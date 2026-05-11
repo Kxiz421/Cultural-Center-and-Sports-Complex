@@ -3,7 +3,7 @@ A booking and reservation management system dedicated for the cultural center an
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-![Uploading image.png…]()
+<img width="1901" height="908" alt="App" src="https://github.com/user-attachments/assets/0cdbf64c-c933-40dc-bd39-5d0c556ddce4" />
 
 ## Getting Started
 
