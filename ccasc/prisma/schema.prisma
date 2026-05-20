@@ -1,0 +1,428 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Staff {
+  staffId        Int     @id @default(autoincrement()) @map("staff_id")
+  firstName      String  @map("first_name") @db.VarChar(100)
+  middleName     String? @map("middle_name") @db.VarChar(100)
+  lastName       String  @map("last_name") @db.VarChar(100)
+  email          String  @unique @map("email") @db.VarChar(150)
+  contactNumber  String  @map("contact_number") @db.VarChar(20)
+  password       String  @map("password") @db.VarChar(255)
+  status         String  @default("Active") @map("status") @db.VarChar(50)
+  profilePhoto   String? @map("profile_photo") @db.VarChar(255)
+  staffRoleId    Int     @map("staff_role_id")
+  staffOrgId     Int     @map("staff_org_id")
+
+  staffRole      StaffRole         @relation(fields: [staffRoleId], references: [roleId])
+  staffOrg       StaffOrganization @relation(fields: [staffOrgId], references: [staffOrgId])
+
+  bookings        Booking[]
+  announcements   Announcement[]
+  notifications   Notification[]    @relation("StaffNotifications")
+  documents       Document[]
+  letters         LetterStatus[]
+  payments        Payment[]
+
+  @@map("Staff")
+}
+
+model StaffRole {
+  roleId   Int    @id @default(autoincrement()) @map("role_id")
+  roleName String @map("role_name") @db.VarChar(100)
+
+  staff Staff[]
+
+  @@map("StaffRole")
+}
+
+model StaffOrganization {
+  staffOrgId Int    @id @default(autoincrement()) @map("staff_org_id")
+  orgName    String @map("org_name") @db.VarChar(200)
+
+  staff Staff[]
+
+  @@map("StaffOrganization")
+}
+
+model Client {
+  clientId      Int     @id @default(autoincrement()) @map("client_id")
+  firstName     String  @map("first_name") @db.VarChar(100)
+  middleName    String? @map("middle_name") @db.VarChar(100)
+  lastName      String  @map("last_name") @db.VarChar(100)
+  email         String  @unique @map("email") @db.VarChar(150)
+  contactNumber String  @map("contact_number") @db.VarChar(20)
+  password      String  @map("password") @db.VarChar(255)
+  idProof       String? @map("id_proof") @db.VarChar(255)
+  accountStatus String  @default("Active") @map("account_status") @db.VarChar(50)
+  profilePhoto  String? @map("profile_photo") @db.VarChar(255)
+  clientRoleId  String  @map("client_role_id") @db.VarChar(10)
+  clientOrgId   Int     @map("client_org_id")
+
+  clientRole ClientRole         @relation(fields: [clientRoleId], references: [clientRoleId])
+  clientOrg  ClientOrganization @relation(fields: [clientOrgId], references: [clientOrgId])
+
+  reservations  Reservation[]
+  notifications Notification[]
+  schedules     Schedule[]
+
+  @@map("Client")
+}
+
+model ClientRole {
+  clientRoleId String @id @map("client_role_id") @db.VarChar(10)
+  roleName     String @map("role_name") @db.VarChar(100)
+
+  clients Client[]
+
+  @@map("ClientRole")
+}
+
+model ClientOrganization {
+  clientOrgId      Int    @id @default(autoincrement()) @map("client_org_id")
+  organizationName String @map("organization_name") @db.VarChar(200)
+
+  clients Client[]
+
+  @@map("ClientOrganization")
+}
+
+model Facility {
+  facilityId   Int    @id @default(autoincrement()) @map("facility_id")
+  facilityName String @map("facility_name") @db.VarChar(200)
+  description  String? @db.Text
+  rateId       Int    @map("rate_id")
+  statusId     Int    @map("status_id")
+  venueId      Int    @map("venue_id")
+
+  rate    FacilityRate        @relation(fields: [rateId], references: [rateId])
+  status  AvailabilityStatus  @relation(fields: [statusId], references: [statusId])
+  venue   FacilityVenue       @relation(fields: [venueId], references: [venueId])
+
+  images    FacilityImage[]
+  schedules Schedule[]
+
+  @@map("Facility")
+}
+
+model FacilityRate {
+  rateId    Int     @id @default(autoincrement()) @map("rate_id")
+  dayRate   Decimal @map("day_rate") @db.Decimal(10, 2)
+  nightRate Decimal @map("night_rate") @db.Decimal(10, 2)
+
+  facilities Facility[]
+
+  @@map("FacilityRate")
+}
+
+model FacilityImage {
+  facilityImageId Int    @id @default(autoincrement()) @map("facility_image_id")
+  image          String @map("image") @db.VarChar(255)
+  facilityId     Int    @map("facility_id")
+
+  facility Facility @relation(fields: [facilityId], references: [facilityId], onDelete: Cascade)
+
+  @@map("FacilityImage")
+}
+
+model FacilityVenue {
+  venueId Int    @id @default(autoincrement()) @map("venue_id")
+  venue   String @map("venue") @db.VarChar(200)
+
+  facilities  Facility[]
+  inventories Inventory[]
+  reservations Reservation[]
+
+  @@map("FacilityVenue")
+}
+
+model AvailabilityStatus {
+  statusId   Int    @id @default(autoincrement()) @map("status_id")
+  statusName String @map("status_name") @db.VarChar(50)
+
+  facilities  Facility[]
+  inventories Inventory[]
+
+  @@map("AvailabilityStatus")
+}
+
+model Particular {
+  particularId   Int    @id @default(autoincrement()) @map("particular_id")
+  particularName String @map("particular_name") @db.VarChar(200)
+  description    String? @db.Text
+
+  inventories         Inventory[]
+  reservedParticulars ReservedParticular[]
+
+  @@map("Particular")
+}
+
+model Inventory {
+  itemId            Int     @id @default(autoincrement()) @map("item_id")
+  itemName          String  @map("item_name") @db.VarChar(200)
+  description       String? @db.Text
+  unitCost          Decimal @map("unit_cost") @db.Decimal(10, 2)
+  quantityAvailable Int     @map("quantity_available")
+  venueId           Int     @map("venue_id")
+  statusId          Int     @map("status_id")
+  particularId      Int     @map("particular_id")
+
+  venue     FacilityVenue      @relation(fields: [venueId], references: [venueId])
+  status    AvailabilityStatus @relation(fields: [statusId], references: [statusId])
+  particular Particular        @relation(fields: [particularId], references: [particularId])
+
+  packageInclusions PackageInclusion[]
+
+  @@map("Inventory")
+}
+
+model Package {
+  packageId        Int      @id @default(autoincrement()) @map("package_id")
+  packageName      String   @map("package_name") @db.VarChar(200)
+  dayRate          Decimal? @map("day_rate") @db.Decimal(10, 2)
+  nightRate        Decimal? @map("night_rate") @db.Decimal(10, 2)
+  ledWallDayRate   Decimal? @map("led_wall_day_rate") @db.Decimal(10, 2)
+  ledWallNightRate Decimal? @map("led_wall_night_rate") @db.Decimal(10, 2)
+  timeSlotId        Int     @map("time_slot_id")
+
+  timeSlot TimeSlot @relation(fields: [timeSlotId], references: [timeSlotId])
+
+  inclusions   PackageInclusion[]
+  reservations Reservation[]
+
+  @@map("Package")
+}
+
+model TimeSlot {
+  timeSlotId Int    @id @default(autoincrement()) @map("time_slot_id")
+  startTime  String @map("start_time") @db.VarChar(20)
+  endTime    String @map("end_time") @db.VarChar(20)
+
+  packages    Package[]
+  reservations Reservation[]
+
+  @@map("TimeSlot")
+}
+
+model PackageInclusion {
+  packageInclusionId Int @id @default(autoincrement()) @map("package_inclusion_id")
+  quantityAvailable  Int @map("quantity_available")
+  packageId          Int @map("package_id")
+  itemId             Int @map("item_id")
+
+  package Package   @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  item    Inventory @relation(fields: [itemId], references: [itemId])
+
+  @@map("PackageInclusion")
+}
+
+model Announcement {
+  announcementId Int      @id @default(autoincrement()) @map("announcement_id")
+  title          String   @map("title") @db.VarChar(255)
+  content        String   @map("content") @db.Text
+  recipientType  String   @map("recipient_type") @db.VarChar(50)
+  datePosted     DateTime @map("date_posted")
+  staffId        Int      @map("staff_id")
+  statusId       Int      @map("status_id")
+
+  staff  Staff               @relation(fields: [staffId], references: [staffId])
+  status AnnouncementStatus  @relation(fields: [statusId], references: [statusId])
+
+  @@map("Announcement")
+}
+
+model AnnouncementStatus {
+  statusId Int    @id @default(autoincrement()) @map("status_id")
+  status   String @map("status") @db.VarChar(50)
+
+  announcements Announcement[]
+
+  @@map("AnnouncementStatus")
+}
+
+model Reservation {
+  reservationId      Int      @id @default(autoincrement()) @map("reservation_id")
+  eventDate          DateTime @map("event_date") @db.Date
+  eventType          String   @map("event_type") @db.VarChar(200)
+  reservationStatus  String   @map("reservation_status") @db.VarChar(50)
+  submittedAt        DateTime @map("submitted_at")
+  venueId            Int      @map("venue_id")
+  clientId           Int      @map("client_id")
+  packageId          Int?     @map("package_id")
+  timeSlotId         Int      @map("time_slot_id")
+
+  venue     FacilityVenue       @relation(fields: [venueId], references: [venueId])
+  client    Client              @relation(fields: [clientId], references: [clientId])
+  package   Package?            @relation(fields: [packageId], references: [packageId])
+  timeSlot  TimeSlot            @relation(fields: [timeSlotId], references: [timeSlotId])
+
+  bookings            Booking[]
+  reservedParticulars ReservedParticular[]
+  letters             LetterStatus[]
+  schedules           Schedule[]
+
+  @@map("Reservation")
+}
+
+model ReservedParticular {
+  reservedParticularId Int @id @default(autoincrement()) @map("reserved_particular_id")
+  quantity             Int @map("quantity")
+  reservationId        Int @map("reservation_id")
+  particularId         Int @map("particular_id")
+
+  reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  particular  Particular  @relation(fields: [particularId], references: [particularId])
+
+  @@map("ReservedParticular")
+}
+
+model Booking {
+  bookingId        Int       @id @default(autoincrement()) @map("booking_id")
+  confirmationDate DateTime? @map("confirmation_date")
+  reservationId    Int       @map("reservation_id")
+  bookingStatusId  Int       @map("booking_status_id")
+  staffId          Int?      @map("staff_id")
+
+  reservation Reservation   @relation(fields: [reservationId], references: [reservationId])
+  status      BookingStatus @relation(fields: [bookingStatusId], references: [bookingStatusId])
+  staff       Staff?        @relation(fields: [staffId], references: [staffId])
+
+  payments     Payment[]
+  documents    Document[]
+  schedules    Schedule[]
+  transactions Transaction[]
+
+  @@map("Booking")
+}
+
+model BookingStatus {
+  bookingStatusId Int    @id @default(autoincrement()) @map("booking_status_id")
+  status          String @map("status") @db.VarChar(50)
+
+  bookings Booking[]
+
+  @@map("BookingStatus")
+}
+
+model Payment {
+  paymentId       Int     @id @default(autoincrement()) @map("payment_id")
+  amountPaid      Decimal @map("amount_paid") @db.Decimal(10, 2)
+  paymentStatusId Int     @map("payment_status_id")
+  staffId         Int?    @map("staff_id")
+  bookingId       Int     @map("booking_id")
+
+  status  PaymentStatus @relation(fields: [paymentStatusId], references: [statusId])
+  staff   Staff?        @relation(fields: [staffId], references: [staffId])
+  booking Booking       @relation(fields: [bookingId], references: [bookingId])
+
+  transactions Transaction[]
+
+  @@map("Payment")
+}
+
+model PaymentStatus {
+  statusId Int    @id @default(autoincrement()) @map("status_id")
+  status   String @map("status") @db.VarChar(50)
+
+  payments Payment[]
+
+  @@map("PaymentStatus")
+}
+
+model Transaction {
+  transactionId Int      @id @default(autoincrement()) @map("transaction_id")
+  receiptNumber String   @map("receipt_number") @db.VarChar(50)
+  paymentDate   DateTime @map("payment_date")
+  recordedBy    String?  @map("recorded_by") @db.VarChar(255)
+  bookingId     Int      @map("booking_id")
+  paymentId     Int      @map("payment_id")
+
+  booking Booking @relation(fields: [bookingId], references: [bookingId])
+  payment Payment @relation(fields: [paymentId], references: [paymentId])
+
+  @@map("Transaction")
+}
+
+model Document {
+  documentId     Int      @id @default(autoincrement()) @map("document_id")
+  documentTypeId Int      @map("document_type_id")
+  filePath       String   @map("file_path") @db.VarChar(255)
+  documentStatus String   @map("document_status") @db.VarChar(50)
+  remarks        String?  @db.Text
+  submittedAt    DateTime @map("submitted_at")
+  bookingId      Int      @map("booking_id")
+  staffId        Int?     @map("staff_id")
+
+  documentType DocumentType @relation(fields: [documentTypeId], references: [documentTypeId])
+  booking      Booking      @relation(fields: [bookingId], references: [bookingId])
+  staff        Staff?       @relation(fields: [staffId], references: [staffId])
+
+  @@map("Document")
+}
+
+model DocumentType {
+  documentTypeId Int    @id @default(autoincrement()) @map("document_type_id")
+  type           String @map("type") @db.VarChar(100)
+
+  documents Document[]
+
+  @@map("DocumentType")
+}
+
+model LetterStatus {
+  letterId         Int      @id @default(autoincrement()) @map("letter_id")
+  letterRemarks    String?  @map("letter_remarks") @db.Text
+  updatedAt        DateTime @map("updated_at")
+  reservationId    Int      @map("reservation_id")
+  approvalStatusId Int      @map("approval_status_id")
+  staffId          Int?     @map("staff_id")
+
+  reservation Reservation    @relation(fields: [reservationId], references: [reservationId])
+  status      ApprovalStatus @relation(fields: [approvalStatusId], references: [approvalStatusId])
+  staff       Staff?         @relation(fields: [staffId], references: [staffId])
+
+  @@map("LetterStatus")
+}
+
+model ApprovalStatus {
+  approvalStatusId Int    @id @default(autoincrement()) @map("approval_status_id")
+  status           String @map("status") @db.VarChar(50)
+
+  letters LetterStatus[]
+
+  @@map("ApprovalStatus")
+}
+
+model Notification {
+  notificationId Int      @id @default(autoincrement()) @map("notification_id")
+  message        String   @map("message") @db.Text
+  sentAt         DateTime @map("sent_at")
+  staffId        Int      @map("staff_id")
+  clientId       Int      @map("client_id")
+
+  staff  Staff  @relation("StaffNotifications", fields: [staffId], references: [staffId])
+  client Client @relation(fields: [clientId], references: [clientId])
+
+  @@map("Notification")
+}
+
+model Schedule {
+  scheduleId    Int  @id @default(autoincrement()) @map("schedule_id")
+  clientId      Int  @map("client_id")
+  reservationId Int? @map("reservation_id")
+  bookingId     Int? @map("booking_id")
+  facilityId    Int  @map("facility_id")
+
+  client      Client      @relation(fields: [clientId], references: [clientId])
+  reservation Reservation? @relation(fields: [reservationId], references: [reservationId])
+  booking     Booking?     @relation(fields: [bookingId], references: [bookingId])
+  facility    Facility     @relation(fields: [facilityId], references: [facilityId])
+
+  @@map("Schedule")
+}

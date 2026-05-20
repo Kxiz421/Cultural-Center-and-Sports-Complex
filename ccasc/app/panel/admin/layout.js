@@ -10,8 +10,7 @@ const TITLES = {
   "/panel/admin/dashboard": "Dashboard",
   "/panel/admin/user-management": "User Management",
   "/panel/admin/facilities": "Facility Management",
-  "/panel/admin/calendar/cultural": "Cultural Calendar",
-  "/panel/admin/calendar/sports": "Sports Complex Calendar",
+  "/panel/admin/calendar": "Combined Calendar",
   "/panel/admin/bookings": "Bookings",
   "/panel/admin/particulars": "Particulars Management",
   "/panel/admin/packages": "Packages Management",
@@ -29,18 +28,25 @@ function AdminAuthShell({ children }) {
     try {
       const userId = window.localStorage.getItem("user_id");
       const role = window.localStorage.getItem("role");
-      const first = window.localStorage.getItem("firstname") ?? "";
-      const last = window.localStorage.getItem("lastname") ?? "";
+      
       if (!userId || role !== "admin") {
         router.replace("/login");
         return;
       }
-      setDisplayName(`${first} ${last}`.trim() || "Administrator");
+      
+      // Move display name logic outside setReady to prevent cascade
+      const first = window.localStorage.getItem("firstname") ?? "";
+      const last = window.localStorage.getItem("lastname") ?? "";
+      const name = `${first} ${last}`.trim() || "Administrator";
+      
+      requestAnimationFrame(() => {
+        setDisplayName(name);
+        setReady(true); 
+      });
     } catch {
       router.replace("/login");
       return;
     }
-    setReady(true);
   }, [router]);
 
   if (!ready) {

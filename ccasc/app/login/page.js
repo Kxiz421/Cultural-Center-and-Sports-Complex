@@ -32,8 +32,9 @@ const DEMO_RESET_PW_KEY = "ccasc_demo_reset_password";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [loginLoading, setLoginLoading] = React.useState(false);
   const [showLoginPassword, setShowLoginPassword] = React.useState(false);
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
@@ -113,37 +114,44 @@ export default function LoginPage() {
     focusOtpCell(Math.min(chars.length, OTP_LENGTH) - 1);
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
-      toast.error("Please enter your username and password.");
+    if (!email.trim() || !password.trim()) {
+      toast.error("Please enter your email and password.");
       return;
     }
 
-    const okUser =
-      username.trim().toLowerCase() === MOCK_ADMIN_USER.username.toLowerCase();
-    let storedResetPass = null;
+    setLoginLoading(true);
+
     try {
-      storedResetPass = sessionStorage.getItem(DEMO_RESET_PW_KEY);
-    } catch (_) {
-      /* ignore */
-    }
-    const okPass =
-      password === "1234" ||
-      (!!storedResetPass && password === storedResetPass);
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
 
-    if (!okUser || !okPass) {
-      toast.error("Invalid username or password. Please try again.");
-      return;
-    }
+      const data = await res.json();
 
-    localStorage.setItem("user_id", MOCK_ADMIN_USER.id);
-    localStorage.setItem("role", "admin");
-    localStorage.setItem("firstname", MOCK_ADMIN_USER.firstName);
-    localStorage.setItem("lastname", MOCK_ADMIN_USER.lastName);
-    localStorage.setItem("token", "demo-token-ccasc");
-    toast.success("Logged in successfully.");
-    router.push("/panel/admin/dashboard");
+      if (!res.ok) {
+        toast.error(data.error || "Invalid email or password");
+        setLoginLoading(false);
+        return;
+      }
+
+      localStorage.setItem("user_id", data.id);
+      localStorage.setItem("role", data.type);
+      localStorage.setItem("firstname", data.firstName);
+      localStorage.setItem("lastname", data.lastName);
+      localStorage.setItem("email", data.email);
+      localStorage.setItem("token", "demo-token-ccasc");
+
+      toast.success("Logged in successfully.");
+      window.location.href = "/panel/admin/dashboard";
+    } catch (err) {
+      toast.error("An error occurred during login. Please try again.");
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
   const handleSendCode = () => {
@@ -226,13 +234,14 @@ export default function LoginPage() {
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email / Username</Label>
               <Input
-                id="username"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                id="email"
+                autoComplete="email"
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email or username"
                 className="text-black placeholder:text-neutral-500"
               />
             </div>
