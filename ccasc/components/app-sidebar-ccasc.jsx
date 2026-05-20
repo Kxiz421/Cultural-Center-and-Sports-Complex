@@ -41,14 +41,9 @@ const navMain = [
     icon: Building2,
   },
   {
-    title: "Cultural Calendar",
-    url: "/panel/admin/calendar/cultural",
+    title: "Facility Calendar",
+    url: "/panel/admin/calendar",
     icon: CalendarDays,
-  },
-  {
-    title: "Sports Complex Calendar",
-    url: "/panel/admin/calendar/sports",
-    icon: Trophy,
   },
   {
     title: "Bookings",
