@@ -146,7 +146,14 @@ export default function LoginPage() {
       localStorage.setItem("token", "demo-token-ccasc");
 
       toast.success("Logged in successfully.");
-      window.location.href = "/panel/admin/dashboard";
+
+      // Route based on role
+      const roleType = data.type;
+      if (roleType === "accounting clerk") {
+        window.location.href = "/panel/accounting-clerk/dashboard";
+      } else {
+        window.location.href = "/panel/admin/dashboard";
+      }
     } catch (err) {
       toast.error("An error occurred during login. Please try again.");
     } finally {
