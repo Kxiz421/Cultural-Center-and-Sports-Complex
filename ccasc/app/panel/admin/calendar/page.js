@@ -421,7 +421,6 @@ export default function CalendarPage() {
                   <SelectContent>
                     <SelectItem value="1">Cultural Center</SelectItem>
                     <SelectItem value="2">Sports Complex</SelectItem>
-                    <SelectItem value="3">Both</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
