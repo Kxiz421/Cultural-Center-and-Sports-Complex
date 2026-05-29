@@ -226,10 +226,10 @@ export default function LoginPage() {
           <div className="bg-primary text-primary-foreground mb-4 flex size-14 items-center justify-center rounded-xl shadow-lg">
             <Building2 className="size-8" />
           </div>
-          <p className="text-lg font-bold uppercase tracking-wider text-white/90 md:text-xl">
+          <p className="text-2xl font-extrabold uppercase tracking-wider text-white drop-shadow-sm md:text-3xl">
             Provincial Government of South Cotabato
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-white drop-shadow-sm md:text-3xl">
+          <h1 className="mt-2 text-lg font-bold tracking-tight text-white/90 md:text-xl">
             Gymnasium & Cultural Center / Sports Complex
           </h1>
         </div>
