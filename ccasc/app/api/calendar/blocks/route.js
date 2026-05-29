@@ -65,30 +65,39 @@ export async function POST(request) {
       );
     }
 
-    const block = await prisma.calendarBlock.create({
-      data: {
-        title,
-        blockDate: new Date(blockDate),
-        blockType,
-        venueId: parseInt(venueId, 10),
-        notes: notes || null,
-      },
-      include: {
-        venue: {
-          select: { venue: true },
-        },
-      },
-    });
+    const parsedVenueId = parseInt(venueId, 10);
+    const venueIds = parsedVenueId === 3 ? [1, 2] : [parsedVenueId];
 
-    return NextResponse.json({
-      id: `BLK-${block.blockId}`,
-      title: block.title,
-      date: block.blockDate.toISOString().split("T")[0],
-      blockType: block.blockType,
-      venueId: block.venueId,
-      venue: block.venue.venue,
-      notes: block.notes,
-    });
+    const created = await Promise.all(
+      venueIds.map((vid) =>
+        prisma.calendarBlock.create({
+          data: {
+            title,
+            blockDate: new Date(blockDate),
+            blockType,
+            venueId: vid,
+            notes: notes || null,
+          },
+          include: {
+            venue: {
+              select: { venue: true },
+            },
+          },
+        })
+      )
+    );
+
+    return NextResponse.json(
+      created.map((b) => ({
+        id: `BLK-${b.blockId}`,
+        title: b.title,
+        date: b.blockDate.toISOString().split("T")[0],
+        blockType: b.blockType,
+        venueId: b.venueId,
+        venue: b.venue.venue,
+        notes: b.notes,
+      }))
+    );
   } catch (error) {
     console.error("Failed to create calendar block:", error);
     return NextResponse.json(
