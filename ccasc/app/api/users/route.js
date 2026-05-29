@@ -48,6 +48,7 @@ export async function GET() {
         dbId: s.staffId,
         createdAt: s.createdAt,
         rolePriority: roleOrder[s.staffRole.roleName] ?? 99,
+        verificationStatus: null,
       })),
       ...clients.map((c) => ({
         id: `CLT-${c.clientId}`,
@@ -63,6 +64,7 @@ export async function GET() {
         dbId: c.clientId,
         createdAt: c.createdAt,
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
+        verificationStatus: c.verificationStatus,
       })),
     ];
 

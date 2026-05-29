@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX } from "lucide-react";
 
 const ROLE_LABELS = {
   "coord-cc": "Program Coordinator – Cultural Center",
@@ -198,6 +198,24 @@ export default function UserManagementPage() {
       );
     } catch (err) {
       toast.error("Failed to update account status");
+    }
+  };
+
+  const handleToggleVerification = async (user) => {
+    const newStatus = user.verificationStatus === "Verified" ? "Pending" : "Verified";
+    try {
+      const res = await fetch('/api/users/verification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, verificationStatus: newStatus }),
+      });
+      if (!res.ok) throw new Error('Failed to update verification status');
+      toast.success(`Verification status set to ${newStatus}`);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, verificationStatus: newStatus } : u))
+      );
+    } catch (err) {
+      toast.error("Failed to update verification status");
     }
   };
 
@@ -545,7 +563,18 @@ export default function UserManagementPage() {
                       {u.role}
                     </TableCell>
                     <TableCell>
-                      {u.type === "client" || u.role === "Provincial Government" ? (
+                      {u.type === "client" ? (
+                        <Badge
+                          variant={u.verificationStatus === "Verified" ? "outline" : "secondary"}
+                          className={
+                            u.verificationStatus === "Verified"
+                              ? "text-green-600 border-green-300"
+                              : "text-yellow-600 border-yellow-300 bg-yellow-50"
+                          }
+                        >
+                          {u.verificationStatus || "Pending"}
+                        </Badge>
+                      ) : u.role === "Provincial Government" ? (
                         <Badge variant="outline" className="text-green-600 border-green-300">
                           Verified
                         </Badge>
@@ -564,14 +593,28 @@ export default function UserManagementPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {u.type === "client" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDocuments(u)}
-                            title="View submitted documents"
-                          >
-                            <FileText className="size-4" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewDocuments(u)}
+                              title="View submitted documents"
+                            >
+                              <FileText className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleVerification(u)}
+                              title={u.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
+                            >
+                              {u.verificationStatus === "Verified" ? (
+                                <ShieldCheck className="size-4 text-green-600" />
+                              ) : (
+                                <ShieldX className="size-4 text-yellow-600" />
+                              )}
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="ghost"

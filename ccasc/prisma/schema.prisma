@@ -52,18 +52,19 @@ model StaffOrganization {
 }
 
 model Client {
-  clientId      Int     @id @default(autoincrement()) @map("client_id")
-  firstName     String  @map("first_name") @db.VarChar(100)
-  middleName    String? @map("middle_name") @db.VarChar(100)
-  lastName      String  @map("last_name") @db.VarChar(100)
-  email         String  @unique @map("email") @db.VarChar(150)
-  contactNumber String  @map("contact_number") @db.VarChar(20)
-  password      String  @map("password") @db.VarChar(255)
-  idProof       String? @map("id_proof") @db.VarChar(255)
-  accountStatus String  @default("Active") @map("account_status") @db.VarChar(50)
-  profilePhoto  String? @map("profile_photo") @db.VarChar(255)
-  clientRoleId  String  @map("client_role_id") @db.VarChar(10)
-  clientOrgId   Int     @map("client_org_id")
+  clientId           Int     @id @default(autoincrement()) @map("client_id")
+  firstName          String  @map("first_name") @db.VarChar(100)
+  middleName         String? @map("middle_name") @db.VarChar(100)
+  lastName           String  @map("last_name") @db.VarChar(100)
+  email              String  @unique @map("email") @db.VarChar(150)
+  contactNumber      String  @map("contact_number") @db.VarChar(20)
+  password           String  @map("password") @db.VarChar(255)
+  idProof            String? @map("id_proof") @db.VarChar(255)
+  accountStatus      String  @default("Active") @map("account_status") @db.VarChar(50)
+  verificationStatus String  @default("Pending") @map("verification_status") @db.VarChar(50)
+  profilePhoto       String? @map("profile_photo") @db.VarChar(255)
+  clientRoleId       String  @map("client_role_id") @db.VarChar(10)
+  clientOrgId        Int     @map("client_org_id")
 
   clientRole ClientRole         @relation(fields: [clientRoleId], references: [clientRoleId])
   clientOrg  ClientOrganization @relation(fields: [clientOrgId], references: [clientOrgId])
@@ -135,9 +136,10 @@ model FacilityVenue {
   venueId Int    @id @default(autoincrement()) @map("venue_id")
   venue   String @map("venue") @db.VarChar(200)
 
-  facilities  Facility[]
-  inventories Inventory[]
-  reservations Reservation[]
+  facilities     Facility[]
+  inventories    Inventory[]
+  reservations   Reservation[]
+  calendarBlocks CalendarBlock[]
 
   @@map("FacilityVenue")
 }
@@ -425,4 +427,18 @@ model Schedule {
   facility    Facility     @relation(fields: [facilityId], references: [facilityId])
 
   @@map("Schedule")
+}
+
+model CalendarBlock {
+  blockId    Int      @id @default(autoincrement()) @map("block_id")
+  title      String   @map("title") @db.VarChar(255)
+  blockDate  DateTime @map("block_date") @db.Date
+  blockType  String   @map("block_type") @db.VarChar(50)
+  venueId    Int      @map("venue_id")
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  venue FacilityVenue @relation(fields: [venueId], references: [venueId])
+
+  @@map("CalendarBlock")
 }

@@ -40,6 +40,16 @@ export async function GET() {
       orderBy: { eventDate: "asc" },
     });
 
+    // Fetch calendar blocks (holidays/maintenance)
+    const blocks = await prisma.calendarBlock.findMany({
+      include: {
+        venue: {
+          select: { venue: true },
+        },
+      },
+      orderBy: { blockDate: "asc" },
+    });
+
     // Transform reservations into calendar events
     const events = reservations.map((r) => ({
       id: `RES-${r.reservationId}`,
@@ -56,13 +66,33 @@ export async function GET() {
       bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
     }));
 
+    // Transform blocks into calendar events
+    const blockEvents = blocks.map((b) => ({
+      id: `BLK-${b.blockId}`,
+      title: b.title,
+      date: b.blockDate.toISOString().split("T")[0],
+      start: null,
+      end: null,
+      venue: b.venue.venue,
+      venueId: b.venueId,
+      status: b.blockType === "Holiday" ? "Holiday" : "Maintenance",
+      type: "block",
+      clientName: null,
+      packageName: null,
+      bookingStatus: null,
+      blockType: b.blockType,
+      notes: b.notes,
+    }));
+
     // Group by venue
     const culturalEvents = events.filter((e) => e.venueId === 1);
     const sportsEvents = events.filter((e) => e.venueId === 2);
+    const culturalBlocks = blockEvents.filter((e) => e.venueId === 1);
+    const sportsBlocks = blockEvents.filter((e) => e.venueId === 2);
 
     return NextResponse.json({
-      cultural: culturalEvents,
-      sports: sportsEvents,
+      cultural: [...culturalEvents, ...culturalBlocks],
+      sports: [...sportsEvents, ...sportsBlocks],
     });
   } catch (error) {
     console.error("Calendar API error:", error);
