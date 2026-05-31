@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle } from "lucide-react";
 
 const ROLE_LABELS = {
   "coord-cc": "Program Coordinator – Cultural Center",
@@ -76,6 +76,16 @@ export default function UserManagementPage() {
   const [docUser, setDocUser] = React.useState(null);
   const [docLoading, setDocLoading] = React.useState(false);
   const [docOpen, setDocOpen] = React.useState(false);
+  const [profileOpen, setProfileOpen] = React.useState(false);
+  const [selectedUser, setSelectedUser] = React.useState(null);
+  const [editForm, setEditForm] = React.useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    contact: "",
+  });
+  const [saving, setSaving] = React.useState(false);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -173,13 +183,75 @@ export default function UserManagementPage() {
       toast.success("User created successfully");
       resetForm();
       setAddOpen(false);
-      // Re-fetch users to include the newly created one in the list
       const refreshRes = await fetch('/api/users');
       const refreshedUsers = await refreshRes.json();
       setUsers(refreshedUsers);
     } catch (error) {
       console.error("Error creating user:", error);
       toast.error("Failed to create user");
+    }
+  };
+
+  const handleOpenProfile = (user) => {
+    setSelectedUser(user);
+    setEditForm({
+      firstName: user.firstName || "",
+      middleName: user.middleName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      contact: user.contact || "",
+    });
+    setProfileOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!selectedUser) return;
+
+    const fn = editForm.firstName.trim();
+    const ln = editForm.lastName.trim();
+    const email = editForm.email.trim();
+
+    if (!fn || !ln) {
+      toast.error("First and last name are required.");
+      return;
+    }
+    if (!email) {
+      toast.error("Email is required.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          firstName: fn,
+          middleName: editForm.middleName,
+          lastName: ln,
+          email,
+          contact: editForm.contact,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update user');
+      }
+
+      toast.success("Account details updated successfully");
+      setProfileOpen(false);
+      setSelectedUser(null);
+
+      // Refresh the user list
+      const refreshRes = await fetch('/api/users');
+      const refreshedUsers = await refreshRes.json();
+      setUsers(refreshedUsers);
+    } catch (err) {
+      toast.error(err.message || "Failed to update user");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -196,6 +268,9 @@ export default function UserManagementPage() {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u))
       );
+      if (selectedUser?.id === user.id) {
+        setSelectedUser((prev) => ({ ...prev, status: newStatus }));
+      }
     } catch (err) {
       toast.error("Failed to update account status");
     }
@@ -214,6 +289,9 @@ export default function UserManagementPage() {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, verificationStatus: newStatus } : u))
       );
+      if (selectedUser?.id === user.id) {
+        setSelectedUser((prev) => ({ ...prev, verificationStatus: newStatus }));
+      }
     } catch (err) {
       toast.error("Failed to update verification status");
     }
@@ -237,10 +315,8 @@ export default function UserManagementPage() {
   };
 
   const filtered = users.filter((u) => {
-    // Role filter
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
 
-    // Search query
     const hay = [
       u.id,
       u.firstName,
@@ -256,7 +332,6 @@ export default function UserManagementPage() {
     return hay.includes(query.toLowerCase());
   });
 
-  // Reset to page 1 when search or role filter changes
   const handleSearchChange = (value) => {
     setQuery(value);
     setPage(1);
@@ -434,7 +509,7 @@ export default function UserManagementPage() {
         </Dialog>
       </div>
 
-      {/* Documentsth Dialog */}
+      {/* Documents Dialog */}
       <Dialog open={docOpen} onOpenChange={setDocOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
@@ -484,11 +559,133 @@ export default function UserManagementPage() {
         </DialogContent>
       </Dialog>
 
+      {/* User Profile Dialog */}
+      <Dialog open={profileOpen} onOpenChange={(open) => { setProfileOpen(open); if (!open) setSelectedUser(null); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="size-5" />
+              Account Details
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName} — ${selectedUser.role}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedUser && (
+            <div className="space-y-5 py-2">
+              {/* Status badges row */}
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={selectedUser.status === "Active" ? "outline" : "secondary"}
+                  className={selectedUser.status === "Active" ? "text-green-600 border-green-300" : "text-red-600"}
+                >
+                  {selectedUser.status === "Active" ? <CheckCircle2 className="size-3 mr-1" /> : <XCircle className="size-3 mr-1" />}
+                  {selectedUser.status}
+                </Badge>
+                {selectedUser.type === "client" && (
+                  <Badge
+                    variant={selectedUser.verificationStatus === "Verified" ? "outline" : "secondary"}
+                    className={
+                      selectedUser.verificationStatus === "Verified"
+                        ? "text-green-600 border-green-300"
+                        : "text-yellow-600 border-yellow-300 bg-yellow-50"
+                    }
+                  >
+                    <Shield className="size-3 mr-1" />
+                    {selectedUser.verificationStatus || "Pending"}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Account ID and Type */}
+              <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground text-xs">Account ID</span>
+                  <p className="font-medium">{selectedUser.id}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Account Type</span>
+                  <p className="font-medium capitalize">{selectedUser.type}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Role</span>
+                  <p className="font-medium">{selectedUser.role}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Organization</span>
+                  <p className="font-medium">{selectedUser.organization || "—"}</p>
+                </div>
+              </div>
+
+              {/* Editable fields */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold">Personal Information</h4>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>First name</Label>
+                    <Input
+                      value={editForm.firstName}
+                      onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Middle name</Label>
+                    <Input
+                      value={editForm.middleName}
+                      onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last name</Label>
+                    <Input
+                      value={editForm.lastName}
+                      onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <div className="relative">
+                    <Mail className="text-muted-foreground absolute top-2.5 left-2 size-4" />
+                    <Input
+                      className="pl-8"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Contact number</Label>
+                  <div className="relative">
+                    <Phone className="text-muted-foreground absolute top-2.5 left-2 size-4" />
+                    <Input
+                      className="pl-8"
+                      value={editForm.contact}
+                      onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setProfileOpen(false); setSelectedUser(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader className="gap-3 space-y-0">
           <CardTitle>Directory</CardTitle>
           <CardDescription>
-            Search by name, role, or account ID.
+            Search by name, role, or account ID. Click a name to view and edit account details.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -547,14 +744,17 @@ export default function UserManagementPage() {
                 paginatedUsers.map((u) => (
                   <TableRow key={u.id}>
                     <TableCell>
-                      <div className="flex flex-col">
+                      <button
+                        className="flex flex-col text-left hover:underline"
+                        onClick={() => handleOpenProfile(u)}
+                      >
                         <span className="font-medium">
                           {u.firstName} {u.middleName ?? ""} {u.lastName}
                         </span>
                         <span className="text-muted-foreground text-xs">
                           {u.email}
                         </span>
-                      </div>
+                      </button>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {u.organization || "—"}
