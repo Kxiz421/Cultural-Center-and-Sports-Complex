@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import * as React from "react";
 import {
@@ -91,6 +91,8 @@ export default function UserManagementPage() {
     contact: "",
   });
   const [saving, setSaving] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [confirmUser, setConfirmUser] = React.useState(null);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -118,7 +120,7 @@ export default function UserManagementPage() {
     confirmPassword: "",
     email: "",
     contact: "",
-    role: "",
+    role: null,
   });
 
   const resetForm = () => {
@@ -131,7 +133,7 @@ export default function UserManagementPage() {
       confirmPassword: "",
       email: "",
       contact: "",
-      role: "",
+      role: null,
     });
   };
 
@@ -164,6 +166,7 @@ export default function UserManagementPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          username: form.username.trim(),
           firstName: fn,
           middleName: form.middleName.trim(),
           lastName: ln,
@@ -171,12 +174,12 @@ export default function UserManagementPage() {
           contact: form.contact.trim(),
           password: form.password,
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
-          roleId: form.role === 'coord-cc' ? 3 :
-                 form.role === 'coord-sc' ? 3 :
-                 form.role === 'acct' ? 2 :
+          roleId: form.role === 'coord-cc' ? 2 :
+                 form.role === 'coord-sc' ? 2 :
+                 form.role === 'acct' ? 3 :
                  form.role === 'provincial-agency' ? 'PROV' : 'PUB',
-          orgId: form.role === 'coord-cc' ? 1 :
-                form.role === 'coord-sc' ? 3 :
+          orgId: form.role === 'coord-cc' ? 2 :
+                form.role === 'coord-sc' ? 1 :
                 form.role === 'acct' ? 2 : 1
         }),
       });
@@ -279,6 +282,11 @@ export default function UserManagementPage() {
     } catch (err) {
       toast.error("Failed to update account status");
     }
+  };
+
+  const handleConfirmToggleStatus = (user) => {
+    setConfirmUser(user);
+    setConfirmOpen(true);
   };
 
   const handleToggleVerification = async (user) => {
@@ -469,7 +477,7 @@ export default function UserManagementPage() {
               <div className="space-y-2">
                 <Label>Role</Label>
                 <Select
-                  value={form.role || undefined}
+                  value={form.role}
                   onValueChange={(value) =>
                     setForm((f) => ({ ...f, role: value }))
                   }
@@ -561,6 +569,38 @@ export default function UserManagementPage() {
               ))}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Status Change Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {confirmUser?.status === "Active" ? <Archive className="size-5 text-red-500" /> : <RotateCcw className="size-5 text-green-500" />}
+              {confirmUser?.status === "Active" ? "Deactivate Account" : "Activate Account"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmUser?.status === "Active"
+                ? `Are you sure you want to deactivate ${confirmUser?.firstName} ${confirmUser?.lastName}? They will not be able to log in until reactivated.`
+                : `Are you sure you want to reactivate ${confirmUser?.firstName} ${confirmUser?.lastName}? They will regain access to their account.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setConfirmOpen(false); setConfirmUser(null); }}>
+              Cancel
+            </Button>
+            <Button
+              variant={confirmUser?.status === "Active" ? "destructive" : "default"}
+              onClick={() => {
+                if (confirmUser) handleToggleStatus(confirmUser);
+                setConfirmOpen(false);
+                setConfirmUser(null);
+              }}
+            >
+              {confirmUser?.status === "Active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -741,6 +781,7 @@ export default function UserManagementPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Username</TableHead>
                 <TableHead>Organization</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Verification</TableHead>
@@ -751,13 +792,13 @@ export default function UserManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : paginatedUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -776,6 +817,9 @@ export default function UserManagementPage() {
                           {u.email}
                         </span>
                       </button>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {u.username || "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {u.organization || "—"}
@@ -840,7 +884,7 @@ export default function UserManagementPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleToggleStatus(u)}
+                          onClick={() => handleConfirmToggleStatus(u)}
                           title={u.status === "Active" ? "Deactivate account" : "Activate account"}
                         >
                           {u.status === "Active" ? (
