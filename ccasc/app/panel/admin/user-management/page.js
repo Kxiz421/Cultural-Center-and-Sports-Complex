@@ -38,7 +38,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera } from "lucide-react";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar";
 
 const ROLE_LABELS = {
   "coord-cc": "Program Coordinator – Cultural Center",
@@ -574,8 +579,24 @@ export default function UserManagementPage() {
 
           {selectedUser && (
             <div className="space-y-5 py-2">
+              {/* Avatar */}
+              <div className="flex flex-col items-center gap-3">
+                <Avatar className="size-20">
+                  {selectedUser.profilePhoto ? (
+                    <AvatarImage src={selectedUser.profilePhoto} alt={`${selectedUser.firstName} ${selectedUser.lastName}`} />
+                  ) : null}
+                  <AvatarFallback className="text-2xl font-bold">
+                    {(selectedUser.firstName?.[0] || "").toUpperCase()}{(selectedUser.lastName?.[0] || "").toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center">
+                  <p className="text-base font-semibold">{selectedUser.firstName} {selectedUser.middleName ?? ""} {selectedUser.lastName}</p>
+                  <p className="text-muted-foreground text-xs">{selectedUser.email}</p>
+                </div>
+              </div>
+
               {/* Status badges row */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 <Badge
                   variant={selectedUser.status === "Active" ? "outline" : "secondary"}
                   className={selectedUser.status === "Active" ? "text-green-600 border-green-300" : "text-red-600"}
