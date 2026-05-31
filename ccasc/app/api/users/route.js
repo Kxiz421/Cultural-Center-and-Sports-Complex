@@ -37,6 +37,7 @@ export async function GET() {
       ...staff.map((s) => ({
         id: `STF-${s.staffId}`,
         type: "staff",
+        username: s.username,
         firstName: s.firstName,
         middleName: s.middleName,
         lastName: s.lastName,
@@ -54,6 +55,7 @@ export async function GET() {
       ...clients.map((c) => ({
         id: `CLT-${c.clientId}`,
         type: "client",
+        username: c.username,
         firstName: c.firstName,
         middleName: c.middleName,
         lastName: c.lastName,
@@ -103,9 +105,14 @@ export async function POST(request) {
 
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
+    const autoUsername = (data.username || `${data.firstName}.${data.lastName}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "");
+
     if (data.roleType === "staff") {
       const staff = await prisma.staff.create({
         data: {
+          username: autoUsername,
           firstName: data.firstName,
           middleName: data.middleName || null,
           lastName: data.lastName,
@@ -122,6 +129,7 @@ export async function POST(request) {
     } else {
       const client = await prisma.client.create({
         data: {
+          username: autoUsername,
           firstName: data.firstName,
           middleName: data.middleName || null,
           lastName: data.lastName,
