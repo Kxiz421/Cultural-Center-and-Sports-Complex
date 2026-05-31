@@ -148,9 +148,56 @@ export async function PATCH(request) {
   try {
     const { userId, status } = await request.json();
 
-    if (!userId || !status) {
+    if (!userId) {
       return NextResponse.json(
-        { error: "userId and new status are required" },
+        { error: "userId and field to update are required" },
+        { status: 400 }
+      );
+    }
+
+    const prefix = userId.split("-")[0];
+    const id = parseInt(userId.split("-")[1], 10);
+
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    // If just updating status (legacy support)
+    if (status) {
+      if (prefix === "STF") {
+        await prisma.staff.update({
+          where: { staffId: id },
+          data: { status },
+        });
+      } else if (prefix === "CLT") {
+        await prisma.client.update({
+          where: { clientId: id },
+          data: { accountStatus: status },
+        });
+      } else {
+        return NextResponse.json({ error: "Unknown user type" }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, newStatus: status });
+    }
+
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  } catch (error) {
+    console.error("Failed to update user:", error);
+    return NextResponse.json(
+      { error: "Failed to update user" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { userId, firstName, middleName, lastName, email, contact } = body;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required" },
         { status: 400 }
       );
     }
@@ -163,24 +210,38 @@ export async function PATCH(request) {
     }
 
     if (prefix === "STF") {
+      const updateData = {};
+      if (firstName !== undefined) updateData.firstName = firstName.trim();
+      if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
+      if (lastName !== undefined) updateData.lastName = lastName.trim();
+      if (email !== undefined) updateData.email = email.trim();
+      if (contact !== undefined) updateData.contactNumber = contact.trim();
+
       await prisma.staff.update({
         where: { staffId: id },
-        data: { status: status },
+        data: updateData,
       });
     } else if (prefix === "CLT") {
+      const updateData = {};
+      if (firstName !== undefined) updateData.firstName = firstName.trim();
+      if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
+      if (lastName !== undefined) updateData.lastName = lastName.trim();
+      if (email !== undefined) updateData.email = email.trim();
+      if (contact !== undefined) updateData.contactNumber = contact.trim();
+
       await prisma.client.update({
         where: { clientId: id },
-        data: { accountStatus: status },
+        data: updateData,
       });
     } else {
       return NextResponse.json({ error: "Unknown user type" }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, newStatus: status });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to update user status:", error);
+    console.error("Failed to update user:", error);
     return NextResponse.json(
-      { error: "Failed to update user status" },
+      { error: "Failed to update user" },
       { status: 500 }
     );
   }
