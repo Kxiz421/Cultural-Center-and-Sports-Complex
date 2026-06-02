@@ -141,6 +141,7 @@ model FacilityVenue {
   facilities     Facility[]
   inventories    Inventory[]
   reservations   Reservation[]
+  bookings       Booking[]
   calendarBlocks CalendarBlock[]
 
   @@map("FacilityVenue")
@@ -290,11 +291,13 @@ model Booking {
   bookingId        Int       @id @default(autoincrement()) @map("booking_id")
   confirmationDate DateTime? @map("confirmation_date")
   reservationId    Int       @map("reservation_id")
+  venueId          Int?      @map("venue_id")
   bookingStatusId  Int       @map("booking_status_id")
   staffId          Int?      @map("staff_id")
 
-  reservation Reservation   @relation(fields: [reservationId], references: [reservationId])
-  status      BookingStatus @relation(fields: [bookingStatusId], references: [bookingStatusId])
+  reservation Reservation    @relation(fields: [reservationId], references: [reservationId])
+  venue       FacilityVenue? @relation(fields: [venueId], references: [venueId])
+  status      BookingStatus  @relation(fields: [bookingStatusId], references: [bookingStatusId])
   staff       Staff?        @relation(fields: [staffId], references: [staffId])
 
   payments     Payment[]

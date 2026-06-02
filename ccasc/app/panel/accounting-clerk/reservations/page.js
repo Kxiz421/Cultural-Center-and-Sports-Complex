@@ -34,18 +34,40 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Search, Eye } from "lucide-react";
-import { MOCK_RESERVATIONS, formatPhp } from "@/lib/data/accounting-mock";
+import { Search, Eye, Building2, Trophy } from "lucide-react";
+import { formatPhp } from "@/lib/data/accounting-mock";
+
+const VENUE_LABELS = {
+  1: { name: "Cultural Center", icon: Building2, color: "bg-blue-100 text-blue-700" },
+  2: { name: "Sports Complex", icon: Trophy, color: "bg-orange-100 text-orange-700" },
+};
 
 export default function AccountingReservationsPage() {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("all");
-  const [payment, setPayment] = React.useState("all");
+  const [venueFilter, setVenueFilter] = React.useState("all");
   const [selectedRes, setSelectedRes] = React.useState(null);
+  const [reservations, setReservations] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const rows = MOCK_RESERVATIONS.filter((r) => {
+  React.useEffect(() => {
+    async function fetchData() {
+      try {
+        const res = await fetch("/api/reservations");
+        const data = await res.json();
+        setReservations(data);
+      } catch (err) {
+        console.error("Failed to load reservations:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const rows = reservations.filter((r) => {
     if (status !== "all" && r.status !== status) return false;
-    if (payment !== "all" && r.payment !== payment) return false;
+    if (venueFilter !== "all" && r.venueId !== parseInt(venueFilter)) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const match =
@@ -101,14 +123,14 @@ export default function AccountingReservationsPage() {
                 <SelectItem value="Pending">Pending</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={payment} onValueChange={setPayment}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Payment status" />
+            <Select value={venueFilter} onValueChange={setVenueFilter}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="All venues" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All payments</SelectItem>
-                <SelectItem value="Partially paid">Partially paid</SelectItem>
-                <SelectItem value="Fully paid">Fully paid</SelectItem>
+                <SelectItem value="all">All venues</SelectItem>
+                <SelectItem value="1">Cultural Center</SelectItem>
+                <SelectItem value="2">Sports Complex</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -134,9 +156,9 @@ export default function AccountingReservationsPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium">{r.clientName}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {r.clientType}
-                      </span>
+                  <span className="text-muted-foreground text-xs">
+                    {r.bookingStatus}
+                  </span>
                     </div>
                   </TableCell>
                   <TableCell className="max-w-[180px] text-sm">
@@ -150,19 +172,14 @@ export default function AccountingReservationsPage() {
                     <Badge variant="outline">{r.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        r.payment === "Fully paid" ? "default" : "secondary"
-                      }
+                  <Badge
+                      variant="outline"
                     >
-                      {r.payment}
+                      {r.bookingStatus}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     <div className="tabular-nums">{formatPhp(r.amountPaid)}</div>
-                    <div className="text-muted-foreground tabular-nums">
-                      of {formatPhp(r.amountTotal)}
-                    </div>
                   </TableCell>
                   <TableCell>
                     <Dialog>
@@ -193,8 +210,8 @@ export default function AccountingReservationsPage() {
                                 <p className="font-medium">
                                   {selectedRes.clientName}
                                 </p>
-                                <p className="text-muted-foreground text-sm">
-                                  {selectedRes.clientType}
+                              <p className="text-muted-foreground text-sm">
+                                  {selectedRes.bookingStatus}
                                 </p>
                               </div>
                               <div>
@@ -243,14 +260,8 @@ export default function AccountingReservationsPage() {
                                 <p className="text-muted-foreground text-xs font-medium">
                                   PAYMENT
                                 </p>
-                                <Badge
-                                  variant={
-                                    selectedRes.payment === "Fully paid"
-                                      ? "default"
-                                      : "secondary"
-                                  }
-                                >
-                                  {selectedRes.payment}
+                                <Badge variant="outline">
+                                  {selectedRes.bookingStatus}
                                 </Badge>
                               </div>
                             </div>
@@ -278,25 +289,6 @@ export default function AccountingReservationsPage() {
                                 </span>
                                 <span className="font-medium tabular-nums">
                                   {formatPhp(selectedRes.amountPaid)}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">
-                                  Total Amount
-                                </span>
-                                <span className="font-medium tabular-nums">
-                                  {formatPhp(selectedRes.amountTotal)}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">
-                                  Balance
-                                </span>
-                                <span className="font-medium tabular-nums text-destructive">
-                                  {formatPhp(
-                                    selectedRes.amountTotal -
-                                      selectedRes.amountPaid
-                                  )}
                                 </span>
                               </div>
                             </div>
