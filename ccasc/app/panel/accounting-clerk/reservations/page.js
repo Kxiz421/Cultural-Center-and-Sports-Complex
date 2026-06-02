@@ -138,7 +138,6 @@ export default function AccountingReservationsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reservation ID</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Venue</TableHead>
                 <TableHead>Event</TableHead>
@@ -152,7 +151,6 @@ export default function AccountingReservationsPage() {
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.id}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium">{r.clientName}</span>
@@ -212,14 +210,6 @@ export default function AccountingReservationsPage() {
                                 </p>
                               <p className="text-muted-foreground text-sm">
                                   {selectedRes.bookingStatus}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground text-xs font-medium">
-                                  RESERVATION ID
-                                </p>
-                                <p className="font-mono text-sm">
-                                  {selectedRes.id}
                                 </p>
                               </div>
                               <div>
@@ -302,7 +292,7 @@ export default function AccountingReservationsPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={8}
                     className="text-muted-foreground py-8 text-center"
                   >
                     No reservations match your search criteria.

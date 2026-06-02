@@ -98,8 +98,6 @@ export default function BookingsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Booking ID</TableHead>
-                <TableHead>Reservation</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Venue</TableHead>
                 <TableHead>Event</TableHead>
@@ -111,8 +109,6 @@ export default function BookingsPage() {
             <TableBody>
               {rows.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="font-mono text-xs">{b.id}</TableCell>
-                  <TableCell className="font-mono text-xs">{b.reservationId}</TableCell>
                   <TableCell>
                     <span className="font-medium">{b.clientName}</span>
                   </TableCell>
