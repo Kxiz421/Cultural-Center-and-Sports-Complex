@@ -37,11 +37,6 @@ const navMain = [
     icon: CalendarDays,
   },
   {
-    title: "Cultural Calendar",
-    url: "/panel/accounting-clerk/cultural",
-    icon: Trophy,
-  },
-  {
     title: "Walk-In Reservation",
     url: "/panel/accounting-clerk/walk-in",
     icon: UserPlus,
