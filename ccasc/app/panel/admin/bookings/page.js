@@ -24,15 +24,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MOCK_BOOKINGS, formatPhp } from "@/lib/data/admin-mock";
+import { formatPhp } from "@/lib/data/admin-mock";
 
 export default function BookingsPage() {
   const [status, setStatus] = React.useState("all");
-  const [pay, setPay] = React.useState("all");
+  const [venueFilter, setVenueFilter] = React.useState("all");
+  const [bookings, setBookings] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const rows = MOCK_BOOKINGS.filter((b) => {
+  React.useEffect(() => {
+    async function fetchData() {
+      try {
+        const res = await fetch("/api/bookings");
+        const data = await res.json();
+        setBookings(data);
+      } catch (err) {
+        console.error("Failed to load bookings:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const rows = bookings.filter((b) => {
     if (status !== "all" && b.status !== status) return false;
-    if (pay !== "all" && b.payment !== pay) return false;
+    if (venueFilter !== "all" && b.venueId !== parseInt(venueFilter)) return false;
     return true;
   });
 
@@ -65,14 +82,14 @@ export default function BookingsPage() {
                 <SelectItem value="Confirmed">Confirmed</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={pay} onValueChange={setPay}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Payment" />
+            <Select value={venueFilter} onValueChange={setVenueFilter}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="All venues" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All payments</SelectItem>
-                <SelectItem value="Partially paid">Partially paid</SelectItem>
-                <SelectItem value="Fully paid">Fully paid</SelectItem>
+                <SelectItem value="all">All venues</SelectItem>
+                <SelectItem value="1">Cultural Center</SelectItem>
+                <SelectItem value="2">Sports Complex</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -82,49 +99,35 @@ export default function BookingsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Booking ID</TableHead>
+                <TableHead>Reservation</TableHead>
                 <TableHead>Client</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Facility</TableHead>
-                <TableHead>Event date</TableHead>
-                <TableHead>Booking</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead className="text-right">Totals</TableHead>
+                <TableHead>Venue</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Paid</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((b) => (
                 <TableRow key={b.id}>
                   <TableCell className="font-mono text-xs">{b.id}</TableCell>
+                  <TableCell className="font-mono text-xs">{b.reservationId}</TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{b.clientName}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {b.clientType}
-                      </span>
-                    </div>
+                    <span className="font-medium">{b.clientName}</span>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{b.accountId}</TableCell>
-                  <TableCell className="max-w-[200px] text-sm">
-                    {b.facility}
+                  <TableCell className="max-w-[180px] text-sm">
+                    {b.venue}
                   </TableCell>
-                  <TableCell>{b.eventDate}</TableCell>
+                  <TableCell className="max-w-[150px] text-sm">
+                    {b.eventType}
+                  </TableCell>
+                  <TableCell className="text-sm">{b.eventDate}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{b.status}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        b.payment === "Fully paid" ? "default" : "secondary"
-                      }
-                    >
-                      {b.payment}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    <div>{formatPhp(b.amountPaid)} paid</div>
-                    <div className="text-muted-foreground">
-                      of {formatPhp(b.amountTotal)}
-                    </div>
+                  <TableCell className="text-right text-sm tabular-nums">
+                    {formatPhp(b.amountPaid)}
                   </TableCell>
                 </TableRow>
               ))}
