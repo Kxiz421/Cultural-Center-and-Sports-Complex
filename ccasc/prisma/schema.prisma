@@ -161,8 +161,9 @@ model Particular {
   particularId   Int    @id @default(autoincrement()) @map("particular_id")
   particularName String @map("particular_name") @db.VarChar(200)
   description    String? @db.Text
+  itemId         Int?   @map("item_id")
 
-  inventories         Inventory[]
+  inventory           Inventory?          @relation(fields: [itemId], references: [itemId])
   reservedParticulars ReservedParticular[]
 
   @@map("Particular")
@@ -171,18 +172,16 @@ model Particular {
 model Inventory {
   itemId            Int     @id @default(autoincrement()) @map("item_id")
   itemName          String  @map("item_name") @db.VarChar(200)
-  description       String? @db.Text
   unitCost          Decimal @map("unit_cost") @db.Decimal(10, 2)
   quantityAvailable Int     @map("quantity_available")
   venueId           Int     @map("venue_id")
   statusId          Int     @map("status_id")
-  particularId      Int     @map("particular_id")
 
-  venue     FacilityVenue      @relation(fields: [venueId], references: [venueId])
-  status    AvailabilityStatus @relation(fields: [statusId], references: [statusId])
-  particular Particular        @relation(fields: [particularId], references: [particularId])
+  venue             FacilityVenue      @relation(fields: [venueId], references: [venueId])
+  status            AvailabilityStatus @relation(fields: [statusId], references: [statusId])
 
   packageInclusions PackageInclusion[]
+  particulars       Particular[]
 
   @@map("Inventory")
 }
