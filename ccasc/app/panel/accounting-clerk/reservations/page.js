@@ -34,13 +34,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Search, Eye, Building2, Trophy } from "lucide-react";
+import { Search, Eye } from "lucide-react";
 import { formatPhp } from "@/lib/data/accounting-mock";
-
-const VENUE_LABELS = {
-  1: { name: "Cultural Center", icon: Building2, color: "bg-blue-100 text-blue-700" },
-  2: { name: "Sports Complex", icon: Trophy, color: "bg-orange-100 text-orange-700" },
-};
 
 export default function AccountingReservationsPage() {
   const [search, setSearch] = React.useState("");
@@ -72,7 +67,6 @@ export default function AccountingReservationsPage() {
       const q = search.toLowerCase();
       const match =
         r.clientName.toLowerCase().includes(q) ||
-        r.id.toLowerCase().includes(q) ||
         r.venue.toLowerCase().includes(q) ||
         r.eventType.toLowerCase().includes(q);
       if (!match) return false;
@@ -154,9 +148,6 @@ export default function AccountingReservationsPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium">{r.clientName}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {r.bookingStatus}
-                  </span>
                     </div>
                   </TableCell>
                   <TableCell className="max-w-[180px] text-sm">
@@ -170,9 +161,7 @@ export default function AccountingReservationsPage() {
                     <Badge variant="outline">{r.status}</Badge>
                   </TableCell>
                   <TableCell>
-                  <Badge
-                      variant="outline"
-                    >
+                    <Badge variant="outline">
                       {r.bookingStatus}
                     </Badge>
                   </TableCell>
@@ -207,9 +196,6 @@ export default function AccountingReservationsPage() {
                                 </p>
                                 <p className="font-medium">
                                   {selectedRes.clientName}
-                                </p>
-                              <p className="text-muted-foreground text-sm">
-                                  {selectedRes.bookingStatus}
                                 </p>
                               </div>
                               <div>
@@ -254,22 +240,6 @@ export default function AccountingReservationsPage() {
                                   {selectedRes.bookingStatus}
                                 </Badge>
                               </div>
-                            </div>
-
-                            <div>
-                              <p className="text-muted-foreground mb-2 text-xs font-medium">
-                                REQUESTED RESOURCES
-                              </p>
-                              <ul className="space-y-1">
-                                {selectedRes.particulars.map((p, i) => (
-                                  <li
-                                    key={i}
-                                    className="text-sm"
-                                  >
-                                    • {p}
-                                  </li>
-                                ))}
-                              </ul>
                             </div>
 
                             <div className="border-t pt-3">
