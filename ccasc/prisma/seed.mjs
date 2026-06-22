@@ -1,8 +1,17 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  const salt = bcrypt.genSaltSync(12);
+  const ADMIN_PW = bcrypt.hashSync('admin123', salt);
+  const CLERK_PW = bcrypt.hashSync('clerk123', salt);
+  const PASS321 = bcrypt.hashSync('pass321', salt);
+  const PASS654 = bcrypt.hashSync('pass654', salt);
+  const PASS987 = bcrypt.hashSync('pass987', salt);
+  const PASS159 = bcrypt.hashSync('pass159', salt);
+  const PASS753 = bcrypt.hashSync('pass753', salt);
   console.log('Seeding database...\n');
 
   // ===== REFERENCE TABLES =====
@@ -109,36 +118,36 @@ async function main() {
   // ===== STAFF =====
   const staff1 = await prisma.staff.create({
     data: {
-      firstName: 'Maria', lastName: 'Santos', email: 'admin@scgcc.gov.ph',
-      contactNumber: '09171234567', password: '********', status: 'Active',
+      username: 'admin', firstName: 'Maria', lastName: 'Santos', email: 'admin@scgcc.gov.ph',
+      contactNumber: '09171234567', password: ADMIN_PW, status: 'Active',
       profilePhoto: 'photo1.jpg', staffRoleId: 1, staffOrgId: 1,
     },
   });
   const staff2 = await prisma.staff.create({
     data: {
-      firstName: 'Juan', lastName: 'Dela Cruz', email: 'coordinator@scgcc.gov.ph',
-      contactNumber: '09182345678', password: '********', status: 'Active',
+      username: 'coordinator', firstName: 'Juan', lastName: 'Dela Cruz', email: 'coordinator@scgcc.gov.ph',
+      contactNumber: '09182345678', password: ADMIN_PW, status: 'Active',
       profilePhoto: 'photo2.jpg', staffRoleId: 3, staffOrgId: 1,
     },
   });
   const staff3 = await prisma.staff.create({
     data: {
-      firstName: 'Rosa', lastName: 'Reyes', email: 'clerk@scgcc.gov.ph',
-      contactNumber: '09193456789', password: '********', status: 'Active',
+      username: 'clerk', firstName: 'Rosa', lastName: 'Reyes', email: 'clerk@scgcc.gov.ph',
+      contactNumber: '09193456789', password: CLERK_PW, status: 'Active',
       profilePhoto: 'photo3.jpg', staffRoleId: 2, staffOrgId: 2,
     },
   });
   const staff4 = await prisma.staff.create({
     data: {
-      firstName: 'Pedro', lastName: 'Lim', email: 'ltoo@scgcc.gov.ph',
-      contactNumber: '09204567890', password: '********', status: 'Active',
+      username: 'ltoo', firstName: 'Pedro', lastName: 'Lim', email: 'ltoo@scgcc.gov.ph',
+      contactNumber: '09204567890', password: ADMIN_PW, status: 'Active',
       profilePhoto: 'photo4.jpg', staffRoleId: 4, staffOrgId: 2,
     },
   });
   const staff5 = await prisma.staff.create({
     data: {
-      firstName: 'Ana', lastName: 'Gonzales', email: 'ana.gonzales@scgcc.gov.ph',
-      contactNumber: '09215678901', password: '********', status: 'Active',
+      username: 'ana', firstName: 'Ana', lastName: 'Gonzales', email: 'ana.gonzales@scgcc.gov.ph',
+      contactNumber: '09215678901', password: ADMIN_PW, status: 'Active',
       profilePhoto: 'photo5.jpg', staffRoleId: 3, staffOrgId: 3,
     },
   });
@@ -148,40 +157,40 @@ async function main() {
   const client1 = await prisma.client.create({
     data: {
       firstName: 'Carlo', middleName: 'Santos', lastName: 'Mendoza',
-      email: 'carlo@email.com', contactNumber: '09170111222', password: 'pass321',
-      idProof: 'id1.jpg', accountStatus: 'Active', profilePhoto: 'client1.jpg',
+      email: 'carlo@email.com', contactNumber: '09170111222', password: PASS321,
+      idProof: 'id1.jpg', accountStatus: 'Active', verificationStatus: 'Pending', profilePhoto: 'client1.jpg',
       clientRoleId: 'PROV', clientOrgId: 1,
     },
   });
   const client2 = await prisma.client.create({
     data: {
       firstName: 'Beatriz', middleName: 'Reyes', lastName: 'Lopez',
-      email: 'beatriz@email.com', contactNumber: '09171222333', password: 'pass654',
-      idProof: 'id2.jpg', accountStatus: 'Active', profilePhoto: 'client2.jpg',
+      email: 'beatriz@email.com', contactNumber: '09171222333', password: PASS654,
+      idProof: 'id2.jpg', accountStatus: 'Active', verificationStatus: 'Pending', profilePhoto: 'client2.jpg',
       clientRoleId: 'PUB', clientOrgId: 2,
     },
   });
   const client3 = await prisma.client.create({
     data: {
       firstName: 'Daniel', middleName: 'Gomez', lastName: 'Flores',
-      email: 'daniel@email.com', contactNumber: '09172333444', password: 'pass987',
-      idProof: 'id3.jpg', accountStatus: 'Active', profilePhoto: 'client3.jpg',
+      email: 'daniel@email.com', contactNumber: '09172333444', password: PASS987,
+      idProof: 'id3.jpg', accountStatus: 'Active', verificationStatus: 'Pending', profilePhoto: 'client3.jpg',
       clientRoleId: 'PUB', clientOrgId: 3,
     },
   });
   const client4 = await prisma.client.create({
     data: {
       firstName: 'Katrina', middleName: 'Beltran', lastName: 'Villanueva',
-      email: 'katrina@email.com', contactNumber: '09173444555', password: 'pass159',
-      idProof: 'id4.jpg', accountStatus: 'Deactivated', profilePhoto: 'client4.jpg',
+      email: 'katrina@email.com', contactNumber: '09173444555', password: PASS159,
+      idProof: 'id4.jpg', accountStatus: 'Deactivated', verificationStatus: 'Pending', profilePhoto: 'client4.jpg',
       clientRoleId: 'PROV', clientOrgId: 4,
     },
   });
   const client5 = await prisma.client.create({
     data: {
       firstName: 'Mark', middleName: 'Dizon', lastName: 'Bautista',
-      email: 'mark@email.com', contactNumber: '09174555666', password: 'pass753',
-      idProof: 'id5.jpg', accountStatus: 'Deactivated', profilePhoto: 'client5.jpg',
+      email: 'mark@email.com', contactNumber: '09174555666', password: PASS753,
+      idProof: 'id5.jpg', accountStatus: 'Deactivated', verificationStatus: 'Pending', profilePhoto: 'client5.jpg',
       clientRoleId: 'PUB', clientOrgId: 5,
     },
   });
@@ -285,24 +294,20 @@ async function main() {
   console.log(`✓ Created ${packages.length} packages`);
 
   // ===== PACKAGE INCLUSIONS =====
-  // Package 1: Standard Day - includes chair(700), table(8), mic(4), wired(1)
   await prisma.packageInclusion.createMany({
     data: [
       { quantityAvailable: 700, packageId: 1, itemId: 1 },
       { quantityAvailable: 8, packageId: 1, itemId: 2 },
       { quantityAvailable: 4, packageId: 1, itemId: 3 },
       { quantityAvailable: 1, packageId: 1, itemId: 4 },
-      // Package 2: Standard Night
       { quantityAvailable: 700, packageId: 2, itemId: 1 },
       { quantityAvailable: 8, packageId: 2, itemId: 2 },
       { quantityAvailable: 4, packageId: 2, itemId: 3 },
       { quantityAvailable: 1, packageId: 2, itemId: 4 },
-      // Package 3: LED Wall Day
       { quantityAvailable: 700, packageId: 3, itemId: 1 },
       { quantityAvailable: 8, packageId: 3, itemId: 2 },
       { quantityAvailable: 4, packageId: 3, itemId: 3 },
       { quantityAvailable: 1, packageId: 3, itemId: 4 },
-      // Package 4: LED Wall Night
       { quantityAvailable: 700, packageId: 4, itemId: 1 },
       { quantityAvailable: 8, packageId: 4, itemId: 2 },
       { quantityAvailable: 4, packageId: 4, itemId: 3 },
@@ -313,7 +318,6 @@ async function main() {
 
   // ===== RESERVATIONS =====
   const reservations = await Promise.all([
-    // ---- Cultural Center events (venueId: 1) ----
     prisma.reservation.create({
       data: {
         eventDate: new Date('2026-04-10'), eventType: 'Recognition Ceremony',
@@ -363,7 +367,6 @@ async function main() {
         venueId: 1, clientId: 5, timeSlotId: 1,
       },
     }),
-    // ---- Sports Complex events (venueId: 2) ----
     prisma.reservation.create({
       data: {
         eventDate: new Date('2026-05-01'), eventType: 'Provincial Government Assembly',
@@ -412,20 +415,15 @@ async function main() {
   // ===== RESERVED PARTICULARS =====
   await prisma.reservedParticular.createMany({
     data: [
-      // Reservation 1: Carlo - chairs 100, wired mics 2
       { quantity: 100, reservationId: 1, particularId: 1 },
       { quantity: 2, reservationId: 1, particularId: 4 },
-      // Reservation 2: Beatriz - chairs 200, tables 2
       { quantity: 200, reservationId: 2, particularId: 1 },
       { quantity: 2, reservationId: 2, particularId: 2 },
-      // Reservation 3: Daniel - chairs 150, tables 4, wireless mics 4
       { quantity: 150, reservationId: 3, particularId: 1 },
       { quantity: 4, reservationId: 3, particularId: 2 },
       { quantity: 4, reservationId: 3, particularId: 3 },
-      // Reservation 4: Katrina - chairs 700, LED Wall
       { quantity: 700, reservationId: 4, particularId: 1 },
       { quantity: 1, reservationId: 4, particularId: 5 },
-      // Reservation 5: Mark - Track Oval (no particulars)
     ],
   });
   console.log(`✓ Created reserved particulars`);
@@ -462,20 +460,20 @@ async function main() {
 
   // ===== DOCUMENTS =====
   await Promise.all([
-    prisma.document.create({ data: { documentTypeId: 1, filePath: 'docs/request_letter_booking1.pdf', documentStatus: 'Verified', remarks: 'Governor approved the request letter for Recognition Ceremony', submittedAt: new Date('2026-03-02T10:30:00'), bookingId: 1, staffId: 4 } }),
-    prisma.document.create({ data: { documentTypeId: 2, filePath: 'docs/contract_booking1.pdf', documentStatus: 'Verified', remarks: 'Contract of lease issued by Local Treasury Operations Officer', submittedAt: new Date('2026-03-05T10:35:00'), bookingId: 1, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 3, filePath: 'docs/cert_booking1.pdf', documentStatus: 'Verified', remarks: 'Certification issued by Provincial Treasurers Office', submittedAt: new Date('2026-03-05T10:40:00'), bookingId: 1, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 4, filePath: 'docs/billing_booking2.pdf', documentStatus: 'Pending', remarks: 'Please resubmit billing statement with complete breakdown of charges', submittedAt: new Date('2026-03-03T11:20:00'), bookingId: 2, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 5, filePath: 'docs/receipt_booking2.pdf', documentStatus: 'Awaiting Submission', remarks: 'Initial 50 percent payment receipt must be submitted 7 days before the event', submittedAt: new Date('2026-03-03T11:25:00'), bookingId: 2, staffId: null } }),
+    prisma.document.create({ data: { documentTypeId: 1, filePath: 'docs/request_letter_booking1.pdf', status: 'Pending', remarks: 'Governor approved the request letter for Recognition Ceremony', submittedAt: new Date('2026-03-02T10:30:00'), bookingId: 1, staffId: 4 } }),
+    prisma.document.create({ data: { documentTypeId: 2, filePath: 'docs/contract_booking1.pdf', status: 'Pending', remarks: 'Contract of lease issued by Local Treasury Operations Officer', submittedAt: new Date('2026-03-05T10:35:00'), bookingId: 1, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 3, filePath: 'docs/cert_booking1.pdf', status: 'Pending', remarks: 'Certification issued by Provincial Treasurers Office', submittedAt: new Date('2026-03-05T10:40:00'), bookingId: 1, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 4, filePath: 'docs/billing_booking2.pdf', status: 'Pending', remarks: 'Please resubmit billing statement with complete breakdown of charges', submittedAt: new Date('2026-03-03T11:20:00'), bookingId: 2, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 5, filePath: 'docs/receipt_booking2.pdf', status: 'Pending', remarks: 'Initial 50 percent payment receipt must be submitted 7 days before the event', submittedAt: new Date('2026-03-03T11:25:00'), bookingId: 2, staffId: null } }),
   ]);
   console.log(`✓ Created ${5} documents`);
 
   // ===== LETTERS =====
   await Promise.all([
-    prisma.letterStatus.create({ data: { letterRemarks: 'Governor approved the request letter for Recognition Ceremony. Endorsed to Provincial Treasurer\'s Office', updatedAt: new Date('2026-03-04T14:00:00'), reservationId: 1, approvalStatusId: 1, staffId: 4 } }),
-    prisma.letterStatus.create({ data: { letterRemarks: 'Governor approved the request letter for Cultural Festival. Letter forwarded to Provincial Treasurer\'s Office', updatedAt: new Date('2026-03-05T09:00:00'), reservationId: 3, approvalStatusId: 1, staffId: 4 } }),
-    prisma.letterStatus.create({ data: { letterRemarks: 'Request letter for Provincial Government Assembly is currently under review by Governor\'s Office. Review takes 3 days', updatedAt: new Date('2026-03-06T10:00:00'), reservationId: 5, approvalStatusId: 2, staffId: null } }),
-    prisma.letterStatus.create({ data: { letterRemarks: 'Private clients are not required to submit a request letter to the Governor\'s Office', updatedAt: new Date('2026-03-07T11:00:00'), reservationId: 2, approvalStatusId: 3, staffId: 4 } }),
+    prisma.letterStatus.create({ data: { letterRemarks: "Governor approved the request letter for Recognition Ceremony. Endorsed to Provincial Treasurer's Office", updatedAt: new Date('2026-03-04T14:00:00'), reservationId: 1, approvalStatusId: 1, staffId: 4 } }),
+    prisma.letterStatus.create({ data: { letterRemarks: "Governor approved the request letter for Cultural Festival. Letter forwarded to Provincial Treasurer's Office", updatedAt: new Date('2026-03-05T09:00:00'), reservationId: 3, approvalStatusId: 1, staffId: 4 } }),
+    prisma.letterStatus.create({ data: { letterRemarks: "Request letter for Provincial Government Assembly is currently under review by Governor's Office. Review takes 3 days", updatedAt: new Date('2026-03-06T10:00:00'), reservationId: 5, approvalStatusId: 2, staffId: null } }),
+    prisma.letterStatus.create({ data: { letterRemarks: "Private clients are not required to submit a request letter to the Governor's Office", updatedAt: new Date('2026-03-07T11:00:00'), reservationId: 2, approvalStatusId: 3, staffId: 4 } }),
     prisma.letterStatus.create({ data: { letterRemarks: 'Request letter for Basketball Tournament declined due to incomplete event details', updatedAt: new Date('2026-03-08T13:00:00'), reservationId: 4, approvalStatusId: 3, staffId: 4 } }),
   ]);
   console.log(`✓ Created ${5} letter statuses`);
@@ -492,11 +490,11 @@ async function main() {
 
   // ===== NOTIFICATIONS =====
   await Promise.all([
-    prisma.notification.create({ data: { message: 'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.', sentAt: new Date('2026-04-07T08:00:00'), staffId: 4, clientId: 1 } }),
-    prisma.notification.create({ data: { message: 'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.', sentAt: new Date('2026-04-07T08:00:00'), staffId: 4, clientId: 2 } }),
+    prisma.notification.create({ data: { message: "Your Certification is ready to be claimed at the Provincial Treasurer's Office.", sentAt: new Date('2026-04-07T08:00:00'), staffId: 4, clientId: 1 } }),
+    prisma.notification.create({ data: { message: "Your Certification is ready to be claimed at the Provincial Treasurer's Office.", sentAt: new Date('2026-04-07T08:00:00'), staffId: 4, clientId: 2 } }),
     prisma.notification.create({ data: { message: 'The Certification for your event has been processed and is ready for claiming.', sentAt: new Date('2026-04-07T10:15:00'), staffId: 4, clientId: 3 } }),
-    prisma.notification.create({ data: { message: 'Your signed Contract of Lease is ready at the Provincial Treasurer\'s Office.', sentAt: new Date('2026-04-07T14:20:00'), staffId: 4, clientId: 4 } }),
-    prisma.notification.create({ data: { message: 'Please proceed to the Provincial Treasurer\'s Office to claim your Certification.', sentAt: new Date('2026-04-07T11:00:00'), staffId: 4, clientId: 5 } }),
+    prisma.notification.create({ data: { message: "Your signed Contract of Lease is ready at the Provincial Treasurer's Office.", sentAt: new Date('2026-04-07T14:20:00'), staffId: 4, clientId: 4 } }),
+    prisma.notification.create({ data: { message: "Please proceed to the Provincial Treasurer's Office to claim your Certification.", sentAt: new Date('2026-04-07T11:00:00'), staffId: 4, clientId: 5 } }),
   ]);
   console.log(`✓ Created ${5} notifications`);
 
