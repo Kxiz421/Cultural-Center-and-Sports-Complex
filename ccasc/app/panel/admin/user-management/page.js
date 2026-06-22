@@ -100,7 +100,7 @@ export default function UserManagementPage() {
       try {
         const res = await fetch('/api/users');
         const data = await res.json();
-        setUsers(data);
+        setUsers(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to load users:", err);
         toast.error("Failed to load users");
@@ -336,7 +336,7 @@ export default function UserManagementPage() {
       u.middleName,
       u.lastName,
       u.role,
-      u.orgName,
+      u.organization,
       u.username,
     ]
       .filter(Boolean)

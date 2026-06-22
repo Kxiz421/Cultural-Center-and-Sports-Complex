@@ -3,9 +3,17 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get("clientId");
+
   try {
+    const whereClause = clientId
+      ? { reservation: { client: { clientId: parseInt(clientId, 10) } } }
+      : {};
+
     const bookings = await prisma.booking.findMany({
+      where: whereClause,
       include: {
         reservation: {
           include: {
@@ -21,7 +29,12 @@ export async function GET() {
       orderBy: { confirmationDate: { sort: "desc", nulls: "last" } },
     });
 
-    const formatted = bookings.map((b) => ({
+    let filtered = bookings;
+    if (clientId) {
+      filtered = bookings.filter(b => b.reservation.clientId === parseInt(clientId, 10));
+    }
+
+    const formatted = filtered.map((b) => ({
       id: `BK-${b.bookingId}`,
       reservationId: `RES-${b.reservationId}`,
       venueId: b.venueId || b.reservation.venueId,
