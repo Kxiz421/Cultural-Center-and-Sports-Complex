@@ -78,9 +78,11 @@ export async function POST(request) {
         );
       }
 
+      const userType = client.clientRole.clientRoleId === 'PROV' ? 'provincial-agency' : 'client';
+
       return NextResponse.json({
         id: `CLT-${client.clientId}`,
-        type: "client",
+        type: userType,
         firstName: client.firstName,
         lastName: client.lastName,
         role: client.clientRole.roleName,

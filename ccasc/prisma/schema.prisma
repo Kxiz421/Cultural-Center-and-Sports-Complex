@@ -65,6 +65,8 @@ model Client {
   accountStatus      String  @default("Active") @map("account_status") @db.VarChar(50)
   verificationStatus String  @default("Pending") @map("verification_status") @db.VarChar(50)
   profilePhoto       String? @map("profile_photo") @db.VarChar(255)
+  otp                String? @map("otp") @db.VarChar(10)
+  otpExpiration      DateTime? @map("otp_expiration")
   clientRoleId       String  @map("client_role_id") @db.VarChar(10)
   clientOrgId        Int     @map("client_org_id")
 
@@ -255,6 +257,7 @@ model Reservation {
   eventDate          DateTime @map("event_date") @db.Date
   eventType          String   @map("event_type") @db.VarChar(200)
   reservationStatus  String   @map("reservation_status") @db.VarChar(50)
+  eventStatus        String   @default("Upcoming") @map("event_status") @db.VarChar(50) // Upcoming, Ongoing, Completed
   submittedAt        DateTime @map("submitted_at")
   venueId            Int      @map("venue_id")
   clientId           Int      @map("client_id")
@@ -270,6 +273,7 @@ model Reservation {
   reservedParticulars ReservedParticular[]
   letters             LetterStatus[]
   schedules           Schedule[]
+  rescheduleRequests  RescheduleRequest[]
 
   @@map("Reservation")
 }
@@ -359,7 +363,8 @@ model Document {
   documentId     Int      @id @default(autoincrement()) @map("document_id")
   documentTypeId Int      @map("document_type_id")
   filePath       String   @map("file_path") @db.VarChar(255)
-  documentStatus String   @map("document_status") @db.VarChar(50)
+  documentStatus String   @default("Pending") @map("document_status") @db.VarChar(50)
+  status         String   @default("Pending") @map("status") @db.VarChar(50) // Pending, Verified, Declined
   remarks        String?  @db.Text
   submittedAt    DateTime @map("submitted_at")
   bookingId      Int      @map("booking_id")
@@ -408,6 +413,8 @@ model ApprovalStatus {
 model Notification {
   notificationId Int      @id @default(autoincrement()) @map("notification_id")
   message        String   @map("message") @db.Text
+  type           String   @default("General") @map("type") @db.VarChar(50)
+  isRead         Boolean  @default(false) @map("is_read")
   sentAt         DateTime @map("sent_at")
   staffId        Int      @map("staff_id")
   clientId       Int      @map("client_id")
@@ -431,6 +438,20 @@ model Schedule {
   facility    Facility     @relation(fields: [facilityId], references: [facilityId])
 
   @@map("Schedule")
+}
+
+model RescheduleRequest {
+  rescheduleId      Int      @id @default(autoincrement()) @map("reschedule_id")
+  reservationId     Int      @map("reservation_id")
+  requestedDate     DateTime @map("requested_date") @db.Date
+  reason            String   @map("reason") @db.Text
+  status            String   @default("Pending") @map("status") @db.VarChar(50)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  reservation Reservation @relation(fields: [reservationId], references: [reservationId])
+  
+  @@map("RescheduleRequest")
 }
 
 model CalendarBlock {

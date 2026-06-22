@@ -24,11 +24,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CalendarDays, Trophy } from "lucide-react";
 import { formatPhp } from "@/lib/data/admin-mock";
 
 export default function BookingsPage() {
   const [status, setStatus] = React.useState("all");
-  const [venueFilter, setVenueFilter] = React.useState("all");
   const [bookings, setBookings] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -47,11 +47,12 @@ export default function BookingsPage() {
     fetchData();
   }, []);
 
-  const rows = bookings.filter((b) => {
-    if (status !== "all" && b.status !== status) return false;
-    if (venueFilter !== "all" && b.venueId !== parseInt(venueFilter)) return false;
-    return true;
-  });
+  const cultural = bookings.filter(
+    (b) => b.venueId === 1 && (status === "all" || b.status === status)
+  );
+  const sports = bookings.filter(
+    (b) => b.venueId === 2 && (status === "all" || b.status === status)
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,78 +60,148 @@ export default function BookingsPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Bookings</h2>
         <p className="text-muted-foreground text-sm">
           Read-only oversight — administrator monitors reservations & payment
-          progress (demo list).
+          progress across both venues.
         </p>
       </div>
 
-      <Card>
-        <CardHeader className="gap-4 space-y-0 md:flex-row md:items-end md:justify-between">
-          <div>
-            <CardTitle>Reservation register</CardTitle>
-            <CardDescription>
-              Filter by workflow status or payment progress.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Booking status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-                <SelectItem value="Confirmed">Confirmed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={venueFilter} onValueChange={setVenueFilter}>
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="All venues" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All venues</SelectItem>
-                <SelectItem value="1">Cultural Center</SelectItem>
-                <SelectItem value="2">Sports Complex</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Venue</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Paid</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell>
-                    <span className="font-medium">{b.clientName}</span>
-                  </TableCell>
-                  <TableCell className="max-w-[180px] text-sm">
-                    {b.venue}
-                  </TableCell>
-                  <TableCell className="max-w-[150px] text-sm">
-                    {b.eventType}
-                  </TableCell>
-                  <TableCell className="text-sm">{b.eventDate}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{b.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">
-                    {formatPhp(b.amountPaid)}
-                  </TableCell>
+      <div className="flex flex-wrap gap-2">
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Booking status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="Pending">Pending</SelectItem>
+            <SelectItem value="Confirmed">Confirmed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Cultural Center */}
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-blue-100">
+                <CalendarDays className="size-5 text-blue-700" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Cultural Center</CardTitle>
+                <CardDescription>
+                  {cultural.length} booking{cultural.length !== 1 ? "s" : ""}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {cultural.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-muted-foreground py-8 text-center"
+                    >
+                      No bookings
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  cultural.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="max-w-[160px] truncate">
+                        <span className="font-medium">{b.clientName}</span>
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-sm">
+                        {b.eventType}
+                      </TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {b.eventDate}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{b.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums whitespace-nowrap">
+                        {formatPhp(b.amountPaid)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Sports Complex */}
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-orange-100">
+                <Trophy className="size-5 text-orange-700" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Sports Complex</CardTitle>
+                <CardDescription>
+                  {sports.length} booking{sports.length !== 1 ? "s" : ""}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sports.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-muted-foreground py-8 text-center"
+                    >
+                      No bookings
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sports.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="max-w-[160px] truncate">
+                        <span className="font-medium">{b.clientName}</span>
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-sm">
+                        {b.eventType}
+                      </TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {b.eventDate}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{b.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums whitespace-nowrap">
+                        {formatPhp(b.amountPaid)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
