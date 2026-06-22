@@ -1,4 +1,3 @@
-
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -48,7 +47,12 @@ UNLOCK TABLES;
 
 LOCK TABLES `client` WRITE;
 /*!40000 ALTER TABLE `client` DISABLE KEYS */;
-INSERT INTO `client` (`client_id`, `first_name`, `middle_name`, `last_name`, `email`, `contact_number`, `password`, `id_proof`, `account_status`, `profile_photo`, `client_role_id`, `client_org_id`) VALUES (1,'Carlo','Santos','Mendoza','carlo@email.com','09170111222','pass321','id1.jpg','Active','client1.jpg','PROV',1),(2,'Beatriz','Reyes','Lopez','beatriz@email.com','09171222333','pass654','id2.jpg','Active','client2.jpg','PUB',2),(3,'Daniel','Gomez','Flores','daniel@email.com','09172333444','pass987','id3.jpg','Active','client3.jpg','PUB',3),(4,'Katrina','Beltran','Villanueva','katrina@email.com','09173444555','pass159','id4.jpg','Active','client4.jpg','PROV',4),(5,'Mark','Dizon','Bautista','mark@email.com','09174555666','pass753','id5.jpg','Deactivated','client5.jpg','PUB',5),(6,'Mikael Jules','Puello','Balabag','puellokyle@gmail.com','','Skyhigh1',NULL,'Active',NULL,'PUB',1),(7,'Mikael2 Jules','Puello','Balabag','dasdasd@gmail.com','','$2b$12$M.3WR5zMi6RXPW6YieSHnu0nCE7NSClMD6O/0LGcmNvDX8zj28oKi',NULL,'Deactivated',NULL,'PROV',1),(8,'ree','rer','rer','werer','7589094585','$2b$12$9.m3LezJHXHJo683A5DgGeBGuvfqoI/7U4g7hVF223Jmjb/SlC3bS',NULL,'Active',NULL,'PROV',1);
+INSERT INTO `client` (`client_id`, `username`, `first_name`, `middle_name`, `last_name`, `email`, `contact_number`, `password`, `id_proof`, `account_status`, `verification_status`, `profile_photo`, `client_role_id`, `client_org_id`) VALUES 
+(1,NULL,'Carlo','Santos','Mendoza','carlo@email.com','09170111222','$2b$12$nires7bH74NQ2oMSytv3re3z.RFu7GbVD5mJLe5QcltM5CSQbgYbu','id1.jpg','Active','Pending','client1.jpg','PROV',1),
+(2,NULL,'Beatriz','Reyes','Lopez','beatriz@email.com','09171222333','$2b$12$nires7bH74NQ2oMSytv3reROJU/tKVlfIKJBlPcts/SNP.U4lgsEC','id2.jpg','Active','Pending','client2.jpg','PUB',2),
+(3,NULL,'Daniel','Gomez','Flores','daniel@email.com','09172333444','$2b$12$nires7bH74NQ2oMSytv3re28.iEwQFRIuaBYGpKZPsUlIbmvrbjaC','id3.jpg','Active','Pending','client3.jpg','PUB',3),
+(4,NULL,'Katrina','Beltran','Villanueva','katrina@email.com','09173444555','$2b$12$nires7bH74NQ2oMSytv3re23CeOBpN5o8WnTbQQQWLN5mVu.CNSw2','id4.jpg','Active','Pending','client4.jpg','PROV',4),
+(5,NULL,'Mark','Dizon','Bautista','mark@email.com','09174555666','$2b$12$nires7bH74NQ2oMSytv3remjZ3RlOF5OE7o8tqD9iwdHvfyySTYHK','id5.jpg','Deactivated','Pending','client5.jpg','PUB',5);
 /*!40000 ALTER TABLE `client` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -66,7 +70,12 @@ UNLOCK TABLES;
 
 LOCK TABLES `document` WRITE;
 /*!40000 ALTER TABLE `document` DISABLE KEYS */;
-INSERT INTO `document` (`document_id`, `document_type_id`, `file_path`, `document_status`, `remarks`, `submitted_at`, `booking_id`, `staff_id`) VALUES (1,1,'docs/request_letter_booking1.pdf','Verified','Governor approved the request letter for Recognition Ceremony','2026-03-02 02:30:00.000',1,4),(2,5,'docs/receipt_booking2.pdf','Awaiting Submission','Initial 50 percent payment receipt must be submitted 7 days before the event','2026-03-03 03:25:00.000',2,NULL),(3,4,'docs/billing_booking2.pdf','Pending','Please resubmit billing statement with complete breakdown of charges','2026-03-03 03:20:00.000',2,2),(4,2,'docs/contract_booking1.pdf','Verified','Contract of lease issued by Local Treasury Operations Officer','2026-03-05 02:35:00.000',1,2),(5,3,'docs/cert_booking1.pdf','Verified','Certification issued by Provincial Treasurers Office','2026-03-05 02:40:00.000',1,2);
+INSERT INTO `document` (`document_id`, `document_type_id`, `file_path`, `document_status`, `status`, `remarks`, `submitted_at`, `booking_id`, `staff_id`) VALUES 
+(1,1,'docs/request_letter_booking1.pdf','Verified','Pending','Governor approved the request letter for Recognition Ceremony','2026-03-02 02:30:00.000',1,4),
+(2,5,'docs/receipt_booking2.pdf','Awaiting Submission','Pending','Initial 50 percent payment receipt must be submitted 7 days before the event','2026-03-03 03:25:00.000',2,NULL),
+(3,4,'docs/billing_booking2.pdf','Pending','Pending','Please resubmit billing statement with complete breakdown of charges','2026-03-03 03:20:00.000',2,2),
+(4,2,'docs/contract_booking1.pdf','Verified','Pending','Contract of lease issued by Local Treasury Operations Officer','2026-03-05 02:35:00.000',1,2),
+(5,3,'docs/cert_booking1.pdf','Verified','Pending','Certification issued by Provincial Treasurers Office','2026-03-05 02:40:00.000',1,2);
 /*!40000 ALTER TABLE `document` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -78,7 +87,7 @@ UNLOCK TABLES;
 
 LOCK TABLES `facility` WRITE;
 /*!40000 ALTER TABLE `facility` DISABLE KEYS */;
-INSERT INTO `facility` (`facility_id`, `facility_name`, `description`, `rate_id`, `status_id`, `venue_id`) VALUES (1,'Gym Lobby','Event space suitable for small gatherings, exhibits, and formal registrations',4,2,1),(2,'Stage Area','Stage area for cultural presentations and program performances',3,3,1),(3,'Basketball Court','Court for basketball games with shot clock support',2,2,1),(4,'Track Oval','Used for jogging or sprints',5,1,2),(5,'South Cotabato Gymnasium and Cultural Center','Primary venue located at 26 Rafael Alunan Avenue Zone IV Koronadal City South Cotabato',1,1,1),(6,'New','sfefsdf',2,2,1),(7,'gjhg','gjdftutf',1,2,2);
+INSERT INTO `facility` (`facility_id`, `facility_name`, `description`, `rate_id`, `status_id`, `venue_id`) VALUES (1,'Gym Lobby','Event space suitable for small gatherings, exhibits, and formal registrations',4,2,1),(2,'Stage Area','Stage area for cultural presentations and program performances',3,3,1),(3,'Basketball Court','Court for basketball games with shot clock support',2,2,1),(4,'Track Oval','Used for jogging or sprints',5,1,2),(5,'South Cotabato Gymnasium and Cultural Center','Primary venue located at 26 Rafael Alunan Avenue Zone IV Koronadal City South Cotabato',1,1,1);
 /*!40000 ALTER TABLE `facility` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -114,7 +123,12 @@ UNLOCK TABLES;
 
 LOCK TABLES `notification` WRITE;
 /*!40000 ALTER TABLE `notification` DISABLE KEYS */;
-INSERT INTO `notification` (`notification_id`, `message`, `sent_at`, `staff_id`, `client_id`) VALUES (1,'Your signed Contract of Lease is ready at the Provincial Treasurer\'s Office.','2026-04-07 06:20:00.000',4,4),(2,'The Certification for your event has been processed and is ready for claiming.','2026-04-07 02:15:00.000',4,3),(3,'Please proceed to the Provincial Treasurer\'s Office to claim your Certification.','2026-04-07 03:00:00.000',4,5),(4,'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.','2026-04-07 00:00:00.000',4,1),(5,'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.','2026-04-07 00:00:00.000',4,2);
+INSERT INTO `notification` (`notification_id`, `message`, `type`, `is_read`, `sent_at`, `staff_id`, `client_id`) VALUES 
+(1,'Your signed Contract of Lease is ready at the Provincial Treasurer\'s Office.','General',0,'2026-04-07 06:20:00.000',4,4),
+(2,'The Certification for your event has been processed and is ready for claiming.','General',0,'2026-04-07 02:15:00.000',4,3),
+(3,'Please proceed to the Provincial Treasurer\'s Office to claim your Certification.','General',0,'2026-04-07 03:00:00.000',4,5),
+(4,'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.','General',0,'2026-04-07 00:00:00.000',4,1),
+(5,'Your Certification is ready to be claimed at the Provincial Treasurer\'s Office.','General',0,'2026-04-07 00:00:00.000',4,2);
 /*!40000 ALTER TABLE `notification` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -150,7 +164,20 @@ UNLOCK TABLES;
 
 LOCK TABLES `reservation` WRITE;
 /*!40000 ALTER TABLE `reservation` DISABLE KEYS */;
-INSERT INTO `reservation` (`reservation_id`, `event_date`, `event_type`, `reservation_status`, `submitted_at`, `venue_id`, `client_id`, `package_id`, `time_slot_id`) VALUES (1,'2026-04-10','Recognition Ceremony','Approved','2026-03-01 01:00:00.000',1,1,NULL,1),(2,'2026-05-12','Music Concert','Approved','2026-03-12 02:00:00.000',1,3,NULL,2),(3,'2026-04-15','Corporate Dinner','Pending','2026-03-02 02:30:00.000',1,2,NULL,2),(4,'2026-05-18','Provincial Meeting','Pending','2026-03-15 01:00:00.000',1,5,NULL,1),(5,'2026-05-08','Barangay Basketball League','Approved','2026-03-08 01:00:00.000',2,2,NULL,1),(6,'2026-05-01','Provincial Government Assembly','Pending','2026-03-05 06:00:00.000',2,5,1,1),(7,'2026-05-29','Badminton Championship','Approved','2026-03-18 00:30:00.000',2,4,NULL,1),(8,'2026-05-05','Art Exhibit Opening','Approved','2026-03-10 00:00:00.000',1,1,NULL,1),(9,'2026-04-25','Stage Play Rehearsal','Declined','2026-03-04 03:00:00.000',1,4,NULL,1),(10,'2026-04-20','Cultural Festival','Approved','2026-03-03 00:45:00.000',1,3,NULL,1),(11,'2026-05-22','Track and Field Event','Pending','2026-03-14 03:00:00.000',2,1,NULL,2),(12,'2026-05-15','Inter-School Volleyball Tournament','Approved','2026-03-11 02:00:00.000',2,3,NULL,1),(13,'2026-06-05','Zumba Fitness Festival','Pending','2026-03-20 01:00:00.000',2,2,NULL,1);
+INSERT INTO `reservation` (`reservation_id`, `event_date`, `event_type`, `reservation_status`, `event_status`, `submitted_at`, `venue_id`, `client_id`, `package_id`, `time_slot_id`) VALUES 
+(1,'2026-04-10','Recognition Ceremony','Approved','Upcoming','2026-03-01 01:00:00.000',1,1,NULL,1),
+(2,'2026-05-12','Music Concert','Approved','Upcoming','2026-03-12 02:00:00.000',1,3,NULL,2),
+(3,'2026-04-15','Corporate Dinner','Pending','Upcoming','2026-03-02 02:30:00.000',1,2,NULL,2),
+(4,'2026-05-18','Provincial Meeting','Pending','Upcoming','2026-03-15 01:00:00.000',1,5,NULL,1),
+(5,'2026-05-08','Barangay Basketball League','Approved','Upcoming','2026-03-08 01:00:00.000',2,2,NULL,1),
+(6,'2026-05-01','Provincial Government Assembly','Pending','Upcoming','2026-03-05 06:00:00.000',2,5,1,1),
+(7,'2026-05-29','Badminton Championship','Approved','Upcoming','2026-03-18 00:30:00.000',2,4,NULL,1),
+(8,'2026-05-05','Art Exhibit Opening','Approved','Upcoming','2026-03-10 00:00:00.000',1,1,NULL,1),
+(9,'2026-04-25','Stage Play Rehearsal','Declined','Upcoming','2026-03-04 03:00:00.000',1,4,NULL,1),
+(10,'2026-04-20','Cultural Festival','Approved','Upcoming','2026-03-03 00:45:00.000',1,3,NULL,1),
+(11,'2026-05-22','Track and Field Event','Pending','Upcoming','2026-03-14 03:00:00.000',2,1,NULL,2),
+(12,'2026-05-15','Inter-School Volleyball Tournament','Approved','Upcoming','2026-03-11 02:00:00.000',2,3,NULL,1),
+(13,'2026-06-05','Zumba Fitness Festival','Pending','Upcoming','2026-03-20 01:00:00.000',2,2,NULL,1);
 /*!40000 ALTER TABLE `reservation` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -168,7 +195,12 @@ UNLOCK TABLES;
 
 LOCK TABLES `staff` WRITE;
 /*!40000 ALTER TABLE `staff` DISABLE KEYS */;
-INSERT INTO `staff` (`staff_id`, `first_name`, `middle_name`, `last_name`, `email`, `contact_number`, `password`, `status`, `profile_photo`, `staff_role_id`, `staff_org_id`) VALUES (1,'Maria',NULL,'Santos','admin@scgcc.gov.ph','09171234567','********','Active','photo1.jpg',1,1),(2,'Juan',NULL,'Dela Cruz','coordinator@scgcc.gov.ph','09182345678','********','Active','photo2.jpg',3,1),(3,'Rosa',NULL,'Reyes','clerk@scgcc.gov.ph','09193456789','********','Active','photo3.jpg',2,2),(4,'Pedro',NULL,'Lim','ltoo@scgcc.gov.ph','09204567890','********','Active','photo4.jpg',4,2),(5,'Ana',NULL,'Gonzales','ana.gonzales@scgcc.gov.ph','09215678901','********','Active','photo5.jpg',3,3),(7,'Admin',NULL,'Admin','admin','00000000000','$2b$12$ItpZ3JKiR2zi9puStSwlHOMjm0WpiTlL6bvTiD5CcYt5dJoBE1LLW','Active',NULL,2,1),(8,'Accounting',NULL,'Clerk','accountingclerk@gmail.com','','$2b$12$la8sjmDPmg1S3mQJDhPGtu91DGQ7EH7Ep.bzVmD8r1OGpDNuHzP7m','Active',NULL,3,2);
+INSERT INTO `staff` (`staff_id`, `username`, `first_name`, `middle_name`, `last_name`, `email`, `contact_number`, `password`, `status`, `profile_photo`, `staff_role_id`, `staff_org_id`) VALUES 
+(1,'admin','Maria',NULL,'Santos','admin@scgcc.gov.ph','09171234567','$2b$12$nires7bH74NQ2oMSytv3reF4fsOAGZ2lQkzw09MoxO18zqsKJuAOC','Active','photo1.jpg',1,1),
+(2,'coordinator','Juan',NULL,'Dela Cruz','coordinator@scgcc.gov.ph','09182345678','$2b$12$nires7bH74NQ2oMSytv3reF4fsOAGZ2lQkzw09MoxO18zqsKJuAOC','Active','photo2.jpg',3,1),
+(3,'clerk','Rosa',NULL,'Reyes','clerk@scgcc.gov.ph','09193456789','$2b$12$nires7bH74NQ2oMSytv3reTAquocJAlInSwdbNsQ5h7zUzPqpQ8S.','Active','photo3.jpg',2,2),
+(4,'ltoo','Pedro',NULL,'Lim','ltoo@scgcc.gov.ph','09204567890','$2b$12$nires7bH74NQ2oMSytv3reF4fsOAGZ2lQkzw09MoxO18zqsKJuAOC','Active','photo4.jpg',4,2),
+(5,'ana','Ana',NULL,'Gonzales','ana.gonzales@scgcc.gov.ph','09215678901','$2b$12$nires7bH74NQ2oMSytv3reF4fsOAGZ2lQkzw09MoxO18zqsKJuAOC','Active','photo5.jpg',3,3);
 /*!40000 ALTER TABLE `staff` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -195,8 +227,18 @@ LOCK TABLES `transaction` WRITE;
 INSERT INTO `transaction` (`transaction_id`, `receipt_number`, `payment_date`, `recorded_by`, `booking_id`, `payment_id`) VALUES (1,'OR-2026-005','2026-03-07 00:00:00.000','Local Treasury Operations Officer',4,3),(2,'OR-2026-001','2026-03-01 00:00:00.000','Local Treasury Operations Officer',4,1),(3,'OR-2026-002','2026-03-03 00:00:00.000','Local Treasury Operations Officer',4,2),(4,'OR-2026-003','2026-03-02 00:00:00.000','Local Treasury Operations Officer',4,3),(5,'OR-2026-004','2026-03-05 00:00:00.000','Local Treasury Operations Officer',4,4);
 /*!40000 ALTER TABLE `transaction` ENABLE KEYS */;
 UNLOCK TABLES;
-/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
+LOCK TABLES `calendardocument` WRITE;
+/*!40000 ALTER TABLE `calendardocument` DISABLE KEYS */;
+/*!40000 ALTER TABLE `calendardocument` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `rescheduleguard` WRITE;
+/*!40000 ALTER TABLE `rescheduleguard` DISABLE KEYS */;
+/*!40000 ALTER TABLE `rescheduleguard` ENABLE KEYS */;
+UNLOCK TABLES;
+
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
@@ -204,4 +246,3 @@ UNLOCK TABLES;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
-
