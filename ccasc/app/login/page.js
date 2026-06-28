@@ -47,6 +47,7 @@ export default function LoginPage() {
     Array.from({ length: OTP_LENGTH }, () => ""),
   );
   const otpInputRefs = React.useRef([]);
+  const [fpLoading, setFpLoading] = React.useState(false);
 
   const emailLooksValid = (value) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -165,7 +166,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     const email = recoverEmail.trim();
     if (!email) {
       toast.error("Please enter the email address registered to your account.");
@@ -175,21 +176,68 @@ export default function LoginPage() {
       toast.error("Please enter a valid email address (for example, name@example.com).");
       return;
     }
-    setFpStep("code");
-    setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
-    toast.success(`A recovery code has been sent to ${email}.`);
+    
+    setFpLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send recovery code.");
+        setFpLoading(false);
+        return;
+      }
+      
+      setFpStep("code");
+      setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
+      toast.success(`A recovery code has been sent to ${email}.`);
+    } catch (err) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
   };
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     const code = otpCells.join("");
     if (code.length < OTP_LENGTH) {
       toast.error(`Enter all ${OTP_LENGTH} digits of the recovery code.`);
       return;
     }
-    setFpStep("password");
+    
+    setFpLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoverEmail.trim(),
+          otp: code,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || "Invalid or expired recovery code.");
+        setFpLoading(false);
+        return;
+      }
+      
+      setFpStep("password");
+    } catch (err) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
   };
 
-  const handleCompletePasswordReset = () => {
+  const handleCompletePasswordReset = async () => {
     const next = newPassword.trim();
     const confirm = confirmPassword.trim();
     if (!next || !confirm) {
@@ -200,15 +248,55 @@ export default function LoginPage() {
       toast.error("Passwords do not match. Check and try again.");
       return;
     }
-    try {
-      sessionStorage.setItem(DEMO_RESET_PW_KEY, next);
-    } catch (_) {
-      /* ignore */
+    if (next.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
     }
-    toast.success(
-      "Your password has been updated. Sign in with your new password.",
-    );
-    setFpOpen(false);
+    if (!/[A-Z]/.test(next)) {
+      toast.error("Password must contain at least one uppercase letter.");
+      return;
+    }
+    if (!/[a-z]/.test(next)) {
+      toast.error("Password must contain at least one lowercase letter.");
+      return;
+    }
+    if (!/[0-9]/.test(next)) {
+      toast.error("Password must contain at least one number.");
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(next)) {
+      toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
+      return;
+    }
+    
+    setFpLoading(true);
+    try {
+      const otp = otpCells.join("");
+      const res = await fetch("/api/auth/password-reset", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoverEmail.trim(),
+          otp,
+          newPassword: next,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || "Failed to reset password. The code may have expired.");
+        setFpLoading(false);
+        return;
+      }
+      
+      toast.success("Your password has been updated. Sign in with your new password.");
+      setFpOpen(false);
+    } catch (err) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
   };
 
   return (

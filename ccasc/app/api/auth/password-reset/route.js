@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { sendOtpEmail } from "@/lib/email";
 
 const prisma = new PrismaClient();
 
@@ -25,18 +26,54 @@ export async function POST(request) {
       data: { otp, otpExpiration },
     });
 
-    // In a real app, send email here. For demo, return OTP in response
-    console.log(`OTP for ${email}: ${otp}`);
+    // Send OTP via Gmail SMTP
+    const emailSent = await sendOtpEmail(email, otp);
+
+    if (!emailSent) {
+      return NextResponse.json(
+        { error: "Failed to send OTP email. Please try again later." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ 
-      message: "OTP sent successfully",
-      // Demo mode: include OTP in response for testing
-      demo: { otp }
+      message: "OTP sent successfully"
     });
   } catch (error) {
     console.error("Password reset error:", error);
     return NextResponse.json(
       { error: "Failed to process password reset" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const { email, otp } = await request.json();
+
+    if (!email || !otp) {
+      return NextResponse.json(
+        { error: "Email and OTP are required" },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.client.findUnique({ where: { email } });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Check if OTP matches and is not expired
+    if (user.otp !== otp || !user.otpExpiration || user.otpExpiration < new Date()) {
+      return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+    }
+
+    return NextResponse.json({ message: "OTP verified successfully" });
+  } catch (error) {
+    console.error("OTP verification error:", error);
+    return NextResponse.json(
+      { error: "Failed to verify OTP" },
       { status: 500 }
     );
   }

@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import * as React from "react";
 import {
@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera } from "lucide-react";
 import {
   Avatar,
   AvatarImage,
@@ -93,6 +93,7 @@ export default function UserManagementPage() {
   const [saving, setSaving] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmUser, setConfirmUser] = React.useState(null);
+  const [confirmSaveOpen, setConfirmSaveOpen] = React.useState(false);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -110,6 +111,8 @@ export default function UserManagementPage() {
     }
     fetchUsers();
   }, []);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
   const [form, setForm] = React.useState({
     firstName: "",
@@ -143,19 +146,35 @@ export default function UserManagementPage() {
     const email = form.email.trim();
 
     if (!fn || !ln) {
-      toast.error("Enter first and last name.");
-      return;
-    }
-    if (!email) {
-      toast.error("Enter a valid email.");
+      toast.error("First name and last name are required.");
       return;
     }
     if (!form.role) {
-      toast.error("Choose a role.");
+      toast.error("Please select a role.");
       return;
     }
     if (!form.password || form.password !== form.confirmPassword) {
       toast.error("Passwords must match and cannot be empty.");
+      return;
+    }
+    if (form.password.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
+    }
+    if (!/[A-Z]/.test(form.password)) {
+      toast.error("Password must contain at least one uppercase letter.");
+      return;
+    }
+    if (!/[a-z]/.test(form.password)) {
+      toast.error("Password must contain at least one lowercase letter.");
+      return;
+    }
+    if (!/[0-9]/.test(form.password)) {
+      toast.error("Password must contain at least one number.");
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(form.password)) {
+      toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
       return;
     }
 
@@ -171,21 +190,23 @@ export default function UserManagementPage() {
           middleName: form.middleName.trim(),
           lastName: ln,
           email: email,
-          contact: form.contact.trim(),
+          contact: form.contact.trim() || "N/A",
           password: form.password,
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
-          roleId: form.role === 'coord-cc' ? 2 :
-                 form.role === 'coord-sc' ? 2 :
-                 form.role === 'acct' ? 3 :
+          roleId: form.role === 'coord-cc' ? 3 :
+                 form.role === 'coord-sc' ? 3 :
+                 form.role === 'acct' ? 2 :
                  form.role === 'provincial-agency' ? 'PROV' : 'PUB',
-          orgId: form.role === 'coord-cc' ? 2 :
-                form.role === 'coord-sc' ? 1 :
-                form.role === 'acct' ? 2 : 1
+          orgId: form.role === 'coord-cc' ? 1 :
+                 form.role === 'coord-sc' ? 3 :
+                 form.role === 'acct' ? 2 : 1
         }),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to create user');
+        throw new Error(result.error || 'Failed to create user');
       }
 
       toast.success("User created successfully");
@@ -196,7 +217,7 @@ export default function UserManagementPage() {
       setUsers(refreshedUsers);
     } catch (error) {
       console.error("Error creating user:", error);
-      toast.error("Failed to create user");
+      toast.error(error.message || "Failed to create user");
     }
   };
 
@@ -432,26 +453,62 @@ export default function UserManagementPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Password</Label>
-                  <Input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, password: e.target.value }))
-                    }
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, password: e.target.value }))
+                      }
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                    >
+                      {showPassword ? (
+                        <Eye className="size-4" />
+                      ) : (
+                        <EyeOff className="size-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Confirm password</Label>
-                  <Input
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        confirmPassword: e.target.value,
-                      }))
-                    }
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={form.confirmPassword}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          confirmPassword: e.target.value,
+                        }))
+                      }
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showConfirmPassword}
+                    >
+                      {showConfirmPassword ? (
+                        <Eye className="size-4" />
+                      ) : (
+                        <EyeOff className="size-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">
@@ -514,8 +571,61 @@ export default function UserManagementPage() {
               >
                 Cancel
               </Button>
-              <Button type="button" onClick={handleSaveUser}>
+              <Button type="button" onClick={() => {
+                const fn = form.firstName.trim();
+                const ln = form.lastName.trim();
+                if (!fn || !ln) { toast.error("First name and last name are required."); return; }
+                if (!form.role) { toast.error("Please select a role."); return; }
+                if (!form.password || form.password !== form.confirmPassword) { toast.error("Passwords must match and cannot be empty."); return; }
+                if (form.password.length < 8) { toast.error("Password must be at least 8 characters long."); return; }
+                if (!/[A-Z]/.test(form.password)) { toast.error("Password must contain at least one uppercase letter."); return; }
+                if (!/[a-z]/.test(form.password)) { toast.error("Password must contain at least one lowercase letter."); return; }
+                if (!/[0-9]/.test(form.password)) { toast.error("Password must contain at least one number."); return; }
+                if (!/[^A-Za-z0-9]/.test(form.password)) { toast.error("Password must contain at least one special character."); return; }
+                setConfirmSaveOpen(true);
+              }}>
                 Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Confirm Save Dialog */}
+        <Dialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <User className="size-5" />
+                Confirm Save
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to create this account?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-medium text-right">{form.firstName} {form.middleName} {form.lastName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Email:</span>
+                <span className="font-medium text-right">{form.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Username:</span>
+                <span className="font-medium text-right">{form.username || "(auto-generated)"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Role:</span>
+                <span className="font-medium text-right">{ROLE_LABELS[form.role] || form.role}</span>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setConfirmSaveOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => { setConfirmSaveOpen(false); handleSaveUser(); }}>
+                Save changes
               </Button>
             </DialogFooter>
           </DialogContent>

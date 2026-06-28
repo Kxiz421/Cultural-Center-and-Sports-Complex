@@ -107,6 +107,32 @@ export async function POST(request) {
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, "");
 
+    // Check for duplicate email in both staff and client tables
+    const [existingStaffEmail, existingClientEmail] = await Promise.all([
+      prisma.staff.findUnique({ where: { email: data.email } }),
+      prisma.client.findUnique({ where: { email: data.email } }),
+    ]);
+    if (existingStaffEmail || existingClientEmail) {
+      return NextResponse.json(
+        { error: "A user with this email already exists." },
+        { status: 409 }
+      );
+    }
+
+    // Check for duplicate username in both staff and client tables
+    if (autoUsername) {
+      const [existingStaffUser, existingClientUser] = await Promise.all([
+        prisma.staff.findUnique({ where: { username: autoUsername } }),
+        prisma.client.findUnique({ where: { username: autoUsername } }),
+      ]);
+      if (existingStaffUser || existingClientUser) {
+        return NextResponse.json(
+          { error: "This username is already taken. Please choose a different one." },
+          { status: 409 }
+        );
+      }
+    }
+
     if (data.roleType === "staff") {
       const staff = await prisma.staff.create({
         data: {
