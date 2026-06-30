@@ -253,7 +253,7 @@ async function main() {
         description: 'Used for jogging or sprints',
         rateId: 5, statusId: 1, venueId: 2,
       },
-    }),
+    }),hi
   ]);
   console.log(`✓ Created ${facilities.length} facilities`);
 

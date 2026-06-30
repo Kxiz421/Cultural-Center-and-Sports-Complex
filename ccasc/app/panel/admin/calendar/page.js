@@ -60,7 +60,7 @@ function getEventColor(status, type) {
   return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
 }
 
-function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh }) {
+function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEventClick }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -205,7 +205,8 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh }) {
                         return (
                           <div
                             key={ev.id}
-                            className={`truncate rounded-sm px-1 py-0.5 text-[10px] font-medium leading-tight ${colors.bg} ${colors.text}`}
+                            className={`truncate rounded-sm px-1 py-0.5 text-[10px] font-medium leading-tight cursor-pointer ${colors.bg} ${colors.text}`}
+                            onClick={() => onEventClick?.(ev)}
                             title={`${ev.title}${ev.clientName ? ` - ${ev.clientName}` : ""}${ev.blockType ? ` (${ev.blockType})` : ""}`}
                           >
                             {ev.title}
@@ -242,6 +243,7 @@ export default function CalendarPage() {
     venueId: null,
     notes: "",
   });
+  const [selectedEvent, setSelectedEvent] = useState(null);
 
   useEffect(() => {
     async function loadData() {
@@ -513,6 +515,7 @@ export default function CalendarPage() {
             color="border-l-4 border-l-blue-500"
             venueId={1}
             onRefresh={fetchData}
+            onEventClick={setSelectedEvent}
           />
           <MonthGrid
             events={sports}
@@ -521,9 +524,106 @@ export default function CalendarPage() {
             color="border-l-4 border-l-orange-500"
             venueId={2}
             onRefresh={fetchData}
+            onEventClick={setSelectedEvent}
           />
         </div>
       )}
+
+      {/* Event Detail Dialog */}
+      <Dialog open={selectedEvent !== null} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedEvent?.type === "event" ? "Reservation Details" : "Block Details"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedEvent?.type === "event"
+                ? `Reservation #${selectedEvent?.id?.replace("RES-", "")}`
+                : selectedEvent?.title}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedEvent?.type === "event" ? (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-xs">Event Type</Label>
+                  <p className="text-sm font-medium">{selectedEvent.title}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Client</Label>
+                  <p className="text-sm font-medium">{selectedEvent.clientName}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Date</Label>
+                  <p className="text-sm font-medium">
+                    {new Date(selectedEvent.date).toLocaleDateString("en-US", {
+                      weekday: "long", month: "long", day: "numeric", year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Time</Label>
+                  <p className="text-sm font-medium">{selectedEvent.start} — {selectedEvent.end}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Venue</Label>
+                  <p className="text-sm font-medium">{selectedEvent.venue}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Package</Label>
+                  <p className="text-sm font-medium">{selectedEvent.packageName || "N/A"}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Reservation Status</Label>
+                  <Badge variant="outline" className={`${getEventColor(selectedEvent.status).bg} ${getEventColor(selectedEvent.status).text}`}>
+                    {selectedEvent.status}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Booking Status</Label>
+                  <p className="text-sm font-medium">{selectedEvent.bookingStatus}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label className="text-muted-foreground text-xs">Title</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.title}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Date</Label>
+                  <p className="text-sm font-medium">
+                    {selectedEvent?.date && new Date(selectedEvent.date).toLocaleDateString("en-US", {
+                      weekday: "long", month: "long", day: "numeric", year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Type</Label>
+                  <Badge variant="outline" className={`${getEventColor(selectedEvent?.status).bg} ${getEventColor(selectedEvent?.status).text}`}>
+                    {selectedEvent?.blockType || selectedEvent?.status}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Venue</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.venue}</p>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-muted-foreground text-xs">Notes</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.notes || "No notes"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" onClick={() => setSelectedEvent(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
