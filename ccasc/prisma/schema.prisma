@@ -102,6 +102,7 @@ model Facility {
   facilityId   Int    @id @default(autoincrement()) @map("facility_id")
   facilityName String @map("facility_name") @db.VarChar(200)
   description  String? @db.Text
+  capacity     Int?   @map("capacity")
   rateId       Int    @map("rate_id")
   statusId     Int    @map("status_id")
   venueId      Int    @map("venue_id")
