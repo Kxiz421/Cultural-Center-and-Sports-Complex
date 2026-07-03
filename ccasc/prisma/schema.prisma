@@ -23,6 +23,8 @@ model Staff {
 
   staffRole      StaffRole         @relation(fields: [staffRoleId], references: [roleId])
   staffOrg       StaffOrganization @relation(fields: [staffOrgId], references: [staffOrgId])
+  otp            String?           @map("otp") @db.VarChar(10)
+  otpExpiration  DateTime?         @map("otp_expiration")
 
   bookings        Booking[]
   announcements   Announcement[]

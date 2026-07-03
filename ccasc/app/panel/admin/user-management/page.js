@@ -178,6 +178,15 @@ export default function UserManagementPage() {
       return;
     }
 
+    // Check for existing email
+    const emailExists = users.some(
+      (u) => u.email?.toLowerCase() === form.email.trim().toLowerCase()
+    );
+    if (emailExists) {
+      toast.error("A user with this email already exists.");
+      return;
+    }
+
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
@@ -193,13 +202,13 @@ export default function UserManagementPage() {
           contact: form.contact.trim() || "N/A",
           password: form.password,
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
-          roleId: form.role === 'coord-cc' ? 3 :
-                 form.role === 'coord-sc' ? 3 :
-                 form.role === 'acct' ? 2 :
+          roleId: form.role === 'coord-cc' ? 2 :
+                 form.role === 'coord-sc' ? 2 :
+                 form.role === 'acct' ? 3 :
                  form.role === 'provincial-agency' ? 'PROV' : 'PUB',
-          orgId: form.role === 'coord-cc' ? 1 :
-                 form.role === 'coord-sc' ? 3 :
-                 form.role === 'acct' ? 2 : 1
+          orgId: form.role === 'coord-cc' ? 2 :
+                 form.role === 'coord-sc' ? 1 :
+                 form.role === 'acct' ? 3 : 1
         }),
       });
 
@@ -470,7 +479,7 @@ export default function UserManagementPage() {
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? "Hide password" : "Show password"}
                       aria-pressed={showPassword}
-                    >
+                    > 
                       {showPassword ? (
                         <Eye className="size-4" />
                       ) : (
