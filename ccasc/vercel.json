@@ -1,4 +1,4 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npx prisma generate && npx prisma db push --accept-data-loss && node scripts/backfill-usernames.js && node scripts/backfill-booking-venues.js && node scripts/fix-particular-inventory.js && next build"
+  "buildCommand": "npx prisma generate && next build"
 }
