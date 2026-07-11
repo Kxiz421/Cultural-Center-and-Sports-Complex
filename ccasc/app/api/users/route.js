@@ -180,7 +180,7 @@ export async function POST(request) {
 
 export async function PATCH(request) {
   try {
-    const { userId, status } = await request.json();
+    const { userId, status, verificationStatus } = await request.json();
 
     if (!userId) {
       return NextResponse.json(
@@ -194,6 +194,25 @@ export async function PATCH(request) {
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    // If updating verification status (for clients)
+    if (verificationStatus) {
+      if (prefix === "CLT") {
+        // When verified, also activate the account
+        const updateData = {
+          verificationStatus,
+        };
+        if (verificationStatus === "Verified") {
+          updateData.accountStatus = "Active";
+        }
+        await prisma.client.update({
+          where: { clientId: id },
+          data: updateData,
+        });
+        return NextResponse.json({ success: true, newVerificationStatus: verificationStatus });
+      }
+      return NextResponse.json({ error: "Verification is only for clients" }, { status: 400 });
     }
 
     // If just updating status (legacy support)

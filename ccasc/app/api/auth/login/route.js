@@ -71,9 +71,16 @@ export async function POST(request) {
         );
       }
 
-      if (client.accountStatus !== "Active") {
+      if (client.accountStatus === "Deactivated") {
         return NextResponse.json(
           { error: "Your account has been deactivated. Contact the administrator." },
+          { status: 403 }
+        );
+      }
+
+      if (client.accountStatus === "Pending" || client.verificationStatus === "Pending") {
+        return NextResponse.json(
+          { error: "Your registration is still pending verification. Please wait for admin approval." },
           { status: 403 }
         );
       }
