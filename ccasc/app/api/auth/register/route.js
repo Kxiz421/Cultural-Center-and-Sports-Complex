@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export async function POST(request) {
   try {
-    const { firstName, middleName, lastName, email, contactNumber, password, organizationId, otherOrganization, idProof } = await request.json();
+    const { firstName, middleName, lastName, username, email, contactNumber, password, organizationId, otherOrganization, idProof } = await request.json();
 
     // Validate required fields
     if (!firstName || !lastName || !email || !password || !contactNumber) {
@@ -36,9 +36,35 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+    if (!/[A-Z]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one uppercase letter" },
+        { status: 400 }
+      );
+    }
+    if (!/[a-z]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one lowercase letter" },
+        { status: 400 }
+      );
+    }
+    if (!/[0-9]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one number" },
+        { status: 400 }
+      );
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one special character (e.g., @, #, $)" },
+        { status: 400 }
+      );
+    }
 
-    // Generate username from email prefix
-    const username = email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    // Use provided username or generate from email prefix
+    const finalUsername = username
+      ? username.toLowerCase().replace(/[^a-z0-9._-]/g, "")
+      : email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "");
 
     // Check for duplicate email in both staff and client tables
     const [existingStaffEmail, existingClientEmail] = await Promise.all([
@@ -53,20 +79,22 @@ export async function POST(request) {
     }
 
     // Check for duplicate username
-    const [existingStaffUser, existingClientUser] = await Promise.all([
-      prisma.staff.findUnique({ where: { username } }),
-      prisma.client.findUnique({ where: { username } }),
-    ]);
-    if (existingStaffUser || existingClientUser) {
-      return NextResponse.json(
-        { error: "This email is already registered" },
-        { status: 409 }
-      );
+    if (finalUsername) {
+      const [existingStaffUser, existingClientUser] = await Promise.all([
+        prisma.staff.findUnique({ where: { username: finalUsername } }),
+        prisma.client.findUnique({ where: { username: finalUsername } }),
+      ]);
+      if (existingStaffUser || existingClientUser) {
+        return NextResponse.json(
+          { error: "This username is already taken. Please choose a different one." },
+          { status: 409 }
+        );
+      }
     }
 
     // Handle organization
     let orgId;
-    if (organizationId) {
+    if (organizationId && organizationId !== "other") {
       orgId = parseInt(organizationId, 10);
     } else {
       // Create a new organization for "Other"
@@ -84,7 +112,7 @@ export async function POST(request) {
     // Create client
     const client = await prisma.client.create({
       data: {
-        username,
+        username: finalUsername,
         firstName,
         middleName: middleName || null,
         lastName,

@@ -28,16 +28,20 @@ export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [organizations, setOrganizations] = useState([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
+  const [selectedIsOther, setSelectedIsOther] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
     middleName: "",
     lastName: "",
+    username: "",
     email: "",
     contactNumber: "",
     password: "",
+    confirmPassword: "",
     organizationId: "",
     otherOrganization: "",
   });
@@ -106,6 +110,15 @@ export default function RegisterPage() {
     }
   };
 
+  const validatePassword = (password) => {
+    if (password.length < 8) return "Password must be at least 8 characters long.";
+    if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter.";
+    if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter.";
+    if (!/[0-9]/.test(password)) return "Password must contain at least one number.";
+    if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character (e.g., @, #, $).";
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -120,8 +133,16 @@ export default function RegisterPage() {
       return;
     }
 
-    if (formData.password.length < 8) {
-      toast.error("Password must be at least 8 characters long.");
+    // Validate password
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+
+    // Validate confirm password
+    if (formData.password !== formData.confirmPassword) {
+      toast.error("Passwords do not match.");
       return;
     }
 
@@ -132,7 +153,15 @@ export default function RegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
+          firstName: formData.firstName,
+          middleName: formData.middleName,
+          lastName: formData.lastName,
+          username: formData.username || undefined,
+          email: formData.email,
+          contactNumber: formData.contactNumber,
+          password: formData.password,
+          organizationId: formData.organizationId,
+          otherOrganization: formData.otherOrganization,
           idProof: idProofData,
         }),
       });
@@ -250,6 +279,19 @@ export default function RegisterPage() {
                 />
               </div>
 
+              {/* Username (optional) */}
+              <div className="space-y-2">
+                <Label htmlFor="username">Username (optional)</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Choose a username"
+                  className="text-black placeholder:text-neutral-500"
+                />
+              </div>
+
               {/* Contact Number */}
               <div className="space-y-2">
                 <Label htmlFor="contactNumber">
@@ -298,6 +340,43 @@ export default function RegisterPage() {
                     )}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
+                </p>
+              </div>
+
+              {/* Confirm Password */}
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">
+                  Confirm Password <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    placeholder="Re-enter your password"
+                    className="pr-10 text-black placeholder:text-neutral-500"
+                    required
+                    minLength={8}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? (
+                      <Eye className="size-4" />
+                    ) : (
+                      <EyeOff className="size-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {/* Organization */}
@@ -315,8 +394,10 @@ export default function RegisterPage() {
                     value={formData.organizationId}
                     onValueChange={(value) => {
                       if (value === "other") {
-                        setFormData((prev) => ({ ...prev, organizationId: "", otherOrganization: "" }));
+                        setSelectedIsOther(true);
+                        setFormData((prev) => ({ ...prev, organizationId: "other", otherOrganization: "" }));
                       } else {
+                        setSelectedIsOther(false);
                         setFormData((prev) => ({ ...prev, organizationId: value, otherOrganization: "" }));
                       }
                     }}
@@ -334,7 +415,7 @@ export default function RegisterPage() {
                     </SelectContent>
                   </Select>
                 )}
-                {formData.organizationId === "" && (
+                {selectedIsOther && (
                   <Input
                     name="otherOrganization"
                     value={formData.otherOrganization}
