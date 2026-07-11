@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const prefix = id.split("-")[0];
     const userId = parseInt(id.split("-")[1], 10);
 
