@@ -120,7 +120,7 @@ export async function POST(request) {
         contactNumber,
         password: hashedPassword,
         idProof: idProof || null,
-        accountStatus: "Active",
+        accountStatus: "Pending",
         verificationStatus: "Pending",
         clientRoleId: "PUB",
         clientOrgId: orgId,

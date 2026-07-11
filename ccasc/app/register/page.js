@@ -174,7 +174,7 @@ export default function RegisterPage() {
         return;
       }
 
-      toast.success("Registration successful! You can now sign in.");
+      toast.success("Registration submitted! Please wait for admin verification before signing in.");
       router.push("/login");
     } catch (error) {
       toast.error("An error occurred during registration.");
