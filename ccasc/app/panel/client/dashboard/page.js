@@ -1,40 +1,97 @@
 "use client";
 
-import * as React from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Calendar, ClipboardEdit, FileText, History } from "lucide-react";
 
 export default function ClientDashboard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        // For now, fetch without clientId to get overview
+        // In production, pass the actual clientId from auth context
+        const res = await fetch("/api/dashboard/client?clientId=1");
+        const json = await res.json();
+        setData(json);
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Client Dashboard</h1>
+          <p className="text-muted-foreground text-sm">
+            Loading live data from database...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = data?.stats || {
+    totalReservations: 0,
+    pendingReservations: 0,
+    confirmedReservations: 0,
+    totalDocuments: 0,
+  };
+  const upcomingEvents = data?.upcomingEvents || [];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Client Dashboard</h1>
         <p className="text-muted-foreground text-sm">
-          Manage your reservations, documents, and bookings
+          Live data from database — manage your reservations, documents, and bookings
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Facility Calendar</CardTitle>
-            <Calendar className="text-muted-foreground size-4" />
+            <CardTitle className="text-sm font-medium">Total Reservations</CardTitle>
+            <ClipboardEdit className="text-muted-foreground size-4" />
           </CardHeader>
           <CardContent>
+            <p className="text-2xl font-bold">{stats.totalReservations}</p>
             <p className="text-xs text-muted-foreground">
-              Check availability and schedules
+              {stats.confirmedReservations} confirmed · {stats.pendingReservations} pending
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Reservations</CardTitle>
-            <ClipboardEdit className="text-muted-foreground size-4" />
+            <CardTitle className="text-sm font-medium">Confirmed</CardTitle>
+            <Calendar className="text-muted-foreground size-4" />
           </CardHeader>
           <CardContent>
+            <p className="text-2xl font-bold text-green-600">{stats.confirmedReservations}</p>
             <p className="text-xs text-muted-foreground">
-              Create and manage your bookings
+              Approved and scheduled events
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <History className="text-muted-foreground size-4" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-orange-600">{stats.pendingReservations}</p>
+            <p className="text-xs text-muted-foreground">
+              Awaiting approval
             </p>
           </CardContent>
         </Card>
@@ -45,24 +102,42 @@ export default function ClientDashboard() {
             <FileText className="text-muted-foreground size-4" />
           </CardHeader>
           <CardContent>
+            <p className="text-2xl font-bold">{stats.totalDocuments}</p>
             <p className="text-xs text-muted-foreground">
-              Upload and track required documents
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Booking History</CardTitle>
-            <History className="text-muted-foreground size-4" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              View past and current bookings
+              Uploaded documents
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Upcoming Events */}
+      {upcomingEvents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Events</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {upcomingEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="font-medium">{event.eventType}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {event.venue} · {event.eventDate} · {event.timeSlot}
+                    </p>
+                  </div>
+                  <Badge variant={event.status === "Confirmed" ? "default" : "secondary"}>
+                    {event.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
