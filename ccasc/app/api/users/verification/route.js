@@ -29,9 +29,14 @@ export async function PATCH(request) {
     }
 
     if (prefix === "CLT") {
+      const updateData = { verificationStatus };
+      // Auto-activate account when verified
+      if (verificationStatus === "Verified") {
+        updateData.accountStatus = "Active";
+      }
       await prisma.client.update({
         where: { clientId: id },
-        data: { verificationStatus },
+        data: updateData,
       });
     } else {
       return NextResponse.json(

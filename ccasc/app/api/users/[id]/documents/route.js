@@ -16,7 +16,26 @@ export async function GET(request, { params }) {
     let documents = [];
 
     if (prefix === "CLT") {
-      // For clients: find their reservations -> bookings -> documents
+      // First: check if the client has an idProof (Certificate of Employment) on their record
+      const client = await prisma.client.findUnique({
+        where: { clientId: userId },
+        select: { idProof: true, firstName: true, lastName: true },
+      });
+
+      // Add idProof as a document if it exists
+      if (client?.idProof) {
+        documents.push({
+          documentId: 0,
+          documentType: { type: "Certificate of Employment (ID)" },
+          filePath: client.idProof,
+          documentStatus: "Submitted",
+          remarks: `Submitted during registration by ${client.firstName} ${client.lastName}`,
+          submittedAt: new Date(),
+          booking: null,
+        });
+      }
+
+      // Then: find their reservations -> bookings -> submitted documents
       const reservations = await prisma.reservation.findMany({
         where: { clientId: userId },
         select: { reservationId: true },
@@ -31,7 +50,7 @@ export async function GET(request, { params }) {
 
       const bookingIds = bookings.map((b) => b.bookingId);
 
-      documents = await prisma.document.findMany({
+      const bookingDocs = await prisma.document.findMany({
         where: { bookingId: { in: bookingIds } },
         include: {
           documentType: { select: { type: true } },
@@ -49,6 +68,8 @@ export async function GET(request, { params }) {
         },
         orderBy: { submittedAt: "desc" },
       });
+
+      documents = [...documents, ...bookingDocs];
     } else if (prefix === "STF") {
       // For staff: find documents where staffId matches
       documents = await prisma.document.findMany({
