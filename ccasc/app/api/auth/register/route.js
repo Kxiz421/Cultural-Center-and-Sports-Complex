@@ -7,7 +7,7 @@ export async function POST(request) {
     const { firstName, middleName, lastName, username, email, contactNumber, password, organizationId, otherOrganization, idProof } = await request.json();
 
     // Validate required fields
-    if (!firstName || !lastName || !email || !password || !contactNumber) {
+    if (!firstName || !lastName || !email || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }

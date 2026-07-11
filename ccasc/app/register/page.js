@@ -123,7 +123,7 @@ export default function RegisterPage() {
     e.preventDefault();
 
     // Validate required fields
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.contactNumber) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       toast.error("Please fill in all required fields.");
       return;
     }
@@ -294,9 +294,7 @@ export default function RegisterPage() {
 
               {/* Contact Number */}
               <div className="space-y-2">
-                <Label htmlFor="contactNumber">
-                  Contact Number <span className="text-destructive">*</span>
-                </Label>
+                <Label htmlFor="contactNumber">Contact Number (optional)</Label>
                 <Input
                   id="contactNumber"
                   name="contactNumber"
@@ -304,7 +302,6 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="+63 912 345 6789"
                   className="text-black placeholder:text-neutral-500"
-                  required
                 />
               </div>
 
