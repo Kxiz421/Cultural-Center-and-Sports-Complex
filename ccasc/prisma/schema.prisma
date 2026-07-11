@@ -63,7 +63,7 @@ model Client {
   email              String  @unique @map("email") @db.VarChar(150)
   contactNumber      String  @map("contact_number") @db.VarChar(20)
   password           String  @map("password") @db.VarChar(255)
-  idProof            String? @map("id_proof") @db.VarChar(255)
+  idProof            String? @map("id_proof") @db.Text
   accountStatus      String  @default("Active") @map("account_status") @db.VarChar(50)
   verificationStatus String  @default("Pending") @map("verification_status") @db.VarChar(50)
   profilePhoto       String? @map("profile_photo") @db.VarChar(255)
