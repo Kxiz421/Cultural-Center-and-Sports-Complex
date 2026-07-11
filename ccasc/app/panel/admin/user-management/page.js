@@ -55,6 +55,72 @@ const ROLE_LABELS = {
 
 const PAGE_SIZE = 5;
 
+function DocumentsSection({ userId }) {
+  const [documents, setDocuments] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function fetchDocs() {
+      try {
+        const res = await fetch(`/api/users/${userId}/documents`);
+        if (!res.ok) throw new Error('Failed to fetch documents');
+        const data = await res.json();
+        setDocuments(data);
+      } catch (err) {
+        console.error("Failed to load documents:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDocs();
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border p-3">
+        <h4 className="text-sm font-semibold mb-2">Submitted Documents</h4>
+        <p className="text-xs text-muted-foreground">Loading documents...</p>
+      </div>
+    );
+  }
+
+  if (documents.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border p-3">
+      <h4 className="text-sm font-semibold mb-2">Submitted Documents</h4>
+      <div className="space-y-2">
+        {documents.map((doc) => (
+          <div key={doc.id} className="flex items-center justify-between rounded-md bg-muted/30 p-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="text-xs font-medium truncate">{doc.type}</span>
+              {doc.remarks && (
+                <span className="text-xs text-muted-foreground truncate hidden sm:inline">{doc.remarks}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge
+                variant={doc.status === "Verified" ? "outline" : "secondary"}
+                className={doc.status === "Verified" ? "text-green-600 border-green-300 text-[10px]" : "text-yellow-600 border-yellow-300 bg-yellow-50 text-[10px]"}
+              >
+                {doc.status}
+              </Badge>
+              <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
+                  <Eye className="mr-1 size-3" /> View
+                </a>
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function nextAccountId(existing, roleValue) {
   const prefix =
     roleValue === "provincial-agency"
@@ -641,56 +707,6 @@ export default function UserManagementPage() {
         </Dialog>
       </div>
 
-      {/* Documents Dialog */}
-      <Dialog open={docOpen} onOpenChange={setDocOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Submitted Documents</DialogTitle>
-            <DialogDescription>
-              {docUser ? `${docUser.firstName} ${docUser.lastName} (${docUser.role})` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {docLoading ? (
-            <div className="py-8 text-center text-muted-foreground">Loading documents...</div>
-          ) : documents.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">No documents found for this user</div>
-          ) : (
-            <div className="space-y-3">
-              {documents.map((doc) => (
-                <div key={doc.id} className="flex items-start justify-between rounded-lg border p-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <FileText className="size-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">{doc.type}</span>
-                      <Badge
-                        variant={doc.status === "Verified" ? "outline" : "secondary"}
-                        className={doc.status === "Verified" ? "text-green-600 border-green-300" : "text-yellow-600 border-yellow-300 bg-yellow-50"}
-                      >
-                        {doc.status}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Event: {doc.eventType}
-                    </p>
-                    {doc.remarks && (
-                      <p className="text-xs text-muted-foreground">{doc.remarks}</p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right text-xs text-muted-foreground">
-                    <div>{doc.submittedAt ? new Date(doc.submittedAt).toLocaleDateString() : ""}</div>
-                    <Button variant="outline" size="sm" className="mt-1" asChild>
-                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
-                        <Eye className="mr-1 size-3" /> View
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Confirm Status Change Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -797,6 +813,11 @@ export default function UserManagementPage() {
                   <p className="font-medium">{selectedUser.organization || "—"}</p>
                 </div>
               </div>
+
+              {/* Submitted Documents */}
+              {selectedUser.type === "client" && (
+                <DocumentsSection userId={selectedUser.id} />
+              )}
 
               {/* Editable fields */}
               <div className="space-y-4">
@@ -978,14 +999,6 @@ export default function UserManagementPage() {
                       <div className="flex items-center justify-end gap-1">
                         {u.type === "client" && (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDocuments(u)}
-                              title="View submitted documents"
-                            >
-                              <FileText className="size-4" />
-                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
