@@ -55,72 +55,6 @@ const ROLE_LABELS = {
 
 const PAGE_SIZE = 5;
 
-function DocumentsSection({ userId }) {
-  const [documents, setDocuments] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    async function fetchDocs() {
-      try {
-        const res = await fetch(`/api/users/${userId}/documents`);
-        if (!res.ok) throw new Error('Failed to fetch documents');
-        const data = await res.json();
-        setDocuments(data);
-      } catch (err) {
-        console.error("Failed to load documents:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchDocs();
-  }, [userId]);
-
-  if (loading) {
-    return (
-      <div className="rounded-lg border p-3">
-        <h4 className="text-sm font-semibold mb-2">Submitted Documents</h4>
-        <p className="text-xs text-muted-foreground">Loading documents...</p>
-      </div>
-    );
-  }
-
-  if (documents.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-lg border p-3">
-      <h4 className="text-sm font-semibold mb-2">Submitted Documents</h4>
-      <div className="space-y-2">
-        {documents.map((doc) => (
-          <div key={doc.id} className="flex items-center justify-between rounded-md bg-muted/30 p-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText className="size-4 shrink-0 text-muted-foreground" />
-              <span className="text-xs font-medium truncate">{doc.type}</span>
-              {doc.remarks && (
-                <span className="text-xs text-muted-foreground truncate hidden sm:inline">{doc.remarks}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge
-                variant={doc.status === "Verified" ? "outline" : "secondary"}
-                className={doc.status === "Verified" ? "text-green-600 border-green-300 text-[10px]" : "text-yellow-600 border-yellow-300 bg-yellow-50 text-[10px]"}
-              >
-                {doc.status}
-              </Badge>
-              <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
-                  <Eye className="mr-1 size-3" /> View
-                </a>
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function nextAccountId(existing, roleValue) {
   const prefix =
     roleValue === "provincial-agency"
@@ -160,6 +94,8 @@ export default function UserManagementPage() {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmUser, setConfirmUser] = React.useState(null);
   const [confirmSaveOpen, setConfirmSaveOpen] = React.useState(false);
+  const [verifyConfirmOpen, setVerifyConfirmOpen] = React.useState(false);
+  const [verifyConfirmUser, setVerifyConfirmUser] = React.useState(null);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -383,6 +319,11 @@ export default function UserManagementPage() {
   const handleConfirmToggleStatus = (user) => {
     setConfirmUser(user);
     setConfirmOpen(true);
+  };
+
+  const handleConfirmToggleVerification = (user) => {
+    setVerifyConfirmUser(user);
+    setVerifyConfirmOpen(true);
   };
 
   const handleToggleVerification = async (user) => {
@@ -707,6 +648,53 @@ export default function UserManagementPage() {
         </Dialog>
       </div>
 
+      {/* Documents Dialog */}
+      <Dialog open={docOpen} onOpenChange={setDocOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Submitted Documents</DialogTitle>
+            <DialogDescription>
+              {docUser ? `${docUser.firstName} ${docUser.lastName} (${docUser.role})` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {docLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading documents...</div>
+          ) : documents.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No documents found for this user</div>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((doc) => (
+                <div key={doc.id} className="flex flex-col rounded-lg border p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="size-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">{doc.type}</span>
+                      <Badge
+                        variant={doc.status === "Verified" ? "outline" : "secondary"}
+                        className={doc.status === "Verified" ? "text-green-600 border-green-300" : "text-yellow-600 border-yellow-300 bg-yellow-50"}
+                      >
+                        {doc.status}
+                      </Badge>
+                    </div>
+                    {doc.remarks && (
+                      <span className="text-xs text-muted-foreground">{doc.remarks}</span>
+                    )}
+                  </div>
+                  {/* Display the image directly */}
+                  <div className="relative w-full h-64 overflow-hidden rounded-md border bg-muted/20">
+                    <img
+                      src={doc.filePath}
+                      alt={doc.type}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Confirm Status Change Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -734,6 +722,38 @@ export default function UserManagementPage() {
               }}
             >
               {confirmUser?.status === "Active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Verification Dialog */}
+      <Dialog open={verifyConfirmOpen} onOpenChange={setVerifyConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="size-5" />
+              {verifyConfirmUser?.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
+            </DialogTitle>
+            <DialogDescription>
+              {verifyConfirmUser?.verificationStatus === "Verified"
+                ? `Are you sure you want to set ${verifyConfirmUser?.firstName} ${verifyConfirmUser?.lastName}'s verification back to Pending? They will not be able to log in until verified again.`
+                : `Are you sure you want to verify ${verifyConfirmUser?.firstName} ${verifyConfirmUser?.lastName}? They will be able to log in once verified.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setVerifyConfirmOpen(false); setVerifyConfirmUser(null); }}>
+              Cancel
+            </Button>
+            <Button
+              variant={verifyConfirmUser?.verificationStatus === "Verified" ? "destructive" : "default"}
+              onClick={() => {
+                if (verifyConfirmUser) handleToggleVerification(verifyConfirmUser);
+                setVerifyConfirmOpen(false);
+                setVerifyConfirmUser(null);
+              }}
+            >
+              {verifyConfirmUser?.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -813,11 +833,6 @@ export default function UserManagementPage() {
                   <p className="font-medium">{selectedUser.organization || "—"}</p>
                 </div>
               </div>
-
-              {/* Submitted Documents */}
-              {selectedUser.type === "client" && (
-                <DocumentsSection userId={selectedUser.id} />
-              )}
 
               {/* Editable fields */}
               <div className="space-y-4">
@@ -1002,7 +1017,15 @@ export default function UserManagementPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleToggleVerification(u)}
+                              onClick={() => handleViewDocuments(u)}
+                              title="View submitted documents"
+                            >
+                              <FileText className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleConfirmToggleVerification(u)}
                               title={u.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
                             >
                               {u.verificationStatus === "Verified" ? (
