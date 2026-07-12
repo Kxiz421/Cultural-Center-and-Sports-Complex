@@ -114,6 +114,8 @@ export default function ParticularsPage() {
 
     setSaving(true);
     try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
       const res = await fetch("/api/inventory", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -123,6 +125,8 @@ export default function ParticularsPage() {
           unitCost: parseFloat(editForm.unitCost) || 0,
           quantityAvailable: parseInt(editForm.quantityAvailable, 10) || 0,
           statusId: editForm.statusId || "1",
+          performedBy,
+          performedByName,
         }),
       });
 

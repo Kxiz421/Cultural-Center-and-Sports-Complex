@@ -46,7 +46,7 @@ export async function GET(request) {
 
 export async function PUT(request) {
   try {
-    const { itemId, itemName, unitCost, quantityAvailable, statusId } = await request.json();
+    const { itemId, itemName, unitCost, quantityAvailable, statusId, performedBy, performedByName } = await request.json();
 
     if (!itemId) {
       return NextResponse.json(
@@ -67,6 +67,28 @@ export async function PUT(request) {
       include: {
         status: { select: { statusName: true, statusId: true } },
         venue: { select: { venue: true, venueId: true } },
+      },
+    });
+
+    // Build details of what changed
+    const changes = [];
+    if (itemName !== undefined) changes.push(`name: "${itemName}"`);
+    if (unitCost !== undefined) changes.push(`cost: ₱${parseFloat(unitCost).toLocaleString()}`);
+    if (quantityAvailable !== undefined) changes.push(`qty: ${parseInt(quantityAvailable, 10)}`);
+    if (statusId !== undefined) {
+      const statusName = updated.status?.statusName || statusId;
+      changes.push(`status: ${statusName}`);
+    }
+
+    // Log the update
+    await prisma.auditLog.create({
+      data: {
+        action: "UPDATED",
+        targetUserId: `INV-${updated.itemId}`,
+        targetName: updated.itemName,
+        performedById: performedBy || "system",
+        performedByName: performedByName || "System",
+        details: `Inventory item updated: ${changes.join(", ")}`,
       },
     });
 
