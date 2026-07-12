@@ -25,9 +25,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon } from "lucide-react";
 
 function formatPHP(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -46,6 +48,18 @@ function formatPHP(amount) {
   }).format(amount || 0);
 }
 
+const STATUS_OPTIONS = [
+  { id: 1, name: "Available" },
+  { id: 2, name: "Unavailable" },
+  { id: 3, name: "Under Maintenance" },
+  { id: 4, name: "Archived" },
+];
+
+const TIME_SLOTS = [
+  { id: 1, label: "Day (8:00 AM — 5:00 PM)" },
+  { id: 2, label: "Night (5:00 PM — 11:00 PM)" },
+];
+
 export default function PackagesPage() {
   const [packages, setPackages] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -53,13 +67,35 @@ export default function PackagesPage() {
   const [editPkg, setEditPkg] = React.useState(null);
   const [editForm, setEditForm] = React.useState({
     packageName: "",
+    description: "",
     dayRate: "",
     nightRate: "",
     ledWallDayRate: "",
     ledWallNightRate: "",
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [confirmAction, setConfirmAction] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addForm, setAddForm] = React.useState({
+    packageName: "",
+    description: "",
+    dayRate: "",
+    nightRate: "",
+    ledWallDayRate: "",
+    ledWallNightRate: "",
+    timeSlotId: "",
+  });
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyLogs, setHistoryLogs] = React.useState([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+
+  const resetAddForm = () => {
+    setAddForm({
+      packageName: "", description: "", dayRate: "", nightRate: "",
+      ledWallDayRate: "", ledWallNightRate: "", timeSlotId: "",
+    });
+  };
 
   React.useEffect(() => {
     let cancelled = false;
@@ -84,6 +120,7 @@ export default function PackagesPage() {
     setEditPkg(pkg);
     setEditForm({
       packageName: pkg.packageName || "",
+      description: pkg.description || "",
       dayRate: pkg.dayRate != null ? String(pkg.dayRate) : "",
       nightRate: pkg.nightRate != null ? String(pkg.nightRate) : "",
       ledWallDayRate: pkg.ledWallDayRate != null ? String(pkg.ledWallDayRate) : "",
@@ -92,20 +129,41 @@ export default function PackagesPage() {
     setEditOpen(true);
   };
 
+  const handleOpenHistory = async () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryLogs([]);
+    try {
+      const res = await fetch(`/api/audit-logs?targetUserIdPrefix=PKG-`);
+      if (!res.ok) throw new Error("Failed to fetch history");
+      const data = await res.json();
+      setHistoryLogs(data);
+    } catch (err) {
+      toast.error("Failed to load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleSavePackage = async () => {
     if (!editPkg) return;
     setSaving(true);
     try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
       const res = await fetch("/api/packages", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           packageId: editPkg.packageId,
           packageName: editForm.packageName.trim(),
+          description: editForm.description.trim(),
           dayRate: editForm.dayRate || null,
           nightRate: editForm.nightRate || null,
           ledWallDayRate: editForm.ledWallDayRate || null,
           ledWallNightRate: editForm.ledWallNightRate || null,
+          performedBy,
+          performedByName,
         }),
       });
 
@@ -118,7 +176,6 @@ export default function PackagesPage() {
       setConfirmOpen(false);
       setEditOpen(false);
       setEditPkg(null);
-      // Re-fetch packages
       const refreshRes = await fetch("/api/packages");
       const refreshData = await refreshRes.json();
       setPackages(Array.isArray(refreshData) ? refreshData : []);
@@ -129,23 +186,159 @@ export default function PackagesPage() {
     }
   };
 
+  const handleAddPackage = async () => {
+    if (!addForm.packageName.trim()) {
+      toast.error("Package name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/packages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          packageName: addForm.packageName.trim(),
+          description: addForm.description.trim(),
+          dayRate: addForm.dayRate || null,
+          nightRate: addForm.nightRate || null,
+          ledWallDayRate: addForm.ledWallDayRate || null,
+          ledWallNightRate: addForm.ledWallNightRate || null,
+          timeSlotId: addForm.timeSlotId || "1",
+          performedBy,
+          performedByName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to create package");
+      }
+
+      toast.success("Package created successfully");
+      resetAddForm();
+      setAddOpen(false);
+      const refreshRes = await fetch("/api/packages");
+      const refreshData = await refreshRes.json();
+      setPackages(Array.isArray(refreshData) ? refreshData : []);
+    } catch (err) {
+      toast.error(err.message || "Failed to create package");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleArchive = async () => {
+    if (!confirmAction?.item) return;
+    const item = confirmAction.item;
+    const isArchived = Number(item.statusId) === 4;
+    const newStatusId = isArchived ? 1 : 4;
+
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/packages", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          packageId: item.packageId,
+          statusId: newStatusId,
+          performedBy,
+          performedByName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to update status");
+      }
+
+      toast.success(isArchived ? "Package restored successfully" : "Package archived successfully");
+      setConfirmOpen(false);
+      setConfirmAction(null);
+      const refreshRes = await fetch("/api/packages");
+      const refreshData = await refreshRes.json();
+      setPackages(Array.isArray(refreshData) ? refreshData : []);
+    } catch (err) {
+      toast.error(err.message || "Failed to update status");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Packages Management
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Bundle particulars into priced offerings for clients. Click a package to edit its details.
-        </p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Packages Management</h2>
+          <p className="text-muted-foreground text-sm">
+            Bundle particulars into priced offerings for clients. Add, edit, archive, or restore packages.
+          </p>
+        </div>
+        <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetAddForm(); }}>
+          <DialogTrigger asChild>
+            <Button><Plus className="mr-2 size-4" />Add Package</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add New Package</DialogTitle>
+              <DialogDescription>Create a new package with rates and description.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="add-name">Package Name *</Label>
+                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-desc">Description</Label>
+                <Textarea id="add-desc" rows={2} placeholder="Brief description of the package..." value={addForm.description} onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="add-day">Day Rate (₱)</Label>
+                  <Input id="add-day" type="number" min="0" step="0.01" placeholder="e.g. 55000" value={addForm.dayRate} onChange={(e) => setAddForm((f) => ({ ...f, dayRate: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-night">Night Rate (₱)</Label>
+                  <Input id="add-night" type="number" min="0" step="0.01" placeholder="e.g. 60000" value={addForm.nightRate} onChange={(e) => setAddForm((f) => ({ ...f, nightRate: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="add-led-day">LED Wall Day (₱)</Label>
+                  <Input id="add-led-day" type="number" min="0" step="0.01" placeholder="e.g. 80000" value={addForm.ledWallDayRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallDayRate: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-led-night">LED Wall Night (₱)</Label>
+                  <Input id="add-led-night" type="number" min="0" step="0.01" placeholder="e.g. 85000" value={addForm.ledWallNightRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallNightRate: e.target.value }))} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-timeslot">Time Slot</Label>
+                <Select value={addForm.timeSlotId} onValueChange={(v) => setAddForm((f) => ({ ...f, timeSlotId: v }))}>
+                  <SelectTrigger id="add-timeslot"><SelectValue placeholder="Select time slot" /></SelectTrigger>
+                  <SelectContent>
+                    {TIME_SLOTS.map((ts) => (
+                      <SelectItem key={ts.id} value={String(ts.id)}>{ts.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { resetAddForm(); setAddOpen(false); }}>Cancel</Button>
+              <Button onClick={handleAddPackage} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Catalog</CardTitle>
-          <CardDescription>
-            Click the edit icon to update package details and rates.
-          </CardDescription>
+          <CardDescription>Click the edit icon to update package details and rates. Use archive/restore to manage availability.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -154,8 +347,7 @@ export default function PackagesPage() {
                 <TableHead>Package</TableHead>
                 <TableHead className="text-right">Day Rate</TableHead>
                 <TableHead className="text-right">Night Rate</TableHead>
-                <TableHead className="text-right">LED Wall Day</TableHead>
-                <TableHead className="text-right">LED Wall Night</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Time Slot</TableHead>
                 <TableHead>Inclusions</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -164,66 +356,67 @@ export default function PackagesPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
-                    Loading...
-                  </TableCell>
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">Loading...</TableCell>
                 </TableRow>
               ) : packages.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
-                    No packages found
-                  </TableCell>
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">No packages found. Add one to get started.</TableCell>
                 </TableRow>
               ) : (
-                packages.map((pkg) => (
-                  <TableRow
-                    key={pkg.id}
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => openEditDialog(pkg)}
-                  >
-                    <TableCell>
-                      <div className="font-medium">{pkg.packageName}</div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {pkg.dayRate ? formatPHP(pkg.dayRate) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {pkg.nightRate ? formatPHP(pkg.nightRate) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {pkg.ledWallDayRate ? formatPHP(pkg.ledWallDayRate) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {pkg.ledWallNightRate ? formatPHP(pkg.ledWallNightRate) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm">{pkg.timeSlot}</TableCell>
-                    <TableCell className="text-sm max-w-[200px]">
-                      <ul className="list-inside list-disc text-xs">
-                        {pkg.inclusions.map((inc, i) => (
-                          <li key={i}>
-                            {inc.itemName} (x{inc.quantityAvailable})
-                          </li>
-                        ))}
-                        {pkg.inclusions.length === 0 && (
-                          <li className="list-none text-muted-foreground">None</li>
-                        )}
-                      </ul>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditDialog(pkg);
-                        }}
-                        title="Edit package"
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                packages.map((pkg) => {
+                  const statusName = STATUS_OPTIONS.find((s) => s.id === Number(pkg.statusId))?.name || "Unknown";
+                  return (
+                    <TableRow key={pkg.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <PackageIcon className="size-4 text-muted-foreground shrink-0" />
+                          <div>
+                            <span className="font-medium">{pkg.packageName}</span>
+                            {pkg.description && (
+                              <p className="text-xs text-muted-foreground truncate max-w-[200px]">{pkg.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{pkg.dayRate ? formatPHP(pkg.dayRate) : "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{pkg.nightRate ? formatPHP(pkg.nightRate) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={statusName === "Available" ? "outline" : "secondary"}
+                          className={statusName === "Available" ? "text-green-600 border-green-300" : statusName === "Archived" ? "text-muted-foreground" : ""}
+                        >
+                          {statusName}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{pkg.timeSlot}</TableCell>
+                      <TableCell className="text-sm max-w-[150px]">
+                        <ul className="list-inside list-disc text-xs">
+                          {pkg.inclusions.map((inc, i) => (
+                            <li key={i}>{inc.itemName} (x{inc.quantityAvailable})</li>
+                          ))}
+                          {pkg.inclusions.length === 0 && <li className="list-none text-muted-foreground">None</li>}
+                        </ul>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(pkg)} title="Edit package">
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={() => {
+                              setConfirmAction({ type: statusName === "Archived" ? "unarchive" : "archive", item: pkg });
+                              setConfirmOpen(true);
+                            }}
+                            title={statusName === "Archived" ? "Restore package" : "Archive package"}
+                          >
+                            {statusName === "Archived" ? <RotateCcw className="size-4 text-green-600" /> : <Archive className="size-4 text-amber-600" />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -235,65 +428,35 @@ export default function PackagesPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Package</DialogTitle>
-            <DialogDescription>
-              Update package name and rate details.
-            </DialogDescription>
+            <DialogDescription>Update package name, description, and rate details.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="edit-name">Package Name</Label>
-              <Input
-                id="edit-name"
-                value={editForm.packageName}
-                onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value }))}
-              />
+              <Input id="edit-name" value={editForm.packageName} onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea id="edit-desc" rows={2} value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-day">Day Rate (₱)</Label>
-                <Input
-                  id="edit-day"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.dayRate}
-                  onChange={(e) => setEditForm((f) => ({ ...f, dayRate: e.target.value }))}
-                />
+                <Input id="edit-day" type="number" min="0" step="0.01" value={editForm.dayRate} onChange={(e) => setEditForm((f) => ({ ...f, dayRate: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-night">Night Rate (₱)</Label>
-                <Input
-                  id="edit-night"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.nightRate}
-                  onChange={(e) => setEditForm((f) => ({ ...f, nightRate: e.target.value }))}
-                />
+                <Input id="edit-night" type="number" min="0" step="0.01" value={editForm.nightRate} onChange={(e) => setEditForm((f) => ({ ...f, nightRate: e.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-led-day">LED Wall Day (₱)</Label>
-                <Input
-                  id="edit-led-day"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.ledWallDayRate}
-                  onChange={(e) => setEditForm((f) => ({ ...f, ledWallDayRate: e.target.value }))}
-                />
+                <Input id="edit-led-day" type="number" min="0" step="0.01" value={editForm.ledWallDayRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallDayRate: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-led-night">LED Wall Night (₱)</Label>
-                <Input
-                  id="edit-led-night"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.ledWallNightRate}
-                  onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value }))}
-                />
+                <Input id="edit-led-night" type="number" min="0" step="0.01" value={editForm.ledWallNightRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value }))} />
               </div>
             </div>
             {editPkg && editPkg.inclusions && editPkg.inclusions.length > 0 && (
@@ -311,60 +474,111 @@ export default function PackagesPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditOpen(false); setEditPkg(null); }}>
-              Cancel
-            </Button>
-            <Button onClick={() => setConfirmOpen(true)} disabled={saving}>
+            <Button variant="outline" onClick={() => { setEditOpen(false); setEditPkg(null); }}>Cancel</Button>
+            <Button onClick={() => { setConfirmAction({ type: "save", item: editPkg }); setConfirmOpen(true); }} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      {/* Archive/Restore Confirmation */}
+      <Dialog open={confirmOpen && (confirmAction?.type === "archive" || confirmAction?.type === "unarchive")} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="size-5" />
-              Confirm Save Changes
+              {confirmAction?.type === "archive" ? <Archive className="size-5 text-amber-600" /> : <RotateCcw className="size-5 text-green-600" />}
+              {confirmAction?.type === "archive" ? "Archive Package" : "Restore Package"}
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to save the changes to &ldquo;{editPkg?.packageName}&rdquo;?
+              {confirmAction?.type === "archive"
+                ? `Are you sure you want to archive "${confirmAction?.item?.packageName}"? It will be hidden from active listings.`
+                : `Are you sure you want to restore "${confirmAction?.item?.packageName}"? It will become available again.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Package:</span>
-              <span className="font-medium">{editForm.packageName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Day Rate:</span>
-              <span className="font-medium">{editForm.dayRate ? formatPHP(editForm.dayRate) : "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Night Rate:</span>
-              <span className="font-medium">{editForm.nightRate ? formatPHP(editForm.nightRate) : "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">LED Wall Day:</span>
-              <span className="font-medium">{editForm.ledWallDayRate ? formatPHP(editForm.ledWallDayRate) : "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">LED Wall Night:</span>
-              <span className="font-medium">{editForm.ledWallNightRate ? formatPHP(editForm.ledWallNightRate) : "—"}</span>
-            </div>
-          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSavePackage} disabled={saving}>
-              {saving ? "Saving..." : "Confirm"}
+            <Button variant="outline" onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}>Cancel</Button>
+            <Button variant={confirmAction?.type === "archive" ? "destructive" : "default"} onClick={handleToggleArchive} disabled={saving}>
+              {saving ? "Processing..." : confirmAction?.type === "archive" ? "Archive" : "Restore"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Confirmation */}
+      <Dialog open={confirmOpen && confirmAction?.type === "save"} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Pencil className="size-5" />Confirm Save Changes</DialogTitle>
+            <DialogDescription>Are you sure you want to save the changes to &ldquo;{editPkg?.packageName}&rdquo;?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleSavePackage} disabled={saving}>{saving ? "Saving..." : "Confirm"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><History className="size-5" />Package History</DialogTitle>
+            <DialogDescription>View all package changes performed by admins</DialogDescription>
+          </DialogHeader>
+          {historyLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading history...</div>
+          ) : historyLogs.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No history records found</div>
+          ) : (
+            <div className="space-y-3">
+              {historyLogs.map((log) => (
+                <div key={log.auditLogId} className="flex items-start gap-3 rounded-lg border p-3">
+                  <div className="mt-0.5">
+                    {log.action === "CREATED" && <PackageIcon className="size-4 text-blue-500" />}
+                    {log.action === "UPDATED" && <Pencil className="size-4 text-blue-500" />}
+                    {log.action === "ARCHIVED" && <Archive className="size-4 text-amber-600" />}
+                    {log.action === "RESTORED" && <RotateCcw className="size-4 text-green-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className={
+                        log.action === "CREATED" ? "text-blue-600 border-blue-300" :
+                        log.action === "UPDATED" ? "text-blue-600 border-blue-300" :
+                        log.action === "ARCHIVED" ? "text-amber-600 border-amber-300" :
+                        "text-green-600 border-green-300"
+                      }>{log.action}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleDateString("en-US", {
+                          year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm mt-1">
+                      <span className="text-muted-foreground">Target: </span>
+                      <span className="font-medium">{log.targetName}</span>
+                      <span className="text-muted-foreground"> ({log.targetUserId})</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span>By: </span>
+                      <span className="font-medium">{log.performedByName}</span>
+                      <span className="text-muted-foreground"> ({log.performedById})</span>
+                    </p>
+                    {log.details && <p className="text-xs text-muted-foreground mt-1 italic">{log.details}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* History Button */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button onClick={handleOpenHistory} className="shadow-lg" size="lg">
+          <History className="mr-2 size-5" />History
+        </Button>
+      </div>
     </div>
   );
 }
