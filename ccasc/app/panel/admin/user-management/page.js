@@ -102,7 +102,7 @@ export default function UserManagementPage() {
       return localStorage.getItem("user_id") || "";
     }
     return "";
-  })  
+  })    
   const [currentUserName] = React.useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("user_name") || "";
@@ -301,6 +301,8 @@ export default function UserManagementPage() {
           lastName: ln,
           email,
           contact: editForm.contact,
+          performedBy: currentUserId,
+          performedByName: currentUserName,
         }),
       });
 
@@ -310,6 +312,7 @@ export default function UserManagementPage() {
       }
 
       toast.success("Account details updated successfully");
+      setSaveConfirmOpen(false);
       setProfileOpen(false);
       setSelectedUser(null);
 
