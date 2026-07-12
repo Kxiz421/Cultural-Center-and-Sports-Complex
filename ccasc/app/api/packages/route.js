@@ -41,6 +41,7 @@ export async function GET() {
       statusName: getStatusName(pkg.statusId),
       timeSlot: `${pkg.timeSlot.startTime} — ${pkg.timeSlot.endTime}`,
       inclusions: pkg.inclusions.map((inc) => ({
+        itemId: inc.itemId,
         itemName: inc.item?.itemName || "Unknown",
         quantityAvailable: inc.quantityAvailable,
       })),
@@ -114,7 +115,7 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
-    const { packageId, packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, statusId, performedBy, performedByName } = await request.json();
+    const { packageId, packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, statusId, inclusions, performedBy, performedByName } = await request.json();
 
     if (!packageId) {
       return NextResponse.json({ error: "Package ID is required" }, { status: 400 });
@@ -136,6 +137,26 @@ export async function PUT(request) {
     if (ledWallDayRate !== undefined) updateData.ledWallDayRate = ledWallDayRate ? parseFloat(ledWallDayRate) : null;
     if (ledWallNightRate !== undefined) updateData.ledWallNightRate = ledWallNightRate ? parseFloat(ledWallNightRate) : null;
     if (statusId !== undefined) updateData.statusId = parseInt(statusId, 10);
+
+    // Handle inclusions update if provided
+    if (inclusions !== undefined && Array.isArray(inclusions)) {
+      // Delete existing inclusions for this package
+      await prisma.packageInclusion.deleteMany({
+        where: { packageId: parseInt(packageId, 10) },
+      });
+      // Create new inclusions
+      for (const inc of inclusions) {
+        if (inc.itemId && inc.quantityAvailable > 0) {
+          await prisma.packageInclusion.create({
+            data: {
+              packageId: parseInt(packageId, 10),
+              itemId: parseInt(inc.itemId, 10),
+              quantityAvailable: parseInt(inc.quantityAvailable, 10),
+            },
+          });
+        }
+      }
+    }
 
     const updated = await prisma.package.update({
       where: { packageId: parseInt(packageId, 10) },
@@ -159,6 +180,9 @@ export async function PUT(request) {
     }
     if (statusId !== undefined && existing.statusId !== updated.statusId) {
       changes.push(`status: ${getStatusName(existing.statusId)} → ${getStatusName(updated.statusId)}`);
+    }
+    if (inclusions !== undefined) {
+      changes.push(`inclusions updated`);
     }
 
     if (changes.length > 0) {

@@ -73,6 +73,7 @@ export default function PackagesPage() {
     ledWallDayRate: "",
     ledWallNightRate: "",
   });
+  const [editInclusions, setEditInclusions] = React.useState([]);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -126,6 +127,13 @@ export default function PackagesPage() {
       ledWallDayRate: pkg.ledWallDayRate != null ? String(pkg.ledWallDayRate) : "",
       ledWallNightRate: pkg.ledWallNightRate != null ? String(pkg.ledWallNightRate) : "",
     });
+    setEditInclusions(
+      (pkg.inclusions || []).map((inc) => ({
+        itemId: inc.itemId,
+        itemName: inc.itemName,
+        quantityAvailable: inc.quantityAvailable,
+      }))
+    );
     setEditOpen(true);
   };
 
@@ -162,6 +170,10 @@ export default function PackagesPage() {
           nightRate: editForm.nightRate || null,
           ledWallDayRate: editForm.ledWallDayRate || null,
           ledWallNightRate: editForm.ledWallNightRate || null,
+          inclusions: editInclusions.map((inc) => ({
+            itemId: inc.itemId,
+            quantityAvailable: inc.quantityAvailable,
+          })),
           performedBy,
           performedByName,
         }),
@@ -459,19 +471,31 @@ export default function PackagesPage() {
                 <Input id="edit-led-night" type="number" min="0" step="0.01" value={editForm.ledWallNightRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value }))} />
               </div>
             </div>
-            {editPkg && editPkg.inclusions && editPkg.inclusions.length > 0 && (
-              <div className="space-y-2">
-                <Label>Inclusions</Label>
-                <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-                  {editPkg.inclusions.map((inc, i) => (
-                    <div key={i} className="flex justify-between">
-                      <span>{inc.itemName}</span>
-                      <span className="text-muted-foreground">x{inc.quantityAvailable}</span>
+            <div className="space-y-2">
+              <Label>Inclusions (edit quantities)</Label>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+                {editInclusions.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">No inclusions</p>
+                ) : (
+                  editInclusions.map((inc, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="flex-1">{inc.itemName}</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        className="w-20 h-8 text-xs"
+                        value={inc.quantityAvailable}
+                        onChange={(e) => {
+                          const newIncs = [...editInclusions];
+                          newIncs[i] = { ...newIncs[i], quantityAvailable: parseInt(e.target.value, 10) || 0 };
+                          setEditInclusions(newIncs);
+                        }}
+                      />
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </div>
-            )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditPkg(null); }}>Cancel</Button>
