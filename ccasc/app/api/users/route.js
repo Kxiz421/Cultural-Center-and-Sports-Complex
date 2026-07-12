@@ -50,6 +50,7 @@ export async function GET() {
         rolePriority: roleOrder[s.staffRole.roleName] ?? 99,
         verificationStatus: null,
         profilePhoto: s.profilePhoto,
+        createdAt: s.createdAt,
       })),
       ...clients.map((c) => ({
         id: `CLT-${c.clientId}`,
@@ -67,6 +68,7 @@ export async function GET() {
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
         verificationStatus: c.verificationStatus,
         profilePhoto: c.profilePhoto,
+        createdAt: c.createdAt,
       })),
     ];
 
@@ -180,7 +182,7 @@ export async function POST(request) {
 
 export async function PATCH(request) {
   try {
-    const { userId, status, verificationStatus } = await request.json();
+    const { userId, status, verificationStatus, performedBy, performedByName } = await request.json();
 
     if (!userId) {
       return NextResponse.json(
@@ -194,6 +196,18 @@ export async function PATCH(request) {
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    // Helper to get user name for logging
+    async function getTargetName(prefix, id) {
+      if (prefix === "STF") {
+        const u = await prisma.staff.findUnique({ where: { staffId: id } });
+        return u ? `${u.firstName} ${u.lastName}` : userId;
+      } else if (prefix === "CLT") {
+        const u = await prisma.client.findUnique({ where: { clientId: id } });
+        return u ? `${u.firstName} ${u.lastName}` : userId;
+      }
+      return userId;
     }
 
     // If updating verification status (for clients)
@@ -210,13 +224,32 @@ export async function PATCH(request) {
           where: { clientId: id },
           data: updateData,
         });
+
+        // Log the verification change
+        const targetName = await getTargetName(prefix, id);
+        const action = verificationStatus === "Verified" ? "VERIFIED" : verificationStatus === "Declined" ? "DECLINED" : "VERIFICATION_UPDATED";
+        const newStatus = verificationStatus === "Verified" ? "Active" : verificationStatus || "Pending";
+        await prisma.auditLog.create({
+          data: {
+            action,
+            targetUserId: userId,
+            targetName,
+            performedById: performedBy || "system",
+            performedByName: performedByName || "System",
+            details: `Verification status changed to ${verificationStatus}, account status set to ${newStatus}`,
+          },
+        });
+
         return NextResponse.json({ success: true, newVerificationStatus: verificationStatus });
       }
       return NextResponse.json({ error: "Verification is only for clients" }, { status: 400 });
     }
 
-    // If just updating status (legacy support)
+    // If just updating status
     if (status) {
+      const targetName = await getTargetName(prefix, id);
+      const action = status === "Active" ? "ACTIVATED" : "DEACTIVATED";
+
       if (prefix === "STF") {
         await prisma.staff.update({
           where: { staffId: id },
@@ -230,6 +263,19 @@ export async function PATCH(request) {
       } else {
         return NextResponse.json({ error: "Unknown user type" }, { status: 400 });
       }
+
+      // Log the status change
+      await prisma.auditLog.create({
+        data: {
+          action,
+          targetUserId: userId,
+          targetName,
+          performedById: performedBy || "system",
+          performedByName: performedByName || "System",
+          details: `Account status changed to ${status}`,
+        },
+      });
+
       return NextResponse.json({ success: true, newStatus: status });
     }
 
