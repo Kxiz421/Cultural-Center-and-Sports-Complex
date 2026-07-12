@@ -292,7 +292,7 @@ export async function PATCH(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { userId, firstName, middleName, lastName, email, contact } = body;
+    const { userId, firstName, middleName, lastName, email, contact, performedBy, performedByName } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -306,6 +306,18 @@ export async function PUT(request) {
 
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    // Helper to get user name for logging
+    async function getTargetName(prefix, id) {
+      if (prefix === "STF") {
+        const u = await prisma.staff.findUnique({ where: { staffId: id } });
+        return u ? `${u.firstName} ${u.lastName}` : userId;
+      } else if (prefix === "CLT") {
+        const u = await prisma.client.findUnique({ where: { clientId: id } });
+        return u ? `${u.firstName} ${u.lastName}` : userId;
+      }
+      return userId;
     }
 
     if (prefix === "STF") {
@@ -335,6 +347,19 @@ export async function PUT(request) {
     } else {
       return NextResponse.json({ error: "Unknown user type" }, { status: 400 });
     }
+
+    // Log the profile update
+    const targetName = await getTargetName(prefix, id);
+    await prisma.auditLog.create({
+      data: {
+        action: "UPDATED",
+        targetUserId: userId,
+        targetName,
+        performedById: performedBy || "system",
+        performedByName: performedByName || "System",
+        details: `Account details updated`,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
