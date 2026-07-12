@@ -246,7 +246,7 @@ model PackageInclusion {
   itemId             Int @map("item_id")
 
   package Package   @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
-  item    Inventory @relation(fields: [itemId], references: [itemId])
+  item    Inventory? @relation(fields: [itemId], references: [itemId])
 
   @@map("PackageInclusion")
 }
