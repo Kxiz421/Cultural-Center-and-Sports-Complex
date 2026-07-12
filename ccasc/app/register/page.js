@@ -69,8 +69,8 @@ export default function RegisterPage() {
     const { name, value } = e.target;
     // Phone number: digits only, max 11
     if (name === "contactNumber") {
-      const digitsOnly = value.replace(/\D/g, "").slice(0, 11);
-      setFormData((prev) => ({ ...prev, [name]: digitsOnly }));
+      const digitsOnly = value.replace(/\D/g, "");
+      setFormData((prev) => ({ ...prev, [name]: digitsOnly.slice(0, 11) }));
       return;
     }
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -131,6 +131,12 @@ export default function RegisterPage() {
     // Validate required fields
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    // Validate contact number if provided
+    if (formData.contactNumber && formData.contactNumber.length !== 11) {
+      toast.error("Contact number must be exactly 11 digits.");
       return;
     }
 

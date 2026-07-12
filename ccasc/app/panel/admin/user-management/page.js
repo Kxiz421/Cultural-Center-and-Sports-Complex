@@ -162,6 +162,13 @@ export default function UserManagementPage() {
       toast.error("Please select a role.");
       return;
     }
+
+    // Validate contact number if provided
+    if (form.contact && form.contact.length !== 11) {
+      toast.error("Contact number must be exactly 11 digits.");
+      return;
+    }
+
     if (!form.password || form.password !== form.confirmPassword) {
       toast.error("Passwords must match and cannot be empty.");
       return;
@@ -264,6 +271,12 @@ export default function UserManagementPage() {
     }
     if (!email) {
       toast.error("Email is required.");
+      return;
+    }
+
+    // Validate contact number if provided
+    if (editForm.contact && editForm.contact.length !== 11) {
+      toast.error("Contact number must be exactly 11 digits.");
       return;
     }
 
