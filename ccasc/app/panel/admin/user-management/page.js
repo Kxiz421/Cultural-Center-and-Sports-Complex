@@ -110,7 +110,6 @@ export default function UserManagementPage() {
     return "";
   })
   const [historyOpen, setHistoryOpen] = React.useState(false);
-  const [historyUser, setHistoryUser] = React.useState(null);
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const router = useRouter();
@@ -428,13 +427,12 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleOpenHistory = async (user) => {
-    setHistoryUser(user);
+  const handleOpenHistory = async () => {
     setHistoryOpen(true);
     setHistoryLoading(true);
     setHistoryLogs([]);
     try {
-      const res = await fetch(`/api/audit-logs?targetUserId=${user.id}`);
+      const res = await fetch(`/api/audit-logs`);
       if (!res.ok) throw new Error('Failed to fetch history');
       const data = await res.json();
       setHistoryLogs(data);
@@ -1120,7 +1118,7 @@ export default function UserManagementPage() {
               Account History
             </DialogTitle>
             <DialogDescription>
-              {historyUser ? `${historyUser.firstName} ${historyUser.lastName} (${historyUser.id})` : ""}
+              View all account status changes performed by admins
             </DialogDescription>
           </DialogHeader>
           {historyLoading ? (
@@ -1292,14 +1290,6 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenHistory(u)}
-                          title="View account history"
-                        >
-                          <History className="size-4" />
-                        </Button>
                         {u.type === "client" && (
                           <>
                             <Button
@@ -1389,6 +1379,18 @@ export default function UserManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* History Button - Bottom Right */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={handleOpenHistory}
+          className="shadow-lg"
+          size="lg"
+        >
+          <History className="mr-2 size-5" />
+          History
+        </Button>
+      </div>
     </div>
   );
 }
