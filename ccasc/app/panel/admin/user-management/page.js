@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
 import {
   Avatar,
   AvatarImage,
@@ -103,6 +103,16 @@ export default function UserManagementPage() {
     }
     return "";
   })  
+  const [currentUserName] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("user_name") || "";
+    }
+    return "";
+  })
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyUser, setHistoryUser] = React.useState(null);
+  const [historyLogs, setHistoryLogs] = React.useState([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
   const router = useRouter();
 
   React.useEffect(() => {
@@ -321,7 +331,7 @@ export default function UserManagementPage() {
       const res = await fetch('/api/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, status: newStatus }),
+        body: JSON.stringify({ userId: user.id, status: newStatus, performedBy: currentUserId, performedByName: currentUserName }),
       });
       if (!res.ok) throw new Error('Failed to update status');
       toast.success(`Account ${newStatus.toLowerCase()}`);
@@ -415,6 +425,23 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       toast.error("Failed to update verification status");
+    }
+  };
+
+  const handleOpenHistory = async (user) => {
+    setHistoryUser(user);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryLogs([]);
+    try {
+      const res = await fetch(`/api/audit-logs?targetUserId=${user.id}`);
+      if (!res.ok) throw new Error('Failed to fetch history');
+      const data = await res.json();
+      setHistoryLogs(data);
+    } catch (err) {
+      toast.error("Failed to load history");
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -977,6 +1004,10 @@ export default function UserManagementPage() {
                   <span className="text-muted-foreground text-xs">Organization</span>
                   <p className="font-medium">{selectedUser.organization || "—"}</p>
                 </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground text-xs">Account Created</span>
+                  <p className="font-medium">{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                </div>
               </div>
 
               {/* Editable fields */}
@@ -1077,6 +1108,72 @@ export default function UserManagementPage() {
               {saving ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="size-5" />
+              Account History
+            </DialogTitle>
+            <DialogDescription>
+              {historyUser ? `${historyUser.firstName} ${historyUser.lastName} (${historyUser.id})` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {historyLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading history...</div>
+          ) : historyLogs.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No history records found for this user</div>
+          ) : (
+            <div className="space-y-3">
+              {historyLogs.map((log) => (
+                <div key={log.auditLogId} className="flex items-start gap-3 rounded-lg border p-3">
+                  <div className="mt-0.5">
+                    {log.action === "DEACTIVATED" && <Archive className="size-4 text-red-500" />}
+                    {log.action === "ACTIVATED" && <RotateCcw className="size-4 text-green-500" />}
+                    {log.action === "VERIFIED" && <ShieldCheck className="size-4 text-green-600" />}
+                    {log.action === "DECLINED" && <XCircle className="size-4 text-red-500" />}
+                    {log.action === "VERIFICATION_UPDATED" && <Shield className="size-4 text-yellow-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant="outline"
+                        className={
+                          log.action === "DEACTIVATED" ? "text-red-600 border-red-300" :
+                          log.action === "ACTIVATED" ? "text-green-600 border-green-300" :
+                          log.action === "VERIFIED" ? "text-green-600 border-green-300" :
+                          log.action === "DECLINED" ? "text-red-600 border-red-300" :
+                          "text-yellow-600 border-yellow-300"
+                        }
+                      >
+                        {log.action}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm mt-1">
+                      <span className="font-medium">{log.performedByName}</span>
+                      <span className="text-muted-foreground"> ({log.performedById})</span>
+                    </p>
+                    {log.details && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{log.details}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1195,6 +1292,14 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenHistory(u)}
+                          title="View account history"
+                        >
+                          <History className="size-4" />
+                        </Button>
                         {u.type === "client" && (
                           <>
                             <Button

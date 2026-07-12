@@ -7,6 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model AuditLog {
+  auditLogId      Int      @id @default(autoincrement()) @map("audit_log_id")
+  action          String   @map("action") @db.VarChar(100)
+  targetUserId    String   @map("target_user_id") @db.VarChar(50)
+  targetName      String   @map("target_name") @db.VarChar(200)
+  performedById   String   @map("performed_by_id") @db.VarChar(50)
+  performedByName String   @map("performed_by_name") @db.VarChar(200)
+  details         String?  @map("details") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("AuditLog")
+}
+
 model Staff {
   staffId        Int     @id @default(autoincrement()) @map("staff_id")
   username       String? @unique @map("username") @db.VarChar(100)
@@ -20,6 +33,7 @@ model Staff {
   profilePhoto   String? @map("profile_photo") @db.VarChar(255)
   staffRoleId    Int     @map("staff_role_id")
   staffOrgId     Int     @map("staff_org_id")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   staffRole      StaffRole         @relation(fields: [staffRoleId], references: [roleId])
   staffOrg       StaffOrganization @relation(fields: [staffOrgId], references: [staffOrgId])
@@ -71,6 +85,7 @@ model Client {
   otpExpiration      DateTime? @map("otp_expiration")
   clientRoleId       String  @map("client_role_id") @db.VarChar(10)
   clientOrgId        Int     @map("client_org_id")
+  createdAt          DateTime @default(now()) @map("created_at")
 
   clientRole ClientRole         @relation(fields: [clientRoleId], references: [clientRoleId])
   clientOrg  ClientOrganization @relation(fields: [clientOrgId], references: [clientOrgId])
@@ -444,13 +459,13 @@ model Schedule {
 }
 
 model RescheduleRequest {
-  rescheduleId      Int      @id @default(autoincrement()) @map("reschedule_id")
-  reservationId     Int      @map("reservation_id")
-  requestedDate     DateTime @map("requested_date") @db.Date
-  reason            String   @map("reason") @db.Text
-  status            String   @default("Pending") @map("status") @db.VarChar(50)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  rescheduleId  Int      @id @default(autoincrement()) @map("reschedule_id")
+  reservationId Int      @map("reservation_id")
+  requestedDate DateTime @map("requested_date") @db.Date
+  reason        String   @map("reason") @db.Text
+  status        String   @default("Pending") @map("status") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   reservation Reservation @relation(fields: [reservationId], references: [reservationId])
   
@@ -458,13 +473,13 @@ model RescheduleRequest {
 }
 
 model CalendarBlock {
-  blockId    Int      @id @default(autoincrement()) @map("block_id")
-  title      String   @map("title") @db.VarChar(255)
-  blockDate  DateTime @map("block_date") @db.Date
-  blockType  String   @map("block_type") @db.VarChar(50)
-  venueId    Int      @map("venue_id")
-  notes      String?  @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
+  blockId   Int      @id @default(autoincrement()) @map("block_id")
+  title     String   @map("title") @db.VarChar(255)
+  blockDate DateTime @map("block_date") @db.Date
+  blockType String   @map("block_type") @db.VarChar(50)
+  venueId   Int      @map("venue_id")
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
 
   venue FacilityVenue @relation(fields: [venueId], references: [venueId])
 
