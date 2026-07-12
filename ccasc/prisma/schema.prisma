@@ -212,10 +212,12 @@ model Inventory {
 model Package {
   packageId        Int      @id @default(autoincrement()) @map("package_id")
   packageName      String   @map("package_name") @db.VarChar(200)
+  description      String?  @map("description") @db.Text
   dayRate          Decimal? @map("day_rate") @db.Decimal(10, 2)
   nightRate        Decimal? @map("night_rate") @db.Decimal(10, 2)
   ledWallDayRate   Decimal? @map("led_wall_day_rate") @db.Decimal(10, 2)
   ledWallNightRate Decimal? @map("led_wall_night_rate") @db.Decimal(10, 2)
+  statusId         Int      @default(1) @map("status_id")
   timeSlotId        Int     @map("time_slot_id")
 
   timeSlot TimeSlot @relation(fields: [timeSlotId], references: [timeSlotId])
