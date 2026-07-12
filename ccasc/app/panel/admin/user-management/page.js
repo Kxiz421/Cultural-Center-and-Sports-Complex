@@ -92,6 +92,7 @@ export default function UserManagementPage() {
   });
   const [saving, setSaving] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [saveConfirmOpen, setSaveConfirmOpen] = React.useState(false);
   const [confirmUser, setConfirmUser] = React.useState(null);
   const [confirmSaveOpen, setConfirmSaveOpen] = React.useState(false);
   const [verifyConfirmOpen, setVerifyConfirmOpen] = React.useState(false);
@@ -101,7 +102,7 @@ export default function UserManagementPage() {
       return localStorage.getItem("user_id") || "";
     }
     return "";
-  });
+  })  
   const router = useRouter();
 
   React.useEffect(() => {
@@ -597,10 +598,11 @@ export default function UserManagementPage() {
               <div className="space-y-2">
                 <Label>Contact number</Label>
                 <Input
-                  placeholder="+63 …"
+                  placeholder="09123456789"
                   value={form.contact}
+                  maxLength={11}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, contact: e.target.value }))
+                    setForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))
                   }
                 />
               </div>
@@ -1008,7 +1010,8 @@ export default function UserManagementPage() {
                     <Input
                       className="pl-8"
                       value={editForm.contact}
-                      onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value }))}
+                      maxLength={11}
+                      onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))}
                     />
                   </div>
                 </div>
@@ -1018,6 +1021,43 @@ export default function UserManagementPage() {
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setProfileOpen(false); setSelectedUser(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={() => setSaveConfirmOpen(true)} disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Save Profile Dialog */}
+      <Dialog open={saveConfirmOpen} onOpenChange={setSaveConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="size-5" />
+              Confirm Save
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to update {selectedUser?.firstName} {selectedUser?.lastName}'s account details?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Name:</span>
+              <span className="font-medium text-right">{editForm.firstName} {editForm.middleName} {editForm.lastName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Email:</span>
+              <span className="font-medium text-right">{editForm.email}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Contact:</span>
+              <span className="font-medium text-right">{editForm.contact}</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSaveConfirmOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSaveProfile} disabled={saving}>
