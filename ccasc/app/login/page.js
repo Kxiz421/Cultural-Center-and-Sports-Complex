@@ -149,6 +149,7 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("user_id", data.id);
+      localStorage.setItem("user_name", `${data.firstName} ${data.lastName}`);
       localStorage.setItem("role", data.type);
       localStorage.setItem("firstname", data.firstName);
       localStorage.setItem("lastname", data.lastName);
