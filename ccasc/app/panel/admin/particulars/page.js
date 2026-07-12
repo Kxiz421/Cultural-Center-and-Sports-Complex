@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import * as React from "react";
 import {
@@ -48,6 +48,10 @@ import {
   X,
   Package,
   History,
+  User,
+  ShieldCheck,
+  XCircle,
+  Shield,
 } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -55,18 +59,6 @@ const STATUS_OPTIONS = [
   { id: 2, name: "Unavailable" },
   { id: 3, name: "Under Maintenance" },
   { id: 4, name: "Archived" },
-];
-
-const CATEGORY_OPTIONS = [
-  "Audio Equipment",
-  "Lighting",
-  "Seating",
-  "Tables",
-  "Sports Equipment",
-  "Stage Equipment",
-  "Air Conditioning",
-  "Display/Visual",
-  "Other",
 ];
 
 function getStatusName(statusId) {
@@ -83,7 +75,6 @@ export default function ParticularsPage() {
   const [editForm, setEditForm] = React.useState({
     particularName: "",
     description: "",
-    category: "",
     totalQuantity: "",
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -93,7 +84,6 @@ export default function ParticularsPage() {
   const [addForm, setAddForm] = React.useState({
     particularName: "",
     description: "",
-    category: "",
     totalQuantity: "",
   });
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -123,7 +113,7 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
-    setAddForm({ particularName: "", description: "", category: "", totalQuantity: "" });
+    setAddForm({ particularName: "", description: "", totalQuantity: "" });
   };
 
   const openEditDialog = (item) => {
@@ -131,22 +121,22 @@ export default function ParticularsPage() {
     setEditForm({
       particularName: item.particularName,
       description: item.description || "",
-      category: item.category || "",
       totalQuantity: String(item.totalQuantity || ""),
     });
     setEditOpen(true);
   };
 
-  const openHistoryDialog = async (item) => {
-    setHistoryLoading(true);
+  const handleOpenHistory = async () => {
     setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryLogs([]);
     try {
-      const res = await fetch(`/api/audit-logs?targetUserId=PART-${item.particularId}`);
+      const res = await fetch(`/api/audit-logs`);
+      if (!res.ok) throw new Error("Failed to fetch history");
       const data = await res.json();
-      setHistoryLogs(Array.isArray(data) ? data : []);
+      setHistoryLogs(data);
     } catch (err) {
-      console.error("Failed to load history:", err);
-      setHistoryLogs([]);
+      toast.error("Failed to load history");
     } finally {
       setHistoryLoading(false);
     }
@@ -170,7 +160,6 @@ export default function ParticularsPage() {
           particularId: editItem.particularId,
           particularName: editForm.particularName.trim(),
           description: editForm.description.trim(),
-          category: editForm.category.trim(),
           totalQuantity: parseInt(editForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
@@ -209,7 +198,6 @@ export default function ParticularsPage() {
         body: JSON.stringify({
           particularName: addForm.particularName.trim(),
           description: addForm.description.trim(),
-          category: addForm.category.trim(),
           totalQuantity: parseInt(addForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
@@ -305,7 +293,7 @@ export default function ParticularsPage() {
   const filteredItems = items.filter((item) => {
     if (!searchQuery) return true;
     const term = searchQuery.toLowerCase();
-    const hay = [item.particularName, item.description, item.category, getStatusName(item.statusId)]
+    const hay = [item.particularName, item.description, getStatusName(item.statusId)]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -369,24 +357,6 @@ export default function ParticularsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="add-category">Category</Label>
-                <Select
-                  value={addForm.category}
-                  onValueChange={(v) => setAddForm((f) => ({ ...f, category: v }))}
-                >
-                  <SelectTrigger id="add-category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORY_OPTIONS.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="add-qty">Total Quantity</Label>
                 <Input
                   id="add-qty"
@@ -426,7 +396,7 @@ export default function ParticularsPage() {
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search by name, description, category, or status..."
+                placeholder="Search by name, description, or status..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -457,22 +427,21 @@ export default function ParticularsPage() {
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Item Name</TableHead>
-                <TableHead>Category</TableHead>
                 <TableHead className="text-right">Total Qty</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right w-32">Actions</TableHead>
+                <TableHead className="text-right w-28">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                     {searchQuery ? "No particulars match your search" : "No particulars found. Add one to get started."}
                   </TableCell>
                 </TableRow>
@@ -490,17 +459,12 @@ export default function ParticularsPage() {
                           <div>
                             <span className="font-medium">{item.particularName}</span>
                             {item.description && (
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              <p className="text-xs text-muted-foreground truncate max-w-[250px]">
                                 {item.description}
                               </p>
                             )}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {item.category || "—"}
-                        </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
                         {item.totalQuantity}
@@ -525,14 +489,6 @@ export default function ParticularsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openHistoryDialog(item)}
-                            title="View history"
-                          >
-                            <History className="size-4" />
-                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -587,7 +543,7 @@ export default function ParticularsPage() {
           <DialogHeader>
             <DialogTitle>Edit Particular</DialogTitle>
             <DialogDescription>
-              Update the item name, description, category, and quantity.
+              Update the item name, description, and quantity.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -607,24 +563,6 @@ export default function ParticularsPage() {
                 value={editForm.description}
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-category">Category</Label>
-              <Select
-                value={editForm.category}
-                onValueChange={(v) => setEditForm((f) => ({ ...f, category: v }))}
-              >
-                <SelectTrigger id="edit-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_OPTIONS.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-qty">Total Quantity</Label>
@@ -716,68 +654,89 @@ export default function ParticularsPage() {
 
       {/* History Dialog */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="size-5" />
-              Change History
+              Account History
             </DialogTitle>
             <DialogDescription>
-              Audit trail of changes made to this particular item.
+              View all particular changes performed by admins
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            {historyLoading ? (
-              <p className="text-muted-foreground text-sm py-4 text-center">Loading history...</p>
-            ) : historyLogs.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-4 text-center">No history records found.</p>
-            ) : (
-              historyLogs.map((log) => (
-                <div
-                  key={log.auditLogId || log.id}
-                  className="rounded-lg border p-3 text-sm space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">
-                      {log.action === "CREATED" && "Created"}
-                      {log.action === "UPDATED" && "Updated"}
-                      {log.action === "DELETED" && "Deleted"}
-                      {log.action === "ARCHIVED" && "Archived"}
-                      {log.action === "RESTORED" && "Restored"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {log.createdAt
-                        ? new Date(log.createdAt).toLocaleString("en-PH", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : ""}
-                    </span>
+          {historyLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading history...</div>
+          ) : historyLogs.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">No history records found</div>
+          ) : (
+            <div className="space-y-3">
+              {historyLogs.map((log) => (
+                <div key={log.auditLogId} className="flex items-start gap-3 rounded-lg border p-3">
+                  <div className="mt-0.5">
+                    {log.action === "CREATED" && <User className="size-4 text-blue-500" />}
+                    {log.action === "UPDATED" && <User className="size-4 text-blue-500" />}
+                    {log.action === "DELETED" && <Trash2 className="size-4 text-red-500" />}
+                    {log.action === "ARCHIVED" && <Archive className="size-4 text-amber-600" />}
+                    {log.action === "RESTORED" && <RotateCcw className="size-4 text-green-500" />}
                   </div>
-                  <div className="text-muted-foreground">
-                    <span className="font-medium text-foreground">{log.performedByName || "System"}</span>
-                    {" performed "}
-                    <span className="lowercase font-medium">{log.action}</span>
-                  </div>
-                  {log.details && (
-                    <div className="bg-muted/30 rounded p-2 mt-1 text-xs text-muted-foreground font-mono">
-                      {log.details}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant="outline"
+                        className={
+                          log.action === "CREATED" ? "text-blue-600 border-blue-300" :
+                          log.action === "UPDATED" ? "text-blue-600 border-blue-300" :
+                          log.action === "DELETED" ? "text-red-600 border-red-300" :
+                          log.action === "ARCHIVED" ? "text-amber-600 border-amber-300" :
+                          "text-green-600 border-green-300"
+                        }
+                      >
+                        {log.action}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
                     </div>
-                  )}
+                    <p className="text-sm mt-1">
+                      <span className="text-muted-foreground">Target: </span>
+                      <span className="font-medium">{log.targetName}</span>
+                      <span className="text-muted-foreground"> ({log.targetUserId})</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span>By: </span>
+                      <span className="font-medium">{log.performedByName}</span>
+                      <span className="text-muted-foreground"> ({log.performedById})</span>
+                    </p>
+                    {log.details && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">
+                        {log.details}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setHistoryOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* History Button - Bottom Right */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={handleOpenHistory}
+          className="shadow-lg"
+          size="lg"
+        >
+          <History className="mr-2 size-5" />
+          History
+        </Button>
+      </div>
     </div>
   );
 }
