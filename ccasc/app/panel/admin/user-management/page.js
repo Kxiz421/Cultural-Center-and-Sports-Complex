@@ -1170,6 +1170,12 @@ export default function UserManagementPage() {
                       </span>
                     </div>
                     <p className="text-sm mt-1">
+                      <span className="text-muted-foreground">Target: </span>
+                      <span className="font-medium">{log.targetName}</span>
+                      <span className="text-muted-foreground"> ({log.targetUserId})</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span>By: </span>
                       <span className="font-medium">{log.performedByName}</span>
                       <span className="text-muted-foreground"> ({log.performedById})</span>
                     </p>
