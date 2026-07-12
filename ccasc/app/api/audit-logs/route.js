@@ -7,8 +7,19 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get("targetUserId");
+    const targetUserIdPrefix = searchParams.get("targetUserIdPrefix");
 
-    const where = targetUserId ? { targetUserId } : {};
+    let where = {};
+
+    if (targetUserIdPrefix) {
+      where = {
+        targetUserId: {
+          startsWith: targetUserIdPrefix,
+        },
+      };
+    } else if (targetUserId) {
+      where = { targetUserId };
+    }
 
     const logs = await prisma.auditLog.findMany({
       where,
