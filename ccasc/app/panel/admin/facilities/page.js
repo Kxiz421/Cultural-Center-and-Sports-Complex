@@ -545,10 +545,11 @@ export default function FacilitiesPage() {
                     id="add-capacity"
                     type="number"
                     min="0"
+                    max="99999"
                     placeholder="e.g. 500"
                     value={addForm.capacity}
                     onChange={(e) =>
-                      setAddForm((f) => ({ ...f, capacity: e.target.value }))
+                      setAddForm((f) => ({ ...f, capacity: e.target.value.slice(0, 5) }))
                     }
                   />
                 </div>
@@ -847,9 +848,10 @@ export default function FacilitiesPage() {
                     id="edit-capacity"
                     type="number"
                     min="0"
+                    max="99999"
                     value={editForm.capacity}
                     onChange={(e) =>
-                      setEditForm((f) => ({ ...f, capacity: e.target.value }))
+                      setEditForm((f) => ({ ...f, capacity: e.target.value.slice(0, 5) }))
                     }
                   />
                 </div>
