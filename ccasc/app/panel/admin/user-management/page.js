@@ -96,6 +96,12 @@ export default function UserManagementPage() {
   const [confirmSaveOpen, setConfirmSaveOpen] = React.useState(false);
   const [verifyConfirmOpen, setVerifyConfirmOpen] = React.useState(false);
   const [verifyConfirmUser, setVerifyConfirmUser] = React.useState(null);
+  const [currentUserId] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("user_id") || "";
+    }
+    return "";
+  });
   const router = useRouter();
 
   React.useEffect(() => {
@@ -328,6 +334,57 @@ export default function UserManagementPage() {
 
   const handleToggleVerification = async (user) => {
     const newStatus = user.verificationStatus === "Verified" ? "Pending" : "Verified";
+    try {
+      const res = await fetch('/api/users/verification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, verificationStatus: newStatus }),
+      });
+      if (!res.ok) throw new Error('Failed to update verification status');
+      toast.success(`Verification status set to ${newStatus}`);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, verificationStatus: newStatus } : u))
+      );
+      if (selectedUser?.id === user.id) {
+        setSelectedUser((prev) => ({ ...prev, verificationStatus: newStatus }));
+      }
+    } catch (err) {
+      toast.error("Failed to update verification status");
+    }
+  };
+
+  const [declineConfirmOpen, setDeclineConfirmOpen] = React.useState(false);
+  const [declineConfirmUser, setDeclineConfirmUser] = React.useState(null);
+  const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false);
+  const [resubmitConfirmUser, setResubmitConfirmUser] = React.useState(null);
+
+  const handleDeclineDocument = (user) => {
+    setDeclineConfirmUser(user);
+    setDeclineConfirmOpen(true);
+  };
+
+  const handleRequestResubmission = (user) => {
+    setResubmitConfirmUser(user);
+    setResubmitConfirmOpen(true);
+  };
+
+  const handleConfirmDecline = async () => {
+    if (!declineConfirmUser) return;
+    await handleToggleVerificationStatus(declineConfirmUser, "Declined");
+    setDeclineConfirmOpen(false);
+    setDeclineConfirmUser(null);
+    setDocOpen(false);
+  };
+
+  const handleConfirmResubmission = async () => {
+    if (!resubmitConfirmUser) return;
+    await handleToggleVerificationStatus(resubmitConfirmUser, "Declined");
+    setResubmitConfirmOpen(false);
+    setResubmitConfirmUser(null);
+    setDocOpen(false);
+  };
+
+  const handleToggleVerificationStatus = async (user, newStatus) => {
     try {
       const res = await fetch('/api/users/verification', {
         method: 'PATCH',
@@ -688,6 +745,27 @@ export default function UserManagementPage() {
                       className="w-full h-full object-contain"
                     />
                   </div>
+                  {/* Action buttons for idProof documents */}
+                  {doc.id === 0 && docUser && (
+                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleDeclineDocument(docUser)}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                        onClick={() => handleRequestResubmission(docUser)}
+                      >
+                        Request Resubmission
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -754,6 +832,58 @@ export default function UserManagementPage() {
               }}
             >
               {verifyConfirmUser?.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Decline Document Dialog */}
+      <Dialog open={declineConfirmOpen} onOpenChange={setDeclineConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="size-5 text-red-500" />
+              Decline Document
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to decline {declineConfirmUser?.firstName} {declineConfirmUser?.lastName}'s Certificate of Employment?
+              Their account will be marked as declined.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDeclineConfirmOpen(false); setDeclineConfirmUser(null); }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDecline}>
+              Decline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Request Resubmission Dialog */}
+      <Dialog open={resubmitConfirmOpen} onOpenChange={setResubmitConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="size-5 text-orange-500" />
+              Request Resubmission
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to request {resubmitConfirmUser?.firstName} {resubmitConfirmUser?.lastName} to resubmit their Certificate of Employment?
+              They will be prompted to upload a new document when they try to log in.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setResubmitConfirmOpen(false); setResubmitConfirmUser(null); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handleConfirmResubmission}
+            >
+              Request Resubmission
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1036,18 +1166,20 @@ export default function UserManagementPage() {
                             </Button>
                           </>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleConfirmToggleStatus(u)}
-                          title={u.status === "Active" ? "Deactivate account" : "Activate account"}
-                        >
-                          {u.status === "Active" ? (
-                            <Archive className="size-4" />
-                          ) : (
-                            <RotateCcw className="size-4" />
-                          )}
-                        </Button>
+                        {u.id !== currentUserId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleConfirmToggleStatus(u)}
+                            title={u.status === "Active" ? "Deactivate account" : "Activate account"}
+                          >
+                            {u.status === "Active" ? (
+                              <Archive className="size-4" />
+                            ) : (
+                              <RotateCcw className="size-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -14,9 +14,9 @@ export async function PATCH(request) {
       );
     }
 
-    if (!["Pending", "Verified"].includes(verificationStatus)) {
+    if (!["Pending", "Verified", "Declined"].includes(verificationStatus)) {
       return NextResponse.json(
-        { error: "verificationStatus must be 'Pending' or 'Verified'" },
+        { error: "verificationStatus must be 'Pending', 'Verified', or 'Declined'" },
         { status: 400 }
       );
     }

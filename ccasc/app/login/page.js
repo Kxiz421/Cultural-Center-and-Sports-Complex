@@ -134,6 +134,15 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.needsResubmission) {
+          toast.error(data.error);
+          setLoginLoading(false);
+          // Store client info and redirect to resubmission
+          localStorage.setItem("resubmit_client_id", data.clientId);
+          localStorage.setItem("resubmit_email", email.trim());
+          window.location.href = "/resubmit";
+          return;
+        }
         toast.error(data.error || "Invalid email or password");
         setLoginLoading(false);
         return;

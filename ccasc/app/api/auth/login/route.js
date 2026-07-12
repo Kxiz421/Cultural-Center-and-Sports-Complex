@@ -78,6 +78,17 @@ export async function POST(request) {
         );
       }
 
+      if (client.verificationStatus === "Declined") {
+        return NextResponse.json(
+          {
+            error: "Your Certificate of Employment has been declined. Please resubmit a valid document.",
+            needsResubmission: true,
+            clientId: `CLT-${client.clientId}`,
+          },
+          { status: 403 }
+        );
+      }
+
       if (client.accountStatus === "Pending" || client.verificationStatus === "Pending") {
         return NextResponse.json(
           { error: "Your registration is still pending verification. Please wait for admin approval." },
