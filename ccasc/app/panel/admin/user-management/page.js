@@ -1135,6 +1135,8 @@ export default function UserManagementPage() {
               {historyLogs.map((log) => (
                 <div key={log.auditLogId} className="flex items-start gap-3 rounded-lg border p-3">
                   <div className="mt-0.5">
+                    {log.action === "CREATED" && <User className="size-4 text-blue-500" />}
+                    {log.action === "UPDATED" && <User className="size-4 text-blue-500" />}
                     {log.action === "DEACTIVATED" && <Archive className="size-4 text-red-500" />}
                     {log.action === "ACTIVATED" && <RotateCcw className="size-4 text-green-500" />}
                     {log.action === "VERIFIED" && <ShieldCheck className="size-4 text-green-600" />}
@@ -1146,6 +1148,8 @@ export default function UserManagementPage() {
                       <Badge
                         variant="outline"
                         className={
+                          log.action === "CREATED" ? "text-blue-600 border-blue-300" :
+                          log.action === "UPDATED" ? "text-blue-600 border-blue-300" :
                           log.action === "DEACTIVATED" ? "text-red-600 border-red-300" :
                           log.action === "ACTIVATED" ? "text-green-600 border-green-300" :
                           log.action === "VERIFIED" ? "text-green-600 border-green-300" :
