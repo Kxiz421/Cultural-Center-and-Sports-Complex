@@ -135,6 +135,9 @@ export async function POST(request) {
       }
     }
 
+    const performedBy = data.performedBy || "system";
+    const performedByName = data.performedByName || "System";
+
     if (data.roleType === "staff") {
       const staff = await prisma.staff.create({
         data: {
@@ -151,6 +154,20 @@ export async function POST(request) {
           staffOrgId: parseInt(data.orgId),
         },
       });
+
+      // Log account creation
+      const userId = `STF-${staff.staffId}`;
+      await prisma.auditLog.create({
+        data: {
+          action: "CREATED",
+          targetUserId: userId,
+          targetName: `${data.firstName} ${data.lastName}`,
+          performedById: performedBy,
+          performedByName: performedByName,
+          details: `Account created as ${data.roleType}`,
+        },
+      });
+
       return NextResponse.json(staff);
     } else {
       const client = await prisma.client.create({
@@ -169,6 +186,20 @@ export async function POST(request) {
           clientOrgId: parseInt(data.orgId),
         },
       });
+
+      // Log account creation
+      const userId = `CLT-${client.clientId}`;
+      await prisma.auditLog.create({
+        data: {
+          action: "CREATED",
+          targetUserId: userId,
+          targetName: `${data.firstName} ${data.lastName}`,
+          performedById: performedBy,
+          performedByName: performedByName,
+          details: `Account created as ${data.roleType}`,
+        },
+      });
+
       return NextResponse.json(client);
     }
   } catch (error) {

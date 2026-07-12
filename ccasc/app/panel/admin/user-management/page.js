@@ -226,6 +226,8 @@ export default function UserManagementPage() {
           email: email,
           contact: form.contact.trim() || "N/A",
           password: form.password,
+          performedBy: currentUserId,
+          performedByName: currentUserName,
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
           roleId: form.role === 'coord-cc' ? 2 :
                  form.role === 'coord-sc' ? 2 :
