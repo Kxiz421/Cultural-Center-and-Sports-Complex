@@ -181,6 +181,9 @@ model Particular {
   particularId   Int    @id @default(autoincrement()) @map("particular_id")
   particularName String @map("particular_name") @db.VarChar(200)
   description    String? @db.Text
+  category       String  @default("") @map("category") @db.VarChar(100)
+  totalQuantity  Int     @default(0) @map("total_quantity")
+  statusId       Int     @default(1) @map("status_id")
   itemId         Int?   @map("item_id")
 
   inventory           Inventory?          @relation(fields: [itemId], references: [itemId])

@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import * as React from "react";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -31,13 +32,47 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Search,
   Plus,
   Pencil,
+  Archive,
+  RotateCcw,
   Trash2,
   X,
   Package,
+  History,
 } from "lucide-react";
+
+const STATUS_OPTIONS = [
+  { id: 1, name: "Available" },
+  { id: 2, name: "Unavailable" },
+  { id: 3, name: "Under Maintenance" },
+  { id: 4, name: "Archived" },
+];
+
+const CATEGORY_OPTIONS = [
+  "Audio Equipment",
+  "Lighting",
+  "Seating",
+  "Tables",
+  "Sports Equipment",
+  "Stage Equipment",
+  "Air Conditioning",
+  "Display/Visual",
+  "Other",
+];
+
+function getStatusName(statusId) {
+  const s = STATUS_OPTIONS.find((o) => o.id === Number(statusId));
+  return s ? s.name : "";
+}
 
 export default function ParticularsPage() {
   const [items, setItems] = React.useState([]);
@@ -48,15 +83,22 @@ export default function ParticularsPage() {
   const [editForm, setEditForm] = React.useState({
     particularName: "",
     description: "",
+    category: "",
+    totalQuantity: "",
   });
-  const [confirOpen, setConfirOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
   const [addForm, setAddForm] = React.useState({
     particularName: "",
     description: "",
+    category: "",
+    totalQuantity: "",
   });
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyLogs, setHistoryLogs] = React.useState([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
 
   const fetchItems = async (search) => {
     try {
@@ -81,7 +123,7 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
-    setAddForm({ particularName: "", description: "" });
+    setAddForm({ particularName: "", description: "", category: "", totalQuantity: "" });
   };
 
   const openEditDialog = (item) => {
@@ -89,8 +131,25 @@ export default function ParticularsPage() {
     setEditForm({
       particularName: item.particularName,
       description: item.description || "",
+      category: item.category || "",
+      totalQuantity: String(item.totalQuantity || ""),
     });
     setEditOpen(true);
+  };
+
+  const openHistoryDialog = async (item) => {
+    setHistoryLoading(true);
+    setHistoryOpen(true);
+    try {
+      const res = await fetch(`/api/audit-logs?targetUserId=PART-${item.particularId}`);
+      const data = await res.json();
+      setHistoryLogs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      setHistoryLogs([]);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleSaveItem = async () => {
@@ -111,6 +170,8 @@ export default function ParticularsPage() {
           particularId: editItem.particularId,
           particularName: editForm.particularName.trim(),
           description: editForm.description.trim(),
+          category: editForm.category.trim(),
+          totalQuantity: parseInt(editForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -148,6 +209,8 @@ export default function ParticularsPage() {
         body: JSON.stringify({
           particularName: addForm.particularName.trim(),
           description: addForm.description.trim(),
+          category: addForm.category.trim(),
+          totalQuantity: parseInt(addForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -164,6 +227,47 @@ export default function ParticularsPage() {
       await fetchItems(searchQuery);
     } catch (err) {
       toast.error(err.message || "Failed to create particular");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleArchive = async () => {
+    if (!confirmAction?.item) return;
+    const item = confirmAction.item;
+    const isArchived = Number(item.statusId) === 4;
+    const newStatusId = isArchived ? 1 : 4;
+
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/particulars", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          particularId: item.particularId,
+          statusId: newStatusId,
+          performedBy,
+          performedByName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to update status");
+      }
+
+      toast.success(
+        isArchived
+          ? "Particular restored successfully"
+          : "Particular archived successfully"
+      );
+      setConfirmOpen(false);
+      setConfirmAction(null);
+      await fetchItems(searchQuery);
+    } catch (err) {
+      toast.error(err.message || "Failed to update status");
     } finally {
       setSaving(false);
     }
@@ -188,7 +292,7 @@ export default function ParticularsPage() {
       }
 
       toast.success("Particular deleted successfully");
-      setConfirOpen(false);
+      setConfirmOpen(false);
       setConfirmAction(null);
       await fetchItems(searchQuery);
     } catch (err) {
@@ -201,7 +305,7 @@ export default function ParticularsPage() {
   const filteredItems = items.filter((item) => {
     if (!searchQuery) return true;
     const term = searchQuery.toLowerCase();
-    const hay = [item.particularName, item.description]
+    const hay = [item.particularName, item.description, item.category, getStatusName(item.statusId)]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -217,7 +321,7 @@ export default function ParticularsPage() {
             Particulars Management
           </h2>
           <p className="text-muted-foreground text-sm">
-            Manage rentable equipment and amenities — add, edit, or remove particulars.
+            Manage rentable equipment and amenities — add, edit, archive, or remove particulars.
           </p>
         </div>
         <Dialog
@@ -242,7 +346,7 @@ export default function ParticularsPage() {
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label htmlFor="add-name">Particular Name *</Label>
+                <Label htmlFor="add-name">Item Name *</Label>
                 <Input
                   id="add-name"
                   placeholder="e.g. Wireless Microphone"
@@ -253,14 +357,45 @@ export default function ParticularsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="add-desc">Description</Label>
+                <Label htmlFor="add-desc">Brief Description</Label>
                 <Textarea
                   id="add-desc"
-                  rows={3}
+                  rows={2}
                   placeholder="Brief description of the particular item..."
                   value={addForm.description}
                   onChange={(e) =>
                     setAddForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-category">Category</Label>
+                <Select
+                  value={addForm.category}
+                  onValueChange={(v) => setAddForm((f) => ({ ...f, category: v }))}
+                >
+                  <SelectTrigger id="add-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-qty">Total Quantity</Label>
+                <Input
+                  id="add-qty"
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 50"
+                  value={addForm.totalQuantity}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, totalQuantity: e.target.value }))
                   }
                 />
               </div>
@@ -275,10 +410,7 @@ export default function ParticularsPage() {
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleAddParticular}
-                disabled={saving}
-              >
+              <Button onClick={handleAddParticular} disabled={saving}>
                 {saving ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
@@ -294,7 +426,7 @@ export default function ParticularsPage() {
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search particulars..."
+                placeholder="Search by name, description, category, or status..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -316,7 +448,7 @@ export default function ParticularsPage() {
           <CardTitle>Particulars List</CardTitle>
           <CardDescription>
             {filteredItems.length} particular{filteredItems.length !== 1 ? "s" : ""} available.
-            Click the edit icon to update details, or delete to remove.
+            Use archive/restore to manage availability.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -324,64 +456,125 @@ export default function ParticularsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right w-24">Actions</TableHead>
+                <TableHead>Item Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Total Qty</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right w-32">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                     {searchQuery ? "No particulars match your search" : "No particulars found. Add one to get started."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {item.particularId}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Package className="size-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium">{item.particularName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-md truncate">
-                      {item.description || "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditDialog(item)}
-                          title="Edit particular"
+                filteredItems.map((item) => {
+                  const statusName = getStatusName(item.statusId);
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {item.particularId}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Package className="size-4 text-muted-foreground shrink-0" />
+                          <div>
+                            <span className="font-medium">{item.particularName}</span>
+                            {item.description && (
+                              <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {item.category || "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {item.totalQuantity}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={statusName === "Available" ? "outline" : "secondary"}
+                          className={
+                            statusName === "Available"
+                              ? "text-green-600 border-green-300"
+                              : statusName === "Under Maintenance"
+                                ? "text-yellow-600 border-yellow-300 bg-yellow-50"
+                                : statusName === "Unavailable"
+                                  ? "text-red-600"
+                                  : statusName === "Archived"
+                                    ? "text-muted-foreground"
+                                    : ""
+                          }
                         >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setConfirmAction({ type: "delete", item });
-                            setConfirOpen(true);
-                          }}
-                          title="Delete particular"
-                        >
-                          <Trash2 className="size-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          {statusName}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openHistoryDialog(item)}
+                            title="View history"
+                          >
+                            <History className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(item)}
+                            title="Edit particular"
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setConfirmAction({
+                                type: statusName === "Archived" ? "unarchive" : "archive",
+                                item,
+                              });
+                              setConfirmOpen(true);
+                            }}
+                            title={statusName === "Archived" ? "Restore particular" : "Archive particular"}
+                          >
+                            {statusName === "Archived" ? (
+                              <RotateCcw className="size-4 text-green-600" />
+                            ) : (
+                              <Archive className="size-4 text-amber-600" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setConfirmAction({ type: "delete", item });
+                              setConfirmOpen(true);
+                            }}
+                            title="Delete particular"
+                          >
+                            <Trash2 className="size-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -394,12 +587,12 @@ export default function ParticularsPage() {
           <DialogHeader>
             <DialogTitle>Edit Particular</DialogTitle>
             <DialogDescription>
-              Update the name and description of this particular item.
+              Update the item name, description, category, and quantity.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Particular Name</Label>
+              <Label htmlFor="edit-name">Item Name</Label>
               <Input
                 id="edit-name"
                 value={editForm.particularName}
@@ -407,12 +600,40 @@ export default function ParticularsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-desc">Description</Label>
+              <Label htmlFor="edit-desc">Brief Description</Label>
               <Textarea
                 id="edit-desc"
-                rows={3}
+                rows={2}
                 value={editForm.description}
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-category">Category</Label>
+              <Select
+                value={editForm.category}
+                onValueChange={(v) => setEditForm((f) => ({ ...f, category: v }))}
+              >
+                <SelectTrigger id="edit-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-qty">Total Quantity</Label>
+              <Input
+                id="edit-qty"
+                type="number"
+                min="0"
+                value={editForm.totalQuantity}
+                onChange={(e) => setEditForm((f) => ({ ...f, totalQuantity: e.target.value }))}
               />
             </div>
           </div>
@@ -427,8 +648,44 @@ export default function ParticularsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Archive/Restore Confirmation Dialog */}
+      <Dialog open={confirmOpen && (confirmAction?.type === "archive" || confirmAction?.type === "unarchive")} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {confirmAction?.type === "archive" ? (
+                <Archive className="size-5 text-amber-600" />
+              ) : (
+                <RotateCcw className="size-5 text-green-600" />
+              )}
+              {confirmAction?.type === "archive" ? "Archive Particular" : "Restore Particular"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmAction?.type === "archive"
+                ? `Are you sure you want to archive "${confirmAction?.item?.particularName}"? It will be hidden from booking selection.`
+                : `Are you sure you want to restore "${confirmAction?.item?.particularName}"? It will become available again.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={confirmAction?.type === "archive" ? "destructive" : "default"}
+              onClick={handleToggleArchive}
+              disabled={saving}
+            >
+              {saving ? "Processing..." : confirmAction?.type === "archive" ? "Archive" : "Restore"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
-      <Dialog open={confirOpen} onOpenChange={setConfirOpen}>
+      <Dialog open={confirmOpen && confirmAction?.type === "delete"} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -436,13 +693,13 @@ export default function ParticularsPage() {
               Delete Particular
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &ldquo;{confirmAction?.item?.particularName}&rdquo;? This action cannot be undone.
+              Are you sure you want to permanently delete &ldquo;{confirmAction?.item?.particularName}&rdquo;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => { setConfirOpen(false); setConfirmAction(null); }}
+              onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}
             >
               Cancel
             </Button>
@@ -452,6 +709,71 @@ export default function ParticularsPage() {
               disabled={saving}
             >
               {saving ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="size-5" />
+              Change History
+            </DialogTitle>
+            <DialogDescription>
+              Audit trail of changes made to this particular item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {historyLoading ? (
+              <p className="text-muted-foreground text-sm py-4 text-center">Loading history...</p>
+            ) : historyLogs.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-4 text-center">No history records found.</p>
+            ) : (
+              historyLogs.map((log) => (
+                <div
+                  key={log.auditLogId || log.id}
+                  className="rounded-lg border p-3 text-sm space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {log.action === "CREATED" && "Created"}
+                      {log.action === "UPDATED" && "Updated"}
+                      {log.action === "DELETED" && "Deleted"}
+                      {log.action === "ARCHIVED" && "Archived"}
+                      {log.action === "RESTORED" && "Restored"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {log.createdAt
+                        ? new Date(log.createdAt).toLocaleString("en-PH", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    <span className="font-medium text-foreground">{log.performedByName || "System"}</span>
+                    {" performed "}
+                    <span className="lowercase font-medium">{log.action}</span>
+                  </div>
+                  {log.details && (
+                    <div className="bg-muted/30 rounded p-2 mt-1 text-xs text-muted-foreground font-mono">
+                      {log.details}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
