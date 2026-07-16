@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export async function PATCH(request) {
   try {
-    const { userId, verificationStatus } = await request.json();
+    const { userId, verificationStatus, remarks } = await request.json();
 
     if (!userId || !verificationStatus) {
       return NextResponse.json(
@@ -33,6 +33,11 @@ export async function PATCH(request) {
       // Auto-activate account when verified
       if (verificationStatus === "Verified") {
         updateData.accountStatus = "Active";
+        updateData.remarks = null; // Clear remarks when verified
+      }
+      // Store remarks when declined
+      if (verificationStatus === "Declined" && remarks) {
+        updateData.remarks = remarks;
       }
       await prisma.client.update({
         where: { clientId: id },

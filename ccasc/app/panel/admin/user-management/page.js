@@ -104,7 +104,7 @@ export default function UserManagementPage() {
   const [currentUserId] = React.useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("user_id") || "";
-    }
+    } 
     return "";
   })    
   const [currentUserName] = React.useState(() => {
@@ -288,12 +288,8 @@ export default function UserManagementPage() {
       toast.error("First and last name are required.");
       return;
     }
-    if (!email) {
-      toast.error("Email is required.");
-      return;
-    }
 
-    // Validate contact number if provided
+    // Validate contact number if provided (only digits accepted)
     if (editForm.contact && editForm.contact.length !== 11) {
       toast.error("Contact number must be exactly 11 digits.");
       return;
@@ -426,8 +422,10 @@ export default function UserManagementPage() {
 
   const [declineConfirmOpen, setDeclineConfirmOpen] = React.useState(false);
   const [declineConfirmUser, setDeclineConfirmUser] = React.useState(null);
+  const [declineRemarks, setDeclineRemarks] = React.useState("");
   const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false);
   const [resubmitConfirmUser, setResubmitConfirmUser] = React.useState(null);
+  const [resubmitRemarks, setResubmitRemarks] = React.useState("");
 
   const handleDeclineDocument = (user) => {
     setDeclineConfirmUser(user);
@@ -441,7 +439,8 @@ export default function UserManagementPage() {
 
   const handleConfirmDecline = async () => {
     if (!declineConfirmUser) return;
-    await handleToggleVerificationStatus(declineConfirmUser, "Declined");
+    await handleToggleVerificationStatus(declineConfirmUser, "Declined", declineRemarks.trim());
+    setDeclineRemarks("");
     setDeclineConfirmOpen(false);
     setDeclineConfirmUser(null);
     setDocOpen(false);
@@ -449,18 +448,21 @@ export default function UserManagementPage() {
 
   const handleConfirmResubmission = async () => {
     if (!resubmitConfirmUser) return;
-    await handleToggleVerificationStatus(resubmitConfirmUser, "Declined");
+    await handleToggleVerificationStatus(resubmitConfirmUser, "Declined", resubmitRemarks.trim());
+    setResubmitRemarks("");
     setResubmitConfirmOpen(false);
     setResubmitConfirmUser(null);
     setDocOpen(false);
   };
 
-  const handleToggleVerificationStatus = async (user, newStatus) => {
+  const handleToggleVerificationStatus = async (user, newStatus, remarks) => {
     try {
+      const body = { userId: user.id, verificationStatus: newStatus };
+      if (remarks) body.remarks = remarks;
       const res = await fetch('/api/users/verification', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, verificationStatus: newStatus }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to update verification status');
       toast.success(`Verification status set to ${newStatus}`);
@@ -571,34 +573,34 @@ export default function UserManagementPage() {
               <div className="grid gap-2 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>First name</Label>
-                  <Input
-                    placeholder="Given name"
-                    value={form.firstName}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, firstName: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Middle name</Label>
-                  <Input
-                    placeholder="Optional"
-                    value={form.middleName}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, middleName: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last name</Label>
-                  <Input
-                    placeholder="Surname"
-                    value={form.lastName}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, lastName: e.target.value }))
-                    }
-                  />
-                </div>
+                    <Input
+                      placeholder="Given name"
+                      value={form.firstName}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, firstName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Middle name</Label>
+                    <Input
+                      placeholder="Optional"
+                      value={form.middleName}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, middleName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last name</Label>
+                    <Input
+                      placeholder="Surname"
+                      value={form.lastName}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, lastName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
+                      }
+                    />
+                  </div>
               </div>
               <div className="space-y-2">
                 <Label>Username</Label>
@@ -926,7 +928,7 @@ export default function UserManagementPage() {
       </Dialog>
 
       {/* Confirm Decline Document Dialog */}
-      <Dialog open={declineConfirmOpen} onOpenChange={setDeclineConfirmOpen}>
+      <Dialog open={declineConfirmOpen} onOpenChange={(open) => { setDeclineConfirmOpen(open); if (!open) { setDeclineConfirmUser(null); setDeclineRemarks(""); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -938,11 +940,20 @@ export default function UserManagementPage() {
               Their account will be marked as declined.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Reason for declining (required)</Label>
+            <textarea
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Explain why the document is being declined..."
+              value={declineRemarks}
+              onChange={(e) => setDeclineRemarks(e.target.value)}
+            />
+          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setDeclineConfirmOpen(false); setDeclineConfirmUser(null); }}>
+            <Button variant="outline" onClick={() => { setDeclineConfirmOpen(false); setDeclineConfirmUser(null); setDeclineRemarks(""); }}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleConfirmDecline}>
+            <Button variant="destructive" onClick={handleConfirmDecline} disabled={!declineRemarks.trim()}>
               Decline
             </Button>
           </DialogFooter>
@@ -950,7 +961,7 @@ export default function UserManagementPage() {
       </Dialog>
 
       {/* Confirm Request Resubmission Dialog */}
-      <Dialog open={resubmitConfirmOpen} onOpenChange={setResubmitConfirmOpen}>
+      <Dialog open={resubmitConfirmOpen} onOpenChange={(open) => { setResubmitConfirmOpen(open); if (!open) { setResubmitConfirmUser(null); setResubmitRemarks(""); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -962,14 +973,24 @@ export default function UserManagementPage() {
               They will be prompted to upload a new document when they try to log in.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Reason for resubmission (required)</Label>
+            <textarea
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Explain why the document needs to be resubmitted..."
+              value={resubmitRemarks}
+              onChange={(e) => setResubmitRemarks(e.target.value)}
+            />
+          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setResubmitConfirmOpen(false); setResubmitConfirmUser(null); }}>
+            <Button variant="outline" onClick={() => { setResubmitConfirmOpen(false); setResubmitConfirmUser(null); setResubmitRemarks(""); }}>
               Cancel
             </Button>
             <Button
               variant="default"
               className="bg-orange-600 hover:bg-orange-700"
               onClick={handleConfirmResubmission}
+              disabled={!resubmitRemarks.trim()}
             >
               Request Resubmission
             </Button>
@@ -1064,21 +1085,21 @@ export default function UserManagementPage() {
                     <Label>First name</Label>
                     <Input
                       value={editForm.firstName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+                      onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Middle name</Label>
                     <Input
                       value={editForm.middleName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value }))}
+                      onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Last name</Label>
                     <Input
                       value={editForm.lastName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+                      onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
                     />
                   </div>
                 </div>

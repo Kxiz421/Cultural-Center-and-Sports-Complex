@@ -79,9 +79,12 @@ export async function POST(request) {
       }
 
       if (client.verificationStatus === "Declined") {
+        const remarksText = client.remarks
+          ? ` Reason: ${client.remarks}`
+          : "";
         return NextResponse.json(
           {
-            error: "Your Certificate of Employment has been declined. Please resubmit a valid document.",
+            error: `Your Certificate of Employment has been declined. Please resubmit a valid document.${remarksText}`,
             needsResubmission: true,
             clientId: `CLT-${client.clientId}`,
           },
