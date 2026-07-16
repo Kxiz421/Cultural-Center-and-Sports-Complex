@@ -15,6 +15,11 @@ function getStatusName(id) {
 export async function GET() {
   try {
     const items = await prisma.particular.findMany({
+      include: {
+        inventory: {
+          select: { itemId: true, itemName: true, quantityAvailable: true },
+        },
+      },
       orderBy: { particularId: "asc" },
     });
 
@@ -24,7 +29,7 @@ export async function GET() {
       particularName: item.particularName,
       description: item.description || "",
       category: item.category || "",
-      totalQuantity: item.totalQuantity,
+      totalQuantity: item.inventory?.quantityAvailable ?? 0,
       statusId: item.statusId,
       statusName: getStatusName(item.statusId),
       itemId: item.itemId,
@@ -42,7 +47,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { particularName, description, category, totalQuantity, performedBy, performedByName } = await request.json();
+    const { particularName, description, category, performedBy, performedByName } = await request.json();
 
     if (!particularName || !particularName.trim()) {
       return NextResponse.json(
@@ -56,7 +61,6 @@ export async function POST(request) {
         particularName: particularName.trim(),
         description: description?.trim() || "",
         category: category?.trim() || "",
-        totalQuantity: parseInt(totalQuantity, 10) || 0,
         statusId: 1, // Default to Available
       },
     });
@@ -69,7 +73,7 @@ export async function POST(request) {
         targetName: created.particularName,
         performedById: performedBy || "system",
         performedByName: performedByName || "System",
-        details: `Particular created: name="${created.particularName}", category="${created.category}", quantity=${created.totalQuantity}`,
+        details: `Particular created: name="${created.particularName}", category="${created.category}"`,
       },
     });
 
@@ -79,7 +83,7 @@ export async function POST(request) {
       particularName: created.particularName,
       description: created.description || "",
       category: created.category || "",
-      totalQuantity: created.totalQuantity,
+      totalQuantity: 0,
       statusId: created.statusId,
       statusName: getStatusName(created.statusId),
     });
@@ -94,7 +98,7 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
-    const { particularId, particularName, description, category, totalQuantity, statusId, performedBy, performedByName } = await request.json();
+    const { particularId, particularName, description, category, statusId, performedBy, performedByName } = await request.json();
 
     if (!particularId) {
       return NextResponse.json(
@@ -119,12 +123,16 @@ export async function PUT(request) {
     if (particularName !== undefined) updateData.particularName = particularName.trim();
     if (description !== undefined) updateData.description = description.trim();
     if (category !== undefined) updateData.category = category.trim();
-    if (totalQuantity !== undefined) updateData.totalQuantity = parseInt(totalQuantity, 10);
     if (statusId !== undefined) updateData.statusId = parseInt(statusId, 10);
 
     const updated = await prisma.particular.update({
       where: { particularId: parseInt(particularId, 10) },
       data: updateData,
+      include: {
+        inventory: {
+          select: { itemId: true, itemName: true, quantityAvailable: true },
+        },
+      },
     });
 
     // Build before/after details
@@ -137,9 +145,6 @@ export async function PUT(request) {
     }
     if (category !== undefined && (existing.category || "") !== (updated.category || "")) {
       changes.push(`category: "${existing.category || ""}" → "${updated.category || ""}"`);
-    }
-    if (totalQuantity !== undefined && existing.totalQuantity !== updated.totalQuantity) {
-      changes.push(`quantity: ${existing.totalQuantity} → ${updated.totalQuantity}`);
     }
     if (statusId !== undefined && existing.statusId !== updated.statusId) {
       changes.push(`status: ${getStatusName(existing.statusId)} → ${getStatusName(updated.statusId)}`);
@@ -164,7 +169,7 @@ export async function PUT(request) {
       particularName: updated.particularName,
       description: updated.description || "",
       category: updated.category || "",
-      totalQuantity: updated.totalQuantity,
+      totalQuantity: updated.inventory?.quantityAvailable ?? 0,
       statusId: updated.statusId,
       statusName: getStatusName(updated.statusId),
     });
@@ -213,7 +218,7 @@ export async function DELETE(request) {
         targetName: existing.particularName,
         performedById: performedBy || "system",
         performedByName: performedByName || "System",
-        details: `Particular deleted: name="${existing.particularName}", category="${existing.category || ""}", quantity=${existing.totalQuantity}`,
+        details: `Particular deleted: name="${existing.particularName}", category="${existing.category || ""}"`,
       },
     });
 
