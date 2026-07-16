@@ -151,9 +151,18 @@ export default function PackagesPage() {
       ledWallNightRate: pkg.ledWallNightRate != null ? String(pkg.ledWallNightRate) : "",
     });
 
+    // Map inclusions by matching inclusion itemId to the particular's itemId
     const selections = {};
     for (const inc of pkg.inclusions || []) {
-      selections[inc.itemId] = String(inc.quantityAvailable);
+      // Find the particular that has this itemId
+      const match = allParticulars.find((p) => p.itemId === inc.itemId);
+      if (match) {
+        // Key by particularId so checkboxes light up correctly
+        selections[match.particularId] = String(inc.quantityAvailable);
+      } else {
+        // Fallback: use itemId directly if no match found
+        selections[inc.itemId] = String(inc.quantityAvailable);
+      }
     }
     setEditSelections(selections);
     setEditOpen(true);

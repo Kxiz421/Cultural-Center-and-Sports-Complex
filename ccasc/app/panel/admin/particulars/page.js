@@ -75,7 +75,6 @@ export default function ParticularsPage() {
   const [editForm, setEditForm] = React.useState({
     particularName: "",
     description: "",
-    totalQuantity: "",
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
@@ -84,7 +83,6 @@ export default function ParticularsPage() {
   const [addForm, setAddForm] = React.useState({
     particularName: "",
     description: "",
-    totalQuantity: "",
   });
   const [addConfirmOpen, setAddConfirmOpen] = React.useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = React.useState(false);
@@ -117,7 +115,7 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
-    setAddForm({ particularName: "", description: "", totalQuantity: "" });
+    setAddForm({ particularName: "", description: "" });
   };
 
   const openEditDialog = (item) => {
@@ -125,7 +123,6 @@ export default function ParticularsPage() {
     setEditForm({
       particularName: item.particularName,
       description: item.description || "",
-      totalQuantity: String(item.totalQuantity || ""),
     });
     setEditOpen(true);
   };
@@ -164,7 +161,6 @@ export default function ParticularsPage() {
           particularId: editItem.particularId,
           particularName: editForm.particularName.trim(),
           description: editForm.description.trim(),
-          totalQuantity: parseInt(editForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -202,7 +198,6 @@ export default function ParticularsPage() {
         body: JSON.stringify({
           particularName: addForm.particularName.trim(),
           description: addForm.description.trim(),
-          totalQuantity: parseInt(addForm.totalQuantity, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -357,19 +352,6 @@ export default function ParticularsPage() {
                   value={addForm.description}
                   onChange={(e) =>
                     setAddForm((f) => ({ ...f, description: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-qty">Total Quantity</Label>
-                <Input
-                  id="add-qty"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="e.g. 50"
-                  value={addForm.totalQuantity}
-                  onChange={(e) =>
-                    setAddForm((f) => ({ ...f, totalQuantity: e.target.value.replace(/\D/g, "").slice(0, 5) }))
                   }
                 />
               </div>
@@ -568,16 +550,6 @@ export default function ParticularsPage() {
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-qty">Total Quantity</Label>
-              <Input
-                id="edit-qty"
-                type="text"
-                inputMode="numeric"
-                value={editForm.totalQuantity}
-                onChange={(e) => setEditForm((f) => ({ ...f, totalQuantity: e.target.value.replace(/\D/g, "").slice(0, 5) }))}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); }}>
@@ -643,10 +615,6 @@ export default function ParticularsPage() {
               <span className="text-muted-foreground">Name:</span>
               <span className="font-medium text-right">{addForm.particularName}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Quantity:</span>
-              <span className="font-medium text-right">{addForm.totalQuantity || 0}</span>
-            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
@@ -705,8 +673,8 @@ export default function ParticularsPage() {
                 <span className="font-medium text-right max-w-[200px]">{detailsItem.description || "No description"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Quantity:</span>
-                <span className="font-medium">{detailsItem.totalQuantity}</span>
+              <span className="text-muted-foreground">Quantity (from Inventory):</span>
+              <span className="font-medium">{detailsItem.totalQuantity}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status:</span>
