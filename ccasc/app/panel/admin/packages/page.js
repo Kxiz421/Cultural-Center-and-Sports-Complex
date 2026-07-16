@@ -90,6 +90,7 @@ export default function PackagesPage() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [addPkgConfirmOpen, setAddPkgConfirmOpen] = React.useState(false);
 
   const resetAddForm = () => {
     setAddForm({
@@ -301,7 +302,7 @@ export default function PackagesPage() {
             <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label htmlFor="add-name">Package Name *</Label>
-                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value }))} />
+                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value.slice(0, 35) }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-desc">Description</Label>
@@ -341,7 +342,7 @@ export default function PackagesPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { resetAddForm(); setAddOpen(false); }}>Cancel</Button>
-              <Button onClick={handleAddPackage} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+              <Button onClick={() => setAddPkgConfirmOpen(true)} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -445,7 +446,7 @@ export default function PackagesPage() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="edit-name">Package Name</Label>
-              <Input id="edit-name" value={editForm.packageName} onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value }))} />
+              <Input id="edit-name" value={editForm.packageName} onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value.slice(0, 35) }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-desc">Description</Label>
@@ -524,6 +525,32 @@ export default function PackagesPage() {
             <Button variant="outline" onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}>Cancel</Button>
             <Button variant={confirmAction?.type === "archive" ? "destructive" : "default"} onClick={handleToggleArchive} disabled={saving}>
               {saving ? "Processing..." : confirmAction?.type === "archive" ? "Archive" : "Restore"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Package Confirmation */}
+      <Dialog open={addPkgConfirmOpen} onOpenChange={setAddPkgConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Plus className="size-5" />Confirm Add Package</DialogTitle>
+            <DialogDescription>Are you sure you want to create this package?</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Name:</span>
+              <span className="font-medium text-right">{addForm.packageName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Time Slot:</span>
+              <span className="font-medium text-right">{TIME_SLOTS.find(ts => ts.id === parseInt(addForm.timeSlotId || "1"))?.label || "Day"}</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAddPkgConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setAddPkgConfirmOpen(false); handleAddPackage(); }} disabled={saving}>
+              {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>

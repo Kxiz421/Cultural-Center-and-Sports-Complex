@@ -86,6 +86,10 @@ export default function ParticularsPage() {
     description: "",
     totalQuantity: "",
   });
+  const [addConfirmOpen, setAddConfirmOpen] = React.useState(false);
+  const [editConfirmOpen, setEditConfirmOpen] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [detailsItem, setDetailsItem] = React.useState(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
@@ -340,7 +344,7 @@ export default function ParticularsPage() {
                   placeholder="e.g. Wireless Microphone"
                   value={addForm.particularName}
                   onChange={(e) =>
-                    setAddForm((f) => ({ ...f, particularName: e.target.value }))
+                    setAddForm((f) => ({ ...f, particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20) }))
                   }
                 />
               </div>
@@ -365,7 +369,7 @@ export default function ParticularsPage() {
                   placeholder="e.g. 50"
                   value={addForm.totalQuantity}
                   onChange={(e) =>
-                    setAddForm((f) => ({ ...f, totalQuantity: e.target.value }))
+                    setAddForm((f) => ({ ...f, totalQuantity: e.target.value.replace(/\D/g, "").slice(0, 5) }))
                   }
                 />
               </div>
@@ -380,7 +384,7 @@ export default function ParticularsPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleAddParticular} disabled={saving}>
+              <Button onClick={() => setAddConfirmOpen(true)} disabled={saving}>
                 {saving ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
@@ -457,12 +461,12 @@ export default function ParticularsPage() {
                         <div className="flex items-center gap-2">
                           <Package className="size-4 text-muted-foreground shrink-0" />
                           <div>
-                            <span className="font-medium">{item.particularName}</span>
-                            {item.description && (
-                              <p className="text-xs text-muted-foreground truncate max-w-[250px]">
-                                {item.description}
-                              </p>
-                            )}
+                            <button
+                              className="font-medium text-left hover:underline"
+                              onClick={() => { setDetailsItem(item); setDetailsOpen(true); }}
+                            >
+                              {item.particularName}
+                            </button>
                           </div>
                         </div>
                       </TableCell>
@@ -552,7 +556,7 @@ export default function ParticularsPage() {
               <Input
                 id="edit-name"
                 value={editForm.particularName}
-                onChange={(e) => setEditForm((f) => ({ ...f, particularName: e.target.value }))}
+                onChange={(e) => setEditForm((f) => ({ ...f, particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20) }))}
               />
             </div>
             <div className="space-y-2">
@@ -571,7 +575,7 @@ export default function ParticularsPage() {
                 type="number"
                 min="0"
                 value={editForm.totalQuantity}
-                onChange={(e) => setEditForm((f) => ({ ...f, totalQuantity: e.target.value }))}
+                onChange={(e) => setEditForm((f) => ({ ...f, totalQuantity: e.target.value.replace(/\D/g, "").slice(0, 5) }))}
               />
             </div>
           </div>
@@ -579,7 +583,7 @@ export default function ParticularsPage() {
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); }}>
               Cancel
             </Button>
-            <Button onClick={handleSaveItem} disabled={saving}>
+            <Button onClick={() => setEditConfirmOpen(true)} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
@@ -619,6 +623,101 @@ export default function ParticularsPage() {
               {saving ? "Processing..." : confirmAction?.type === "archive" ? "Archive" : "Restore"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Confirmation Dialog */}
+      <Dialog open={addConfirmOpen} onOpenChange={setAddConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="size-5" />
+              Confirm Add Particular
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to create this particular?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Name:</span>
+              <span className="font-medium text-right">{addForm.particularName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Quantity:</span>
+              <span className="font-medium text-right">{addForm.totalQuantity || 0}</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setAddConfirmOpen(false); handleAddParticular(); }} disabled={saving}>
+              {saving ? "Saving..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Confirmation Dialog */}
+      <Dialog open={editConfirmOpen} onOpenChange={setEditConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-5" />
+              Confirm Save Changes
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to save the changes to &ldquo;{editItem?.particularName}&rdquo;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setEditConfirmOpen(false); handleSaveItem(); }} disabled={saving}>
+              {saving ? "Saving..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Details Dialog */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="size-5" />
+              {detailsItem?.particularName}
+            </DialogTitle>
+            <DialogDescription>
+              Full details of this particular item.
+            </DialogDescription>
+          </DialogHeader>
+          {detailsItem && (
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ID:</span>
+                <span className="font-medium">{detailsItem.particularId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-medium">{detailsItem.particularName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Description:</span>
+                <span className="font-medium text-right max-w-[200px]">{detailsItem.description || "No description"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Quantity:</span>
+                <span className="font-medium">{detailsItem.totalQuantity}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status:</span>
+                <Badge variant="outline" className={
+                  getStatusName(detailsItem.statusId) === "Available"
+                    ? "text-green-600 border-green-300"
+                    : "text-muted-foreground"
+                }>{getStatusName(detailsItem.statusId)}</Badge>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
