@@ -80,6 +80,7 @@ model Client {
   idProof            String? @map("id_proof") @db.Text
   accountStatus      String  @default("Active") @map("account_status") @db.VarChar(50)
   verificationStatus String  @default("Pending") @map("verification_status") @db.VarChar(50)
+  remarks            String? @map("remarks") @db.Text
   profilePhoto       String? @map("profile_photo") @db.VarChar(255)
   otp                String? @map("otp") @db.VarChar(10)
   otpExpiration      DateTime? @map("otp_expiration")
