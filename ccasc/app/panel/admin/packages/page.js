@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon, Search } from "lucide-react";
+import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon } from "lucide-react";
 
 function formatPHP(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -103,14 +103,14 @@ export default function PackagesPage() {
     setAddSelections({});
   };
 
-  // Fetch all particular items (available ones)
+  // Fetch available particulars for inclusion checkboxes
   React.useEffect(() => {
     async function loadParticulars() {
       try {
         const res = await fetch("/api/particulars");
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Filter to only available items
+          // Show all available particulars regardless of linked inventory
           const available = data.filter((item) => Number(item.statusId) === 1);
           setAllParticulars(available);
         }
@@ -151,7 +151,6 @@ export default function PackagesPage() {
       ledWallNightRate: pkg.ledWallNightRate != null ? String(pkg.ledWallNightRate) : "",
     });
 
-    // Build selections from existing inclusions
     const selections = {};
     for (const inc of pkg.inclusions || []) {
       selections[inc.itemId] = String(inc.quantityAvailable);
@@ -183,13 +182,16 @@ export default function PackagesPage() {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
 
-      // Build inclusions array from selections
       const inclusions = Object.entries(editSelections)
-        .filter(([itemId, qty]) => qty && parseInt(qty, 10) > 0)
-        .map(([itemId, qty]) => ({
-          itemId: parseInt(itemId, 10),
-          quantityAvailable: parseInt(qty, 10),
-        }));
+        .filter(([particularId, qty]) => qty && parseInt(qty, 10) > 0)
+        .map(([particularId, qty]) => {
+          const particular = allParticulars.find((p) => p.particularId === parseInt(particularId, 10));
+          return {
+            itemId: particular?.itemId ? parseInt(particular.itemId, 10) : parseInt(particularId, 10),
+            quantityAvailable: parseInt(qty, 10),
+          };
+        })
+        .filter((inc) => inc.itemId > 0);
 
       const res = await fetch("/api/packages", {
         method: "PUT",
@@ -237,13 +239,16 @@ export default function PackagesPage() {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
 
-      // Build inclusions array from selections
       const inclusions = Object.entries(addSelections)
-        .filter(([itemId, qty]) => qty && parseInt(qty, 10) > 0)
-        .map(([itemId, qty]) => ({
-          itemId: parseInt(itemId, 10),
-          quantityAvailable: parseInt(qty, 10),
-        }));
+        .filter(([particularId, qty]) => qty && parseInt(qty, 10) > 0)
+        .map(([particularId, qty]) => {
+          const particular = allParticulars.find((p) => p.particularId === parseInt(particularId, 10));
+          return {
+            itemId: particular?.itemId ? parseInt(particular.itemId, 10) : parseInt(particularId, 10),
+            quantityAvailable: parseInt(qty, 10),
+          };
+        })
+        .filter((inc) => inc.itemId > 0);
 
       const res = await fetch("/api/packages", {
         method: "POST",
@@ -319,17 +324,25 @@ export default function PackagesPage() {
     }
   };
 
-  // Toggle checkbox for a particular item
-  const toggleParticular = (itemId, selections, setSelections) => {
+  const toggleItem = (itemId, selections, setSelections) => {
     setSelections((prev) => {
       const next = { ...prev };
       if (next[itemId]) {
         delete next[itemId];
       } else {
-        next[itemId] = "1";
+        // Default quantity from the particular's totalQuantity
+        const particular = allParticulars.find((p) => p.particularId === itemId);
+        next[itemId] = String(particular?.totalQuantity || "1");
       }
       return next;
     });
+  };
+
+  const handleQtyChange = (itemId, value, setSelections) => {
+    setSelections((prev) => ({
+      ...prev,
+      [itemId]: value.replace(/\D/g, "").slice(0, 5),
+    }));
   };
 
   return (
@@ -353,7 +366,7 @@ export default function PackagesPage() {
             <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label htmlFor="add-name">Package Name *</Label>
-                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value.slice(0, 35) }))} />
+                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 35) }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-desc">Description</Label>
@@ -396,19 +409,19 @@ export default function PackagesPage() {
                 <Label>Inclusions</Label>
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm max-h-48 overflow-y-auto space-y-2">
                   {allParticulars.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">No available particulars found. Add particulars first.</p>
+                    <p className="text-muted-foreground text-xs">No available particulars found.</p>
                   ) : (
                     allParticulars.map((p) => {
-                      const incKey = p.itemId || p.particularId;
+                      const incKey = p.particularId;
                       const isSelected = !!addSelections[incKey];
                       return (
-                        <div key={p.particularId} className="flex items-center gap-2">
+                        <div key={incKey} className="flex items-center gap-2">
                           <Checkbox
-                            id={`add-inc-${p.particularId}`}
+                            id={`add-inc-${incKey}`}
                             checked={isSelected}
-                            onCheckedChange={() => toggleParticular(incKey, addSelections, setAddSelections)}
+                            onCheckedChange={() => toggleItem(incKey, addSelections, setAddSelections)}
                           />
-                          <Label htmlFor={`add-inc-${p.particularId}`} className="flex-1 cursor-pointer text-sm">
+                          <Label htmlFor={`add-inc-${incKey}`} className="flex-1 cursor-pointer text-sm">
                             {p.particularName}
                           </Label>
                           {isSelected && (
@@ -418,12 +431,7 @@ export default function PackagesPage() {
                               className="w-20 h-8 text-xs"
                               placeholder="Qty"
                               value={addSelections[incKey]}
-                              onChange={(e) =>
-                                setAddSelections((prev) => ({
-                                  ...prev,
-                                  [incKey]: e.target.value.replace(/\D/g, "").slice(0, 5),
-                                }))
-                              }
+                              onChange={(e) => handleQtyChange(incKey, e.target.value, setAddSelections)}
                             />
                           )}
                         </div>
@@ -539,7 +547,7 @@ export default function PackagesPage() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="edit-name">Package Name</Label>
-              <Input id="edit-name" value={editForm.packageName} onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value.slice(0, 35) }))} />
+              <Input id="edit-name" value={editForm.packageName} onChange={(e) => setEditForm((f) => ({ ...f, packageName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 35) }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-desc">Description</Label>
@@ -574,16 +582,16 @@ export default function PackagesPage() {
                   <p className="text-muted-foreground text-xs">No available particulars found.</p>
                 ) : (
                   allParticulars.map((p) => {
-                    const incKey = p.itemId || p.particularId;
+                    const incKey = p.particularId;
                     const isSelected = !!editSelections[incKey];
                     return (
-                      <div key={p.particularId} className="flex items-center gap-2">
+                      <div key={incKey} className="flex items-center gap-2">
                         <Checkbox
-                          id={`edit-inc-${p.particularId}`}
+                          id={`edit-inc-${incKey}`}
                           checked={isSelected}
-                          onCheckedChange={() => toggleParticular(incKey, editSelections, setEditSelections)}
+                          onCheckedChange={() => toggleItem(incKey, editSelections, setEditSelections)}
                         />
-                        <Label htmlFor={`edit-inc-${p.particularId}`} className="flex-1 cursor-pointer text-sm">
+                        <Label htmlFor={`edit-inc-${incKey}`} className="flex-1 cursor-pointer text-sm">
                           {p.particularName}
                         </Label>
                         {isSelected && (
@@ -593,12 +601,7 @@ export default function PackagesPage() {
                             className="w-20 h-8 text-xs"
                             placeholder="Qty"
                             value={editSelections[incKey]}
-                            onChange={(e) =>
-                              setEditSelections((prev) => ({
-                                ...prev,
-                                [incKey]: e.target.value.replace(/\D/g, "").slice(0, 5),
-                              }))
-                            }
+                            onChange={(e) => handleQtyChange(incKey, e.target.value, setEditSelections)}
                           />
                         )}
                       </div>
