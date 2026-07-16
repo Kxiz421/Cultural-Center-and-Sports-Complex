@@ -21,7 +21,7 @@ export async function GET() {
         timeSlot: { select: { startTime: true, endTime: true } },
         inclusions: {
           include: {
-            item: { select: { itemName: true } },
+            item: { select: { itemName: true, quantityAvailable: true } },
           },
         },
       },
@@ -43,7 +43,7 @@ export async function GET() {
       inclusions: pkg.inclusions.map((inc) => ({
         itemId: inc.itemId,
         itemName: inc.item?.itemName || "Unknown",
-        quantityAvailable: inc.quantityAvailable,
+        quantityAvailable: inc.item?.quantityAvailable ?? inc.quantityAvailable,
       })),
     }));
 
@@ -88,7 +88,7 @@ export async function POST(request) {
       },
       include: {
         timeSlot: { select: { startTime: true, endTime: true } },
-        inclusions: { include: { item: { select: { itemName: true } } } },
+        inclusions: { include: { item: { select: { itemName: true, quantityAvailable: true } } } },
       },
     });
 
@@ -173,7 +173,7 @@ export async function PUT(request) {
       data: updateData,
       include: {
         timeSlot: { select: { startTime: true, endTime: true } },
-        inclusions: { include: { item: { select: { itemName: true } } } },
+        inclusions: { include: { item: { select: { itemName: true, quantityAvailable: true } } } },
       },
     });
 
@@ -222,7 +222,7 @@ export async function PUT(request) {
       timeSlot: `${updated.timeSlot.startTime} — ${updated.timeSlot.endTime}`,
       inclusions: updated.inclusions.map((inc) => ({
         itemName: inc.item?.itemName || "Unknown",
-        quantityAvailable: inc.quantityAvailable,
+        quantityAvailable: inc.item?.quantityAvailable ?? inc.quantityAvailable,
       })),
     });
   } catch (error) {
