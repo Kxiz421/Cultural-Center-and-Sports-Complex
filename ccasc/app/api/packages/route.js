@@ -59,7 +59,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, timeSlotId, performedBy, performedByName } = await request.json();
+    const { packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, timeSlotId, inclusions, performedBy, performedByName } = await request.json();
 
     if (!packageName || !packageName.trim()) {
       return NextResponse.json({ error: "Package name is required" }, { status: 400 });
@@ -75,6 +75,16 @@ export async function POST(request) {
         ledWallNightRate: ledWallNightRate ? parseFloat(ledWallNightRate) : null,
         timeSlotId: parseInt(timeSlotId, 10) || 1,
         statusId: 1,
+        inclusions: inclusions && Array.isArray(inclusions) && inclusions.length > 0
+          ? {
+              create: inclusions
+                .filter((inc) => inc.itemId && inc.quantityAvailable > 0)
+                .map((inc) => ({
+                  itemId: parseInt(inc.itemId, 10),
+                  quantityAvailable: parseInt(inc.quantityAvailable, 10),
+                })),
+            }
+          : undefined,
       },
       include: {
         timeSlot: { select: { startTime: true, endTime: true } },
