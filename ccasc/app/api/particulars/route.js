@@ -27,6 +27,7 @@ export async function GET() {
       totalQuantity: item.totalQuantity,
       statusId: item.statusId,
       statusName: getStatusName(item.statusId),
+      itemId: item.itemId,
     }));
 
     return NextResponse.json(formatted);

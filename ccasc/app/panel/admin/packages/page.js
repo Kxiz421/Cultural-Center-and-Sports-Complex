@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -38,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon } from "lucide-react";
+import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon, Search } from "lucide-react";
 
 function formatPHP(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -73,7 +74,7 @@ export default function PackagesPage() {
     ledWallDayRate: "",
     ledWallNightRate: "",
   });
-  const [editInclusions, setEditInclusions] = React.useState([]);
+  const [editSelections, setEditSelections] = React.useState({});
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -87,6 +88,8 @@ export default function PackagesPage() {
     ledWallNightRate: "",
     timeSlotId: "",
   });
+  const [addSelections, setAddSelections] = React.useState({});
+  const [allParticulars, setAllParticulars] = React.useState([]);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
@@ -97,7 +100,26 @@ export default function PackagesPage() {
       packageName: "", description: "", dayRate: "", nightRate: "",
       ledWallDayRate: "", ledWallNightRate: "", timeSlotId: "",
     });
+    setAddSelections({});
   };
+
+  // Fetch all particular items (available ones)
+  React.useEffect(() => {
+    async function loadParticulars() {
+      try {
+        const res = await fetch("/api/particulars");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Filter to only available items
+          const available = data.filter((item) => Number(item.statusId) === 1);
+          setAllParticulars(available);
+        }
+      } catch (err) {
+        console.error("Failed to load particulars:", err);
+      }
+    }
+    loadParticulars();
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -128,13 +150,13 @@ export default function PackagesPage() {
       ledWallDayRate: pkg.ledWallDayRate != null ? String(pkg.ledWallDayRate) : "",
       ledWallNightRate: pkg.ledWallNightRate != null ? String(pkg.ledWallNightRate) : "",
     });
-    setEditInclusions(
-      (pkg.inclusions || []).map((inc) => ({
-        itemId: inc.itemId,
-        itemName: inc.itemName,
-        quantityAvailable: inc.quantityAvailable,
-      }))
-    );
+
+    // Build selections from existing inclusions
+    const selections = {};
+    for (const inc of pkg.inclusions || []) {
+      selections[inc.itemId] = String(inc.quantityAvailable);
+    }
+    setEditSelections(selections);
     setEditOpen(true);
   };
 
@@ -160,6 +182,15 @@ export default function PackagesPage() {
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+
+      // Build inclusions array from selections
+      const inclusions = Object.entries(editSelections)
+        .filter(([itemId, qty]) => qty && parseInt(qty, 10) > 0)
+        .map(([itemId, qty]) => ({
+          itemId: parseInt(itemId, 10),
+          quantityAvailable: parseInt(qty, 10),
+        }));
+
       const res = await fetch("/api/packages", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -171,10 +202,7 @@ export default function PackagesPage() {
           nightRate: editForm.nightRate || null,
           ledWallDayRate: editForm.ledWallDayRate || null,
           ledWallNightRate: editForm.ledWallNightRate || null,
-          inclusions: editInclusions.map((inc) => ({
-            itemId: inc.itemId,
-            quantityAvailable: inc.quantityAvailable,
-          })),
+          inclusions,
           performedBy,
           performedByName,
         }),
@@ -208,6 +236,15 @@ export default function PackagesPage() {
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+
+      // Build inclusions array from selections
+      const inclusions = Object.entries(addSelections)
+        .filter(([itemId, qty]) => qty && parseInt(qty, 10) > 0)
+        .map(([itemId, qty]) => ({
+          itemId: parseInt(itemId, 10),
+          quantityAvailable: parseInt(qty, 10),
+        }));
+
       const res = await fetch("/api/packages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,6 +256,7 @@ export default function PackagesPage() {
           ledWallDayRate: addForm.ledWallDayRate || null,
           ledWallNightRate: addForm.ledWallNightRate || null,
           timeSlotId: addForm.timeSlotId || "1",
+          inclusions,
           performedBy,
           performedByName,
         }),
@@ -281,6 +319,19 @@ export default function PackagesPage() {
     }
   };
 
+  // Toggle checkbox for a particular item
+  const toggleParticular = (itemId, selections, setSelections) => {
+    setSelections((prev) => {
+      const next = { ...prev };
+      if (next[itemId]) {
+        delete next[itemId];
+      } else {
+        next[itemId] = "1";
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -294,10 +345,10 @@ export default function PackagesPage() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 size-4" />Add Package</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Package</DialogTitle>
-              <DialogDescription>Create a new package with rates and description.</DialogDescription>
+              <DialogDescription>Create a new package with rates, description, and selected inclusions.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -339,6 +390,48 @@ export default function PackagesPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Inclusions with Checkboxes */}
+              <div className="space-y-2">
+                <Label>Inclusions</Label>
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm max-h-48 overflow-y-auto space-y-2">
+                  {allParticulars.length === 0 ? (
+                    <p className="text-muted-foreground text-xs">No available particulars found. Add particulars first.</p>
+                  ) : (
+                    allParticulars.map((p) => {
+                      const incKey = p.itemId || p.particularId;
+                      const isSelected = !!addSelections[incKey];
+                      return (
+                        <div key={p.particularId} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`add-inc-${p.particularId}`}
+                            checked={isSelected}
+                            onCheckedChange={() => toggleParticular(incKey, addSelections, setAddSelections)}
+                          />
+                          <Label htmlFor={`add-inc-${p.particularId}`} className="flex-1 cursor-pointer text-sm">
+                            {p.particularName}
+                          </Label>
+                          {isSelected && (
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              className="w-20 h-8 text-xs"
+                              placeholder="Qty"
+                              value={addSelections[incKey]}
+                              onChange={(e) =>
+                                setAddSelections((prev) => ({
+                                  ...prev,
+                                  [incKey]: e.target.value.replace(/\D/g, "").slice(0, 5),
+                                }))
+                              }
+                            />
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { resetAddForm(); setAddOpen(false); }}>Cancel</Button>
@@ -351,7 +444,7 @@ export default function PackagesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Catalog</CardTitle>
-          <CardDescription>Click the edit icon to update package details and rates. Use archive/restore to manage availability.</CardDescription>
+          <CardDescription>Click the edit icon to update package details, rates, and inclusions. Use archive/restore to manage availability.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -438,10 +531,10 @@ export default function PackagesPage() {
 
       {/* Edit Dialog */}
       <Dialog key={editPkg?.packageId || "no-edit"} open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Package</DialogTitle>
-            <DialogDescription>Update package name, description, and rate details.</DialogDescription>
+            <DialogDescription>Update package name, description, rate details, and inclusions.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -472,28 +565,45 @@ export default function PackagesPage() {
                 <Input id="edit-led-night" type="text" inputMode="numeric" value={editForm.ledWallNightRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
               </div>
             </div>
+
+            {/* Inclusions with Checkboxes */}
             <div className="space-y-2">
-              <Label>Inclusions (edit quantities)</Label>
-              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-                {editInclusions.length === 0 ? (
-                  <p className="text-muted-foreground text-xs">No inclusions</p>
+              <Label>Inclusions</Label>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm max-h-48 overflow-y-auto space-y-2">
+                {allParticulars.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">No available particulars found.</p>
                 ) : (
-                  editInclusions.map((inc, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="flex-1">{inc.itemName}</span>
-                      <Input
-                        type="number"
-                        min="0"
-                        className="w-20 h-8 text-xs"
-                        value={inc.quantityAvailable}
-                        onChange={(e) => {
-                          const newIncs = [...editInclusions];
-                          newIncs[i] = { ...newIncs[i], quantityAvailable: parseInt(e.target.value, 10) || 0 };
-                          setEditInclusions(newIncs);
-                        }}
-                      />
-                    </div>
-                  ))
+                  allParticulars.map((p) => {
+                    const incKey = p.itemId || p.particularId;
+                    const isSelected = !!editSelections[incKey];
+                    return (
+                      <div key={p.particularId} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`edit-inc-${p.particularId}`}
+                          checked={isSelected}
+                          onCheckedChange={() => toggleParticular(incKey, editSelections, setEditSelections)}
+                        />
+                        <Label htmlFor={`edit-inc-${p.particularId}`} className="flex-1 cursor-pointer text-sm">
+                          {p.particularName}
+                        </Label>
+                        {isSelected && (
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            className="w-20 h-8 text-xs"
+                            placeholder="Qty"
+                            value={editSelections[incKey]}
+                            onChange={(e) =>
+                              setEditSelections((prev) => ({
+                                ...prev,
+                                [incKey]: e.target.value.replace(/\D/g, "").slice(0, 5),
+                              }))
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -545,6 +655,12 @@ export default function PackagesPage() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Time Slot:</span>
               <span className="font-medium text-right">{TIME_SLOTS.find(ts => ts.id === parseInt(addForm.timeSlotId || "1"))?.label || "Day"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Inclusions:</span>
+              <span className="font-medium text-right">
+                {Object.keys(addSelections).filter((k) => addSelections[k] && parseInt(addSelections[k]) > 0).length || 0} items
+              </span>
             </div>
           </div>
           <DialogFooter className="gap-2">
