@@ -75,6 +75,7 @@ export default function ParticularsPage() {
   const [editForm, setEditForm] = React.useState({
     particularName: "",
     description: "",
+    quantityAvailable: "",
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
@@ -83,6 +84,7 @@ export default function ParticularsPage() {
   const [addForm, setAddForm] = React.useState({
     particularName: "",
     description: "",
+    quantityAvailable: "",
   });
   const [addConfirmOpen, setAddConfirmOpen] = React.useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = React.useState(false);
@@ -115,7 +117,7 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
-    setAddForm({ particularName: "", description: "" });
+    setAddForm({ particularName: "", description: "", quantityAvailable: "" });
   };
 
   const openEditDialog = (item) => {
@@ -123,6 +125,7 @@ export default function ParticularsPage() {
     setEditForm({
       particularName: item.particularName,
       description: item.description || "",
+      quantityAvailable: String(item.totalQuantity || ""),
     });
     setEditOpen(true);
   };
@@ -161,6 +164,7 @@ export default function ParticularsPage() {
           particularId: editItem.particularId,
           particularName: editForm.particularName.trim(),
           description: editForm.description.trim(),
+          quantityAvailable: parseInt(editForm.quantityAvailable, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -198,6 +202,7 @@ export default function ParticularsPage() {
         body: JSON.stringify({
           particularName: addForm.particularName.trim(),
           description: addForm.description.trim(),
+          quantityAvailable: parseInt(addForm.quantityAvailable, 10) || 0,
           performedBy,
           performedByName,
         }),
@@ -292,7 +297,7 @@ export default function ParticularsPage() {
   const filteredItems = items.filter((item) => {
     if (!searchQuery) return true;
     const term = searchQuery.toLowerCase();
-    const hay = [item.particularName, item.description, getStatusName(item.statusId)]
+    const hay = [item.particularName, item.description, item.inventoryName, getStatusName(item.statusId)]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -355,6 +360,19 @@ export default function ParticularsPage() {
                   }
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-qty">Quantity Available</Label>
+                <Input
+                  id="add-qty"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 50"
+                  value={addForm.quantityAvailable}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, quantityAvailable: e.target.value.replace(/\D/g, "").slice(0, 5) }))
+                  }
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -404,7 +422,6 @@ export default function ParticularsPage() {
           <CardTitle>Particulars List</CardTitle>
           <CardDescription>
             {filteredItems.length} particular{filteredItems.length !== 1 ? "s" : ""} available.
-            Use archive/restore to manage availability.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,7 +430,8 @@ export default function ParticularsPage() {
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Item Name</TableHead>
-                <TableHead className="text-right">Total Qty</TableHead>
+                <TableHead>Inventory Item</TableHead>
+                <TableHead className="text-right">Qty Available</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-28">Actions</TableHead>
               </TableRow>
@@ -421,13 +439,13 @@ export default function ParticularsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
                     {searchQuery ? "No particulars match your search" : "No particulars found. Add one to get started."}
                   </TableCell>
                 </TableRow>
@@ -451,6 +469,9 @@ export default function ParticularsPage() {
                             </button>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.inventoryName || "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
                         {item.totalQuantity}
@@ -550,6 +571,22 @@ export default function ParticularsPage() {
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-qty">Quantity Available</Label>
+              <Input
+                id="edit-qty"
+                type="text"
+                inputMode="numeric"
+                placeholder="e.g. 50"
+                value={editForm.quantityAvailable}
+                onChange={(e) => setEditForm((f) => ({ ...f, quantityAvailable: e.target.value.replace(/\D/g, "").slice(0, 5) }))}
+              />
+              {editItem?.inventoryName && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Linked to Inventory: <span className="font-medium">{editItem.inventoryName}</span>
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); }}>
@@ -615,6 +652,10 @@ export default function ParticularsPage() {
               <span className="text-muted-foreground">Name:</span>
               <span className="font-medium text-right">{addForm.particularName}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Quantity:</span>
+              <span className="font-medium text-right">{addForm.quantityAvailable || 0}</span>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
@@ -673,8 +714,12 @@ export default function ParticularsPage() {
                 <span className="font-medium text-right max-w-[200px]">{detailsItem.description || "No description"}</span>
               </div>
               <div className="flex justify-between">
-              <span className="text-muted-foreground">Quantity (from Inventory):</span>
-              <span className="font-medium">{detailsItem.totalQuantity}</span>
+                <span className="text-muted-foreground">Inventory Item:</span>
+                <span className="font-medium">{detailsItem.inventoryName || "Not linked"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Quantity Available:</span>
+                <span className="font-medium">{detailsItem.totalQuantity}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status:</span>

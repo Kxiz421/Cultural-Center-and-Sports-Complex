@@ -30,6 +30,7 @@ export async function GET() {
       description: item.description || "",
       category: item.category || "",
       totalQuantity: item.inventory?.quantityAvailable ?? 0,
+      inventoryName: item.inventory?.itemName || "",
       statusId: item.statusId,
       statusName: getStatusName(item.statusId),
       itemId: item.itemId,
@@ -47,7 +48,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { particularName, description, category, performedBy, performedByName } = await request.json();
+    const { particularName, description, category, quantityAvailable, performedBy, performedByName } = await request.json();
 
     if (!particularName || !particularName.trim()) {
       return NextResponse.json(
@@ -65,6 +66,44 @@ export async function POST(request) {
       },
     });
 
+    // If quantity provided, create or update the linked inventory item
+    const qty = parseInt(quantityAvailable, 10);
+    if (qty > 0) {
+      // Check if there's already an inventory item with matching name
+      let inventory = await prisma.inventory.findFirst({
+        where: { itemName: particularName.trim() },
+      });
+
+      if (inventory) {
+        // Link to existing inventory
+        await prisma.particular.update({
+          where: { particularId: created.particularId },
+          data: { itemId: inventory.itemId },
+        });
+        // Update quantity
+        await prisma.inventory.update({
+          where: { itemId: inventory.itemId },
+          data: { quantityAvailable: qty },
+        });
+      } else {
+        // Create new inventory item
+        inventory = await prisma.inventory.create({
+          data: {
+            itemName: particularName.trim(),
+            unitCost: 0,
+            quantityAvailable: qty,
+            venueId: 1,
+            statusId: 1,
+          },
+        });
+        // Link to the new inventory
+        await prisma.particular.update({
+          where: { particularId: created.particularId },
+          data: { itemId: inventory.itemId },
+        });
+      }
+    }
+
     // Log the creation
     await prisma.auditLog.create({
       data: {
@@ -73,7 +112,7 @@ export async function POST(request) {
         targetName: created.particularName,
         performedById: performedBy || "system",
         performedByName: performedByName || "System",
-        details: `Particular created: name="${created.particularName}", category="${created.category}"`,
+        details: `Particular created: name="${created.particularName}", category="${created.category}", quantity=${qty || 0}`,
       },
     });
 
@@ -83,7 +122,8 @@ export async function POST(request) {
       particularName: created.particularName,
       description: created.description || "",
       category: created.category || "",
-      totalQuantity: 0,
+      totalQuantity: qty || 0,
+      inventoryName: particularName.trim(),
       statusId: created.statusId,
       statusName: getStatusName(created.statusId),
     });
@@ -98,7 +138,7 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
-    const { particularId, particularName, description, category, statusId, performedBy, performedByName } = await request.json();
+    const { particularId, particularName, description, category, statusId, quantityAvailable, performedBy, performedByName } = await request.json();
 
     if (!particularId) {
       return NextResponse.json(
@@ -110,6 +150,11 @@ export async function PUT(request) {
     // Get the existing record for before/after comparison
     const existing = await prisma.particular.findUnique({
       where: { particularId: parseInt(particularId, 10) },
+      include: {
+        inventory: {
+          select: { itemId: true, itemName: true, quantityAvailable: true },
+        },
+      },
     });
 
     if (!existing) {
@@ -135,6 +180,46 @@ export async function PUT(request) {
       },
     });
 
+    // Update quantity in Inventory if provided
+    const qty = parseInt(quantityAvailable, 10);
+    if (!isNaN(qty) && qty >= 0) {
+      if (updated.itemId) {
+        // Update existing linked inventory
+        await prisma.inventory.update({
+          where: { itemId: updated.itemId },
+          data: { quantityAvailable: qty },
+        });
+      } else if (qty > 0) {
+        // No linked inventory - create one
+        let inventory = await prisma.inventory.findFirst({
+          where: { itemName: updated.particularName },
+        });
+        if (!inventory) {
+          inventory = await prisma.inventory.create({
+            data: {
+              itemName: updated.particularName,
+              unitCost: 0,
+              quantityAvailable: qty,
+              venueId: 1,
+              statusId: 1,
+            },
+          });
+        } else {
+          await prisma.inventory.update({
+            where: { itemId: inventory.itemId },
+            data: { quantityAvailable: qty },
+          });
+        }
+        // Link particular to inventory
+        await prisma.particular.update({
+          where: { particularId: updated.particularId },
+          data: { itemId: inventory.itemId },
+        });
+        updated.itemId = inventory.itemId;
+        updated.inventory = inventory;
+      }
+    }
+
     // Build before/after details
     const changes = [];
     if (particularName !== undefined && existing.particularName !== updated.particularName) {
@@ -148,6 +233,9 @@ export async function PUT(request) {
     }
     if (statusId !== undefined && existing.statusId !== updated.statusId) {
       changes.push(`status: ${getStatusName(existing.statusId)} → ${getStatusName(updated.statusId)}`);
+    }
+    if (!isNaN(qty) && qty >= 0 && (existing.inventory?.quantityAvailable ?? 0) !== qty) {
+      changes.push(`quantity: ${existing.inventory?.quantityAvailable ?? 0} → ${qty}`);
     }
 
     if (changes.length > 0) {
@@ -169,7 +257,8 @@ export async function PUT(request) {
       particularName: updated.particularName,
       description: updated.description || "",
       category: updated.category || "",
-      totalQuantity: updated.inventory?.quantityAvailable ?? 0,
+      totalQuantity: updated.inventory?.quantityAvailable ?? qty ?? 0,
+      inventoryName: updated.inventory?.itemName || "",
       statusId: updated.statusId,
       statusName: getStatusName(updated.statusId),
     });
