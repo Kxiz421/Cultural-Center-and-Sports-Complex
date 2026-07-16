@@ -89,7 +89,11 @@ export default function UserManagementPage() {
     lastName: "",
     email: "",
     contact: "",
+    password: "",
+    confirmPassword: "",
   });
+  const [showNewPassword, setShowNewPassword] = React.useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [saveConfirmOpen, setSaveConfirmOpen] = React.useState(false);
@@ -265,7 +269,11 @@ export default function UserManagementPage() {
       lastName: user.lastName || "",
       email: user.email || "",
       contact: user.contact || "",
+      password: "",
+      confirmPassword: "",
     });
+    setShowNewPassword(false);
+    setShowConfirmNewPassword(false);
     setProfileOpen(true);
   };
 
@@ -291,21 +299,56 @@ export default function UserManagementPage() {
       return;
     }
 
+    // Validate password if provided
+    const password = editForm.password;
+    const confirmPassword = editForm.confirmPassword;
+    if (password || confirmPassword) {
+      if (password !== confirmPassword) {
+        toast.error("Passwords must match.");
+        return;
+      }
+      if (password.length < 8) {
+        toast.error("Password must be at least 8 characters long.");
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        toast.error("Password must contain at least one uppercase letter.");
+        return;
+      }
+      if (!/[a-z]/.test(password)) {
+        toast.error("Password must contain at least one lowercase letter.");
+        return;
+      }
+      if (!/[0-9]/.test(password)) {
+        toast.error("Password must contain at least one number.");
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(password)) {
+        toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      const body = {
+        userId: selectedUser.id,
+        firstName: fn,
+        middleName: editForm.middleName,
+        lastName: ln,
+        email,
+        contact: editForm.contact,
+        performedBy: currentUserId,
+        performedByName: currentUserName,
+      };
+      if (password) {
+        body.password = password;
+      }
+
       const res = await fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          firstName: fn,
-          middleName: editForm.middleName,
-          lastName: ln,
-          email,
-          contact: editForm.contact,
-          performedBy: currentUserId,
-          performedByName: currentUserName,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -1060,6 +1103,55 @@ export default function UserManagementPage() {
                       maxLength={11}
                       onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))}
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Password change section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold">Change Password (optional)</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>New password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Leave blank to keep current"
+                        value={editForm.password}
+                        onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                      >
+                        {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confirm new password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        placeholder="Re-enter new password"
+                        value={editForm.confirmPassword}
+                        onChange={(e) => setEditForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                        onClick={() => setShowConfirmNewPassword((v) => !v)}
+                      >
+                        {showConfirmNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
