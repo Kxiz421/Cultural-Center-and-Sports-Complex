@@ -364,8 +364,8 @@ export default function ParticularsPage() {
                 <Label htmlFor="add-qty">Total Quantity</Label>
                 <Input
                   id="add-qty"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
                   placeholder="e.g. 50"
                   value={addForm.totalQuantity}
                   onChange={(e) =>
@@ -572,8 +572,8 @@ export default function ParticularsPage() {
               <Label htmlFor="edit-qty">Total Quantity</Label>
               <Input
                 id="edit-qty"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
                 value={editForm.totalQuantity}
                 onChange={(e) => setEditForm((f) => ({ ...f, totalQuantity: e.target.value.replace(/\D/g, "").slice(0, 5) }))}
               />
