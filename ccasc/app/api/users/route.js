@@ -323,7 +323,7 @@ export async function PATCH(request) {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { userId, firstName, middleName, lastName, email, contact, performedBy, performedByName } = body;
+    const { userId, firstName, middleName, lastName, email, contact, password, performedBy, performedByName } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -358,6 +358,7 @@ export async function PUT(request) {
       if (lastName !== undefined) updateData.lastName = lastName.trim();
       if (email !== undefined) updateData.email = email.trim();
       if (contact !== undefined) updateData.contactNumber = contact.trim();
+      if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
 
       await prisma.staff.update({
         where: { staffId: id },
@@ -370,6 +371,7 @@ export async function PUT(request) {
       if (lastName !== undefined) updateData.lastName = lastName.trim();
       if (email !== undefined) updateData.email = email.trim();
       if (contact !== undefined) updateData.contactNumber = contact.trim();
+      if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
 
       await prisma.client.update({
         where: { clientId: id },
@@ -381,6 +383,7 @@ export async function PUT(request) {
 
     // Log the profile update
     const targetName = await getTargetName(prefix, id);
+    const details = password ? `Account details and password updated` : `Account details updated`;
     await prisma.auditLog.create({
       data: {
         action: "UPDATED",
@@ -388,7 +391,7 @@ export async function PUT(request) {
         targetName,
         performedById: performedBy || "system",
         performedByName: performedByName || "System",
-        details: `Account details updated`,
+        details,
       },
     });
 
