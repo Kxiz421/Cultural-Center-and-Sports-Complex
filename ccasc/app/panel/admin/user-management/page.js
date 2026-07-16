@@ -207,6 +207,11 @@ export default function UserManagementPage() {
       return;
     }
 
+    if (!email) {
+      toast.error("Email is required.");
+      return;
+    }
+
     // Check for existing email
     const emailExists = users.some(
       (u) => u.email?.toLowerCase() === form.email.trim().toLowerCase()
@@ -233,8 +238,8 @@ export default function UserManagementPage() {
           performedBy: currentUserId,
           performedByName: currentUserName,
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
-          roleId: form.role === 'coord-cc' ? 2 :
-                 form.role === 'coord-sc' ? 2 :
+          roleId: form.role === 'coord-cc' ? 1 :
+                 form.role === 'coord-sc' ? 1 :
                  form.role === 'acct' ? 3 :
                  form.role === 'provincial-agency' ? 'PROV' : 'PUB',
           orgId: form.role === 'coord-cc' ? 2 :
@@ -738,6 +743,7 @@ export default function UserManagementPage() {
                 const fn = form.firstName.trim();
                 const ln = form.lastName.trim();
                 if (!fn || !ln) { toast.error("First name and last name are required."); return; }
+                if (!form.email.trim()) { toast.error("Email is required."); return; }
                 if (!form.role) { toast.error("Please select a role."); return; }
                 if (!form.password || form.password !== form.confirmPassword) { toast.error("Passwords must match and cannot be empty."); return; }
                 if (form.password.length < 8) { toast.error("Password must be at least 8 characters long."); return; }
