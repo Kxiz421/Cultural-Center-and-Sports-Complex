@@ -310,21 +310,21 @@ export default function PackagesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="add-day">Day Rate (₱)</Label>
-                  <Input id="add-day" type="number" min="0" step="0.01" placeholder="e.g. 55000" value={addForm.dayRate} onChange={(e) => setAddForm((f) => ({ ...f, dayRate: e.target.value }))} />
+                  <Input id="add-day" type="text" inputMode="numeric" placeholder="e.g. 55000" value={addForm.dayRate} onChange={(e) => setAddForm((f) => ({ ...f, dayRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="add-night">Night Rate (₱)</Label>
-                  <Input id="add-night" type="number" min="0" step="0.01" placeholder="e.g. 60000" value={addForm.nightRate} onChange={(e) => setAddForm((f) => ({ ...f, nightRate: e.target.value }))} />
+                  <Input id="add-night" type="text" inputMode="numeric" placeholder="e.g. 60000" value={addForm.nightRate} onChange={(e) => setAddForm((f) => ({ ...f, nightRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="add-led-day">LED Wall Day (₱)</Label>
-                  <Input id="add-led-day" type="number" min="0" step="0.01" placeholder="e.g. 80000" value={addForm.ledWallDayRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallDayRate: e.target.value }))} />
+                  <Input id="add-led-day" type="text" inputMode="numeric" placeholder="e.g. 80000" value={addForm.ledWallDayRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallDayRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="add-led-night">LED Wall Night (₱)</Label>
-                  <Input id="add-led-night" type="number" min="0" step="0.01" placeholder="e.g. 85000" value={addForm.ledWallNightRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallNightRate: e.target.value }))} />
+                  <Input id="add-led-night" type="text" inputMode="numeric" placeholder="e.g. 85000" value={addForm.ledWallNightRate} onChange={(e) => setAddForm((f) => ({ ...f, ledWallNightRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -454,21 +454,21 @@ export default function PackagesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-day">Day Rate (₱)</Label>
-                <Input id="edit-day" type="number" min="0" step="0.01" value={editForm.dayRate} onChange={(e) => setEditForm((f) => ({ ...f, dayRate: e.target.value }))} />
+                <Input id="edit-day" type="text" inputMode="numeric" value={editForm.dayRate} onChange={(e) => setEditForm((f) => ({ ...f, dayRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-night">Night Rate (₱)</Label>
-                <Input id="edit-night" type="number" min="0" step="0.01" value={editForm.nightRate} onChange={(e) => setEditForm((f) => ({ ...f, nightRate: e.target.value }))} />
+                <Input id="edit-night" type="text" inputMode="numeric" value={editForm.nightRate} onChange={(e) => setEditForm((f) => ({ ...f, nightRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-led-day">LED Wall Day (₱)</Label>
-                <Input id="edit-led-day" type="number" min="0" step="0.01" value={editForm.ledWallDayRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallDayRate: e.target.value }))} />
+                <Input id="edit-led-day" type="text" inputMode="numeric" value={editForm.ledWallDayRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallDayRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-led-night">LED Wall Night (₱)</Label>
-                <Input id="edit-led-night" type="number" min="0" step="0.01" value={editForm.ledWallNightRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value }))} />
+                <Input id="edit-led-night" type="text" inputMode="numeric" value={editForm.ledWallNightRate} onChange={(e) => setEditForm((f) => ({ ...f, ledWallNightRate: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
               </div>
             </div>
             <div className="space-y-2">
