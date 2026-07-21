@@ -286,6 +286,7 @@ model Reservation {
   clientId           Int      @map("client_id")
   packageId          Int?     @map("package_id")
   timeSlotId         Int      @map("time_slot_id")
+  notes              String?  @map("notes") @db.Text
 
   venue     FacilityVenue       @relation(fields: [venueId], references: [venueId])
   client    Client              @relation(fields: [clientId], references: [clientId])
