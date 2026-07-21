@@ -150,10 +150,10 @@ export default function AccountingReservationsPage() {
                       <span className="font-medium">{r.clientName}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[180px] text-sm">
+                  <TableCell className="text-sm whitespace-nowrap">
                     {r.venue}
                   </TableCell>
-                  <TableCell className="max-w-[150px] text-sm">
+                  <TableCell className="text-sm whitespace-nowrap">
                     {r.eventType}
                   </TableCell>
                   <TableCell className="text-sm">{r.eventDate}</TableCell>
