@@ -45,6 +45,7 @@ export async function GET(request) {
       amountPaid: r.bookings.reduce((sum, b) => 
         sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0), 0),
       particulars: r.reservedParticulars.map((rp) => rp.particular.particularName),
+      notes: r.notes || null,
     }));
 
     return NextResponse.json(formatted);
@@ -79,6 +80,7 @@ export async function POST(request) {
         reservationStatus: "Pending",
         eventStatus: "Upcoming",
         submittedAt: new Date(),
+        notes: notes || null,
       },
     });
 
