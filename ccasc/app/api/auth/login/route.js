@@ -20,34 +20,41 @@ export async function POST(request) {
     // Try to find a staff member by email or username
     let staff = await prisma.staff.findUnique({
       where: { email: email },
-      include: { staffRole: true },
+      include: { staffRole: true, staffOrg: true },
     });
 
     if (!staff) {
       staff = await prisma.staff.findUnique({
         where: { username: email },
-        include: { staffRole: true },
+        include: { staffRole: true, staffOrg: true },
       });
     }
 
-    if (staff) {
-      const passwordValid = await bcrypt.compare(password, staff.password);
-      if (!passwordValid) {
-        return NextResponse.json(
-          { error: "Invalid email/username or password" },
-          { status: 401 }
-        );
+      if (staff) {
+        const passwordValid = await bcrypt.compare(password, staff.password);
+        if (!passwordValid) {
+          return NextResponse.json(
+            { error: "Invalid email/username or password" },
+            { status: 401 }
+          );
+        }
+
+        // Determine user type: differentiate Program Coordinator by organization
+        let userType = staff.staffRole.roleName.toLowerCase();
+        if (staff.staffRole.roleName === "Program Coordinator") {
+          // staffOrgId 1 = Sports Complex, staffOrgId 2 = Cultural Center
+          userType = staff.staffOrgId === 2 ? "program coordinator" : "program coordinator";
+        }
+
+        return NextResponse.json({
+          id: `STF-${staff.staffId}`,
+          type: userType,
+          firstName: staff.firstName,
+          lastName: staff.lastName,
+          role: staff.staffRole.roleName,
+          email: staff.email,
+        });
       }
-
-      return NextResponse.json({
-        id: `STF-${staff.staffId}`,
-        type: staff.staffRole.roleName.toLowerCase(),
-        firstName: staff.firstName,
-        lastName: staff.lastName,
-        role: staff.staffRole.roleName,
-        email: staff.email,
-      });
-    }
 
     // Try to find a client by email or username
     let client = await prisma.client.findUnique({

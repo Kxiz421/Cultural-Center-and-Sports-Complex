@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -12,7 +13,7 @@ const NAV_ITEMS = [
   { href: "/panel/client/reservations", label: "Reservations", icon: ClipboardEdit },
   { href: "/panel/client/rescheduling", label: "Rescheduling", icon: CalendarRange },
   { href: "/panel/client/documents", label: "Documents", icon: FileText },
-  { href: "/panel/client/notifications", label: "Notifications", icon: Bell },
+  { href: "/panel/client/notifications", label: "Notifications", icon: Bell, showBadge: true },
   { href: "/panel/client/history", label: "Booking History", icon: History },
 ];
 
@@ -20,6 +21,26 @@ export default function ClientLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  React.useEffect(() => {
+    async function fetchUnreadCount() {
+      const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
+      if (!clientId) return;
+      try {
+        const res = await fetch(`/api/notifications?clientId=${clientId}`);
+        const data = await res.json();
+        const count = Array.isArray(data) ? data.filter((n) => !n.isRead).length : 0;
+        setUnreadCount(count);
+      } catch (err) {
+        console.error("Failed to fetch notification count:", err);
+      }
+    }
+    fetchUnreadCount();
+    // Poll every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -66,7 +87,7 @@ export default function ClientLayout({ children }) {
               <Button
                 key={item.href}
                 variant={isActive ? "secondary" : "ghost"}
-                className="w-full justify-start gap-3"
+                className="w-full justify-start gap-3 relative"
                 onClick={() => {
                   router.push(item.href);
                   setSidebarOpen(false);
@@ -74,6 +95,11 @@ export default function ClientLayout({ children }) {
               >
                 <Icon className="size-4" />
                 {item.label}
+                {item.showBadge && unreadCount > 0 && (
+                  <Badge className="absolute right-2 size-5 flex items-center justify-center p-0 text-[10px] bg-red-500 text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Badge>
+                )}
               </Button>
             );
           })}

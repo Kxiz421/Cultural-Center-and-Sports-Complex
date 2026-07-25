@@ -26,7 +26,8 @@ export default function ReschedulingPage() {
     try {
       const userId = localStorage.getItem("user_id");
       if (!userId) return;
-      const res = await fetch(`/api/reservations?clientId=${userId}`);
+      const clientId = userId.replace("CLT-", "");
+      const res = await fetch(`/api/reservations?clientId=${clientId}`);
       const data = await res.json();
       setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -49,7 +50,7 @@ export default function ReschedulingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reservationId: parseInt(reservationId),
+          reservationId: parseInt(reservationId.replace("RES-", "")),
           requestedDate,
           reason
         })
