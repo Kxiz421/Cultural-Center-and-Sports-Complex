@@ -166,6 +166,8 @@ export default function LoginPage() {
         window.location.href = "/panel/provincial-agency/dashboard";
       } else if (roleType === "client") {
         window.location.href = "/panel/client/dashboard";
+      } else if (roleType === "program coordinator") {
+        window.location.href = "/panel/program-coordinator/dashboard";
       } else {
         window.location.href = "/panel/admin/dashboard";
       }

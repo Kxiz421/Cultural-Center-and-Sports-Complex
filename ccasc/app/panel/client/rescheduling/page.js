@@ -44,13 +44,16 @@ export default function ClientReschedulingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reservationId: parseInt(selectedReservation),
+          reservationId: parseInt(selectedReservation.replace("RES-", "")),
           requestedDate,
           reason,
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to submit rescheduling request");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to submit rescheduling request");
+      }
       toast.success("Rescheduling request submitted successfully!");
       setSelectedReservation("");
       setRequestedDate("");

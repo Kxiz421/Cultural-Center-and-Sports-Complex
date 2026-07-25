@@ -23,14 +23,15 @@ export async function POST(request) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
     }
 
-    // Check if request is at least 7 days before event
+    // Check if event date has already passed
     const eventDate = new Date(reservation.eventDate);
     const today = new Date();
-    const daysDiff = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
+    today.setHours(0, 0, 0, 0);
+    eventDate.setHours(0, 0, 0, 0);
 
-    if (daysDiff < 7) {
+    if (eventDate < today) {
       return NextResponse.json(
-        { error: "Rescheduling must be requested at least 7 days before the event" },
+        { error: "Cannot reschedule an event that has already passed" },
         { status: 400 }
       );
     }
