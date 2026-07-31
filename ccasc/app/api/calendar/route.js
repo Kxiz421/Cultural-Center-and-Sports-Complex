@@ -5,21 +5,12 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    // Fetch all reservations with their facility and venue info
+    // Fetch all reservations without client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
       include: {
         venue: true,
-        client: {
-          select: {
-            firstName: true,
-            lastName: true,
-            clientId: true,
-          },
-        },
         package: {
-          select: {
-            packageName: true,
-          },
+          select: { packageName: true },
         },
         timeSlot: {
           select: {
@@ -40,6 +31,14 @@ export async function GET() {
       orderBy: { eventDate: "asc" },
     });
 
+    // Fetch valid client info separately
+    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    const clients = await prisma.client.findMany({
+      where: { clientId: { in: distinctClientIds } },
+      select: { clientId: true, firstName: true, lastName: true },
+    });
+    const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
     // Fetch calendar blocks (holidays/maintenance)
     const blocks = await prisma.calendarBlock.findMany({
       include: {
@@ -50,21 +49,26 @@ export async function GET() {
       orderBy: { blockDate: "asc" },
     });
 
-    // Transform reservations into calendar events
-    const events = reservations.map((r) => ({
-      id: `RES-${r.reservationId}`,
-      title: r.eventType,
-      date: r.eventDate.toISOString().split("T")[0],
-      start: r.timeSlot.startTime,
-      end: r.timeSlot.endTime,
-      venue: r.venue.venue,
-      venueId: r.venue.venueId,
-      status: r.reservationStatus,
-      type: "event",
-      clientName: `${r.client.firstName} ${r.client.lastName}`,
-      packageName: r.package?.packageName || null,
-      bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
-    }));
+    // Transform reservations into calendar events, skip orphaned
+    const events = reservations
+      .filter((r) => clientMap[r.clientId] !== undefined)
+      .map((r) => {
+        const client = clientMap[r.clientId];
+        return {
+          id: `RES-${r.reservationId}`,
+          title: r.eventType,
+          date: r.eventDate.toISOString().split("T")[0],
+          start: r.timeSlot.startTime,
+          end: r.timeSlot.endTime,
+          venue: r.venue.venue,
+          venueId: r.venue.venueId,
+          status: r.reservationStatus,
+          type: "event",
+          clientName: `${client.firstName} ${client.lastName}`,
+          packageName: r.package?.packageName || null,
+          bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
+        };
+      });
 
     // Transform blocks into calendar events
     const blockEvents = blocks.map((b) => ({
