@@ -11,19 +11,12 @@ export async function GET(request) {
     const bookingsOnly = searchParams.get("bookings");
 
     if (bookingsOnly === "true") {
-      // Return reservations for the dropdown selection (not bookings)
+      // Fetch reservations without client include to avoid orphaned FK errors
       const reservations = await prisma.reservation.findMany({
         where: {
           reservationStatus: { not: "Cancelled" },
         },
         include: {
-          client: {
-            select: {
-              firstName: true,
-              lastName: true,
-              clientRole: { select: { clientRoleId: true } },
-            },
-          },
           package: { select: { packageName: true } },
           venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
@@ -32,27 +25,31 @@ export async function GET(request) {
         orderBy: { reservationId: "desc" },
       });
 
-      const mapped = reservations.map((r) => ({
-        id: r.reservationId,
-        reservationId: r.reservationId,
-        clientName: r.client
-          ? `${r.client.firstName} ${r.client.lastName}`
-          : "Unknown",
-        clientType:
-          r.client?.clientRole?.clientRoleId === "PROV"
-            ? "provincial-agency"
-            : "client",
-        eventType: r.eventType,
-        eventDate: r.eventDate
-          ? new Date(r.eventDate).toISOString().split("T")[0]
-          : "",
-        venue: r.venue?.venue,
-        timeSlot: r.timeSlot
-          ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`
-          : "",
-        packageName: r.package?.packageName,
-        hasBooking: r.bookings.length > 0,
-      }));
+      // Fetch valid client info separately
+      const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+      const clients = await prisma.client.findMany({
+        where: { clientId: { in: distinctClientIds } },
+        select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { clientRoleId: true } } },
+      });
+      const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
+      const mapped = reservations
+        .filter((r) => clientMap[r.clientId] !== undefined)
+        .map((r) => {
+          const client = clientMap[r.clientId];
+          return {
+            id: r.reservationId,
+            reservationId: r.reservationId,
+            clientName: `${client.firstName} ${client.lastName}`,
+            clientType: client.clientRole?.clientRoleId === "PROV" ? "provincial-agency" : "client",
+            eventType: r.eventType,
+            eventDate: r.eventDate ? new Date(r.eventDate).toISOString().split("T")[0] : "",
+            venue: r.venue?.venue,
+            timeSlot: r.timeSlot ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}` : "",
+            packageName: r.package?.packageName,
+            hasBooking: r.bookings.length > 0,
+          };
+        });
 
       return NextResponse.json(mapped);
     }
