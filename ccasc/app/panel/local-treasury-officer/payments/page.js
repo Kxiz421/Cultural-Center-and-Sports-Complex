@@ -223,15 +223,15 @@ export default function LTOOPaymentsPage() {
               {addForm.clientType && (
                 <>
                   <div className="space-y-2">
-                    <Label>Select Booking (Optional)</Label>
+                    <Label>Select Reservation (Optional)</Label>
                     <Select value={addForm.selectedBookingId} onValueChange={(v) => setAddForm((f) => ({ ...f, selectedBookingId: v }))}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a booking" />
+                        <SelectValue placeholder="Select a reservation" />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredBookings.map((b) => (
-                          <SelectItem key={b.bookingId || b.id} value={String(b.bookingId || b.id)}>
-                            {b.clientName} — {b.activityName || b.eventType} ({b.eventDate})
+                          <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
+                            {b.clientName} — {b.activityName || b.eventType} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>

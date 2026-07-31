@@ -11,51 +11,47 @@ export async function GET(request) {
     const bookingsOnly = searchParams.get("bookings");
 
     if (bookingsOnly === "true") {
-      // Return bookings for the dropdown selection
-      const bookings = await prisma.booking.findMany({
+      // Return reservations for the dropdown selection (not bookings)
+      const reservations = await prisma.reservation.findMany({
+        where: {
+          reservationStatus: { not: "Cancelled" },
+        },
         include: {
-          reservation: {
-            include: {
-              client: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  clientRole: { select: { clientRoleId: true } },
-                },
-              },
-              package: { select: { packageName: true } },
-              venue: { select: { venue: true } },
-              timeSlot: { select: { startTime: true, endTime: true } },
+          client: {
+            select: {
+              firstName: true,
+              lastName: true,
+              clientRole: { select: { clientRoleId: true } },
             },
           },
-          payments: { select: { amountPaid: true, paymentStatusId: true } },
+          package: { select: { packageName: true } },
+          venue: { select: { venue: true } },
+          timeSlot: { select: { startTime: true, endTime: true } },
+          bookings: { select: { bookingId: true } },
         },
-        orderBy: { bookingId: "desc" },
+        orderBy: { reservationId: "desc" },
       });
 
-      const mapped = bookings.map((b) => ({
-        id: b.bookingId,
-        bookingId: b.bookingId,
-        clientName: b.reservation?.client
-          ? `${b.reservation.client.firstName} ${b.reservation.client.lastName}`
+      const mapped = reservations.map((r) => ({
+        id: r.reservationId,
+        reservationId: r.reservationId,
+        clientName: r.client
+          ? `${r.client.firstName} ${r.client.lastName}`
           : "Unknown",
         clientType:
-          b.reservation?.client?.clientRole?.clientRoleId === "PROV"
+          r.client?.clientRole?.clientRoleId === "PROV"
             ? "provincial-agency"
             : "client",
-        eventType: b.reservation?.eventType,
-        eventDate: b.reservation?.eventDate
-          ? b.reservation.eventDate.toISOString().split("T")[0]
+        eventType: r.eventType,
+        eventDate: r.eventDate
+          ? new Date(r.eventDate).toISOString().split("T")[0]
           : "",
-        venue: b.reservation?.venue?.venue,
-        timeSlot: b.reservation?.timeSlot
-          ? `${b.reservation.timeSlot.startTime} - ${b.reservation.timeSlot.endTime}`
+        venue: r.venue?.venue,
+        timeSlot: r.timeSlot
+          ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`
           : "",
-        packageName: b.reservation?.package?.packageName,
-        amountPaid: b.payments?.reduce(
-          (sum, p) => sum + Number(p.amountPaid),
-          0
-        ),
+        packageName: r.package?.packageName,
+        hasBooking: r.bookings.length > 0,
       }));
 
       return NextResponse.json(mapped);
@@ -150,7 +146,7 @@ export async function POST(request) {
 
     let bookingId = selectedBookingId ? parseInt(selectedBookingId) : null;
 
-    // If no booking selected, create a minimal booking and reservation
+    // If no booking selected, create a reservation first
     if (!bookingId) {
       // Create a temporary client or use default
       let tempClient = await prisma.client.findFirst({
@@ -161,7 +157,7 @@ export async function POST(request) {
         tempClient = await prisma.client.findFirst();
       }
 
-      // Create reservation and booking
+      // Create reservation
       const reservation = await prisma.reservation.create({
         data: {
           eventDate: activityDate ? new Date(activityDate) : new Date(),
@@ -175,17 +171,27 @@ export async function POST(request) {
         },
       });
 
-      const booking = await prisma.booking.create({
-        data: {
-          reservationId: reservation.reservationId,
-          venueId: 1,
-          bookingStatusId: 2, // Booked
-          confirmationDate: new Date(),
-          staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
-        },
+      bookingId = reservation.reservationId;
+    }
+    
+    // If Fully Paid, create a booking from the reservation
+    if (statusToUse === "Fully Paid") {
+      // Check if booking already exists for this reservation
+      const existingBooking = await prisma.booking.findFirst({
+        where: { reservationId: bookingId },
       });
 
-      bookingId = booking.bookingId;
+      if (!existingBooking) {
+        await prisma.booking.create({
+          data: {
+            reservationId: bookingId,
+            venueId: 1,
+            bookingStatusId: 2, // Booked
+            confirmationDate: new Date(),
+            staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+          },
+        });
+      }
     }
 
     // Create payment
@@ -209,11 +215,16 @@ export async function POST(request) {
       },
     });
 
-    // Update booking status to Booked (statusId 2)
-    await prisma.booking.update({
+    // Update booking status to Booked (statusId 2) if booking exists
+    const bookingExists = await prisma.booking.findFirst({
       where: { bookingId: bookingId },
-      data: { bookingStatusId: 2 },
     });
+    if (bookingExists) {
+      await prisma.booking.update({
+        where: { bookingId: bookingId },
+        data: { bookingStatusId: 2 },
+      });
+    }
 
     // Create audit log
     await prisma.auditLog.create({
