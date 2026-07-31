@@ -220,23 +220,28 @@ export default function LTOOPaymentsPage() {
                 </Select>
               </div>
 
+                <div className="space-y-2">
+                  <Label>Select Reservation (Optional)</Label>
+                  <Select value={addForm.selectedBookingId} onValueChange={(v) => setAddForm((f) => ({ ...f, selectedBookingId: v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a reservation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredBookings.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground text-center">No reservations found</div>
+                      ) : (
+                        filteredBookings.map((b) => (
+                          <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
+                            {b.clientName} — {b.eventType || b.activityName} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
               {addForm.clientType && (
                 <>
-                  <div className="space-y-2">
-                    <Label>Select Reservation (Optional)</Label>
-                    <Select value={addForm.selectedBookingId} onValueChange={(v) => setAddForm((f) => ({ ...f, selectedBookingId: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a reservation" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredBookings.map((b) => (
-                          <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
-                            {b.clientName} — {b.activityName || b.eventType} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="client-name">Client Name / Company *</Label>
