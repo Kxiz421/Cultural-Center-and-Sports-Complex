@@ -49,6 +49,7 @@ const ROLE_LABELS = {
   "coord-cc": "Program Coordinator – Cultural Center",
   "coord-sc": "Program Coordinator – Sports Complex",
   acct: "Accounting Clerk – Cultural Center",
+  ltoo: "Local Treasury Operations Officer",
   "provincial-agency": "Provincial Department Agency",
   client: "Client",
 };
@@ -240,11 +241,13 @@ export default function UserManagementPage() {
           roleType: form.role.includes('coord') || form.role === 'acct' ? 'staff' : 'client',
           roleId: form.role === 'coord-cc' ? 1 :
                  form.role === 'coord-sc' ? 1 :
-                 form.role === 'acct' ? 3 :
-                 form.role === 'provincial-agency' ? 'PROV' : 'PUB',
+                  form.role === 'acct' ? 3 :
+                  form.role === 'ltoo' ? 4 :
+                  form.role === 'provincial-agency' ? 'PROV' : 'PUB',
           orgId: form.role === 'coord-cc' ? 2 :
                  form.role === 'coord-sc' ? 1 :
-                 form.role === 'acct' ? 3 : 1
+                  form.role === 'acct' ? 3 :
+                  form.role === 'ltoo' ? 3 : 1
         }),
       });
 
@@ -719,6 +722,9 @@ export default function UserManagementPage() {
                     </SelectItem>
                     <SelectItem value="acct">
                       Accounting Clerk – Cultural Center
+                    </SelectItem>
+                    <SelectItem value="ltoo">
+                      Local Treasury Operations Officer
                     </SelectItem>
                     <SelectItem value="provincial-agency">
                       Provincial Department Agency
