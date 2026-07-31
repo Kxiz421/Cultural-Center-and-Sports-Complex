@@ -64,6 +64,12 @@ const PAYMENT_STATUS_OPTIONS = [
   { id: "Fully Paid", name: "Fully Paid" },
 ];
 
+function generateORNumber() {
+  const year = new Date().getFullYear();
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `OR-${year}-${random}`;
+}
+
 export default function LTOOPaymentsPage() {
   const [payments, setPayments] = React.useState([]);
   const [bookings, setBookings] = React.useState([]);
@@ -120,7 +126,7 @@ export default function LTOOPaymentsPage() {
       activityName: "",
       activityDate: "",
       totalAmount: "",
-      orNumber: "",
+      orNumber: generateORNumber(),
       selectedBookingId: "",
       paymentStatus: "",
     });
@@ -165,15 +171,21 @@ export default function LTOOPaymentsPage() {
 
   const handleTotalAmountChange = (value) => {
     const cleaned = value.replace(/\D/g, "").slice(0, 5);
-    setAddForm((f) => ({ ...f, totalAmount: cleaned }));
-
-    // Auto-set to Fully Paid if amount >= package rate
-    if (selectedReservation) {
-      const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
-      if (pkgRate && parseInt(cleaned) >= pkgRate) {
-        setAddForm((prev) => ({ ...prev, totalAmount: cleaned, paymentStatus: "Fully Paid" }));
+    setAddForm((prev) => {
+      // Determine payment status based on amount vs package rate
+      let newStatus = prev.paymentStatus;
+      if (selectedReservation) {
+        const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
+        if (pkgRate && parseInt(cleaned || "0") >= pkgRate) {
+          newStatus = "Fully Paid";
+        } else if (prev.clientType !== "provincial") {
+          newStatus = parseInt(cleaned || "0") > 0 ? "Partially Paid" : "";
+        }
+      } else if (prev.clientType !== "provincial") {
+        newStatus = parseInt(cleaned || "0") > 0 ? "Partially Paid" : "";
       }
-    }
+      return { ...prev, totalAmount: cleaned, paymentStatus: newStatus || prev.paymentStatus };
+    });
   };
 
   const handleAddPayment = async () => {
@@ -325,12 +337,12 @@ export default function LTOOPaymentsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="total-amount">Total Amount (₱) *</Label>
-                <Input id="total-amount" type="text" inputMode="numeric" placeholder="e.g. 50000" value={addForm.totalAmount} onChange={handleTotalAmountChange} />
+                <Input id="total-amount" type="text" inputMode="numeric" placeholder="e.g. 50000" value={addForm.totalAmount} onChange={(e) => handleTotalAmountChange(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="or-number">Official Receipt (OR) Number *</Label>
-                <Input id="or-number" placeholder="e.g. OR-2024-001" value={addForm.orNumber} onChange={(e) => setAddForm((f) => ({ ...f, orNumber: e.target.value }))} />
+                <Input id="or-number" value={addForm.orNumber} onChange={(e) => setAddForm((f) => ({ ...f, orNumber: e.target.value }))} />
               </div>
 
               {addForm.clientType === "client" && (
