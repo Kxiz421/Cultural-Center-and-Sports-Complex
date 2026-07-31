@@ -8,11 +8,11 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
 
+    // Get reservations WITHOUT client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
       where: clientId ? { clientId: parseInt(clientId, 10) } : {},
       include: {
         venue: { select: { venue: true } },
-        client: { select: { firstName: true, lastName: true } },
         timeSlot: { select: { startTime: true, endTime: true } },
         bookings: {
           include: {
@@ -29,24 +29,37 @@ export async function GET(request) {
       orderBy: { submittedAt: "desc" },
     });
 
-    const formatted = reservations.map((r) => ({
-      id: `RES-${r.reservationId}`,
-      clientId: r.clientId,
-      clientName: `${r.client.firstName} ${r.client.lastName}`,
-      venueId: r.venueId,
-      venue: r.venue.venue,
-      eventType: r.eventType,
-      eventDate: r.eventDate.toISOString().split("T")[0],
-      timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
-      status: r.reservationStatus,
-      submittedAt: r.submittedAt.toISOString(),
-      bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
-      bookingVenueId: r.bookings[0]?.venueId || null,
-      amountPaid: r.bookings.reduce((sum, b) => 
-        sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0), 0),
-      particulars: r.reservedParticulars.map((rp) => rp.particular.particularName),
-      notes: r.notes || null,
-    }));
+    // Fetch valid client info separately
+    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    const clients = await prisma.client.findMany({
+      where: { clientId: { in: distinctClientIds } },
+      select: { clientId: true, firstName: true, lastName: true },
+    });
+    const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
+    const formatted = reservations
+      .filter((r) => clientMap[r.clientId] !== undefined) // Skip orphaned
+      .map((r) => {
+        const client = clientMap[r.clientId];
+        return {
+          id: `RES-${r.reservationId}`,
+          clientId: r.clientId,
+          clientName: `${client.firstName} ${client.lastName}`,
+          venueId: r.venueId,
+          venue: r.venue.venue,
+          eventType: r.eventType,
+          eventDate: r.eventDate.toISOString().split("T")[0],
+          timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
+          status: r.reservationStatus,
+          submittedAt: r.submittedAt.toISOString(),
+          bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
+          bookingVenueId: r.bookings[0]?.venueId || null,
+          amountPaid: r.bookings.reduce((sum, b) => 
+            sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0), 0),
+          particulars: r.reservedParticulars.map((rp) => rp.particular.particularName),
+          notes: r.notes || null,
+        };
+      });
 
     return NextResponse.json(formatted);
   } catch (error) {

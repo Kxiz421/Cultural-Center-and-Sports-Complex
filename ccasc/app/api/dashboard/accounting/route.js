@@ -6,21 +6,28 @@ export async function GET() {
     // Total reservations
     const totalReservations = await prisma.reservation.count();
 
-    // Reservations with payment info
+    // Reservations with payment info - get client separately to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
       include: {
         venue: { select: { venue: true } },
-        client: { select: { firstName: true, lastName: true, clientRole: { select: { roleName: true } } } },
         timeSlot: { select: { startTime: true, endTime: true } },
         bookings: {
           include: {
             status: { select: { status: true } },
-            payments: { select: { amountPaid: true, paymentStatus: { select: { status: true } } } },
+            payments: { select: { amountPaid: true, status: { select: { status: true } } } },
           },
         },
       },
       orderBy: { submittedAt: "desc" },
     });
+
+    // Fetch valid client info separately
+    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    const allClients = await prisma.client.findMany({
+      where: { clientId: { in: distinctClientIds } },
+      select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { roleName: true } } },
+    });
+    const clientMap = Object.fromEntries(allClients.map((c) => [c.clientId, c]));
 
     // Calculate summary stats
     let partiallyPaid = 0;
@@ -28,34 +35,37 @@ export async function GET() {
     let totalClientRevenue = 0;
     let pendingCount = 0;
 
-    const formattedReservations = reservations.map((r) => {
-      const totalPaid = r.bookings.reduce(
-        (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
-        0
-      );
-      const isFullyPaid = r.bookings.some((b) =>
-        b.payments.some((p) => p.paymentStatus?.status === "Fully paid")
-      );
+    const formattedReservations = reservations
+      .filter((r) => clientMap[r.clientId] !== undefined)
+      .map((r) => {
+        const client = clientMap[r.clientId];
+        const totalPaid = r.bookings.reduce(
+          (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
+          0
+        );
+        const isFullyPaid = r.bookings.some((b) =>
+          b.payments.some((p) => p.status?.status === "Fully paid")
+        );
 
-      if (totalPaid > 0 && !isFullyPaid) partiallyPaid++;
-      if (isFullyPaid) fullyPaid++;
-      if (r.reservationStatus === "Pending") pendingCount++;
-      totalClientRevenue += totalPaid;
+        if (totalPaid > 0 && !isFullyPaid) partiallyPaid++;
+        if (isFullyPaid) fullyPaid++;
+        if (r.reservationStatus === "Pending") pendingCount++;
+        totalClientRevenue += totalPaid;
 
-      return {
-        id: `RES-${r.reservationId}`,
-        clientName: `${r.client.firstName} ${r.client.lastName}`,
-        clientType: r.client.clientRole?.roleName || "N/A",
-        venue: r.venue.venue,
-        eventType: r.eventType,
-        eventDate: r.eventDate.toISOString().split("T")[0],
-        timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
-        status: r.reservationStatus,
-        payment: isFullyPaid ? "Fully paid" : totalPaid > 0 ? "Partially paid" : "Unpaid",
-        amountTotal: totalPaid,
-        amountPaid: totalPaid,
-      };
-    });
+        return {
+          id: `RES-${r.reservationId}`,
+          clientName: `${client.firstName} ${client.lastName}`,
+          clientType: client.clientRole?.roleName || "N/A",
+          venue: r.venue.venue,
+          eventType: r.eventType,
+          eventDate: r.eventDate.toISOString().split("T")[0],
+          timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
+          status: r.reservationStatus,
+          payment: isFullyPaid ? "Fully paid" : totalPaid > 0 ? "Partially paid" : "Unpaid",
+          amountTotal: totalPaid,
+          amountPaid: totalPaid,
+        };
+      });
 
     // Monthly revenue (last 12 months)
     const now = new Date();
