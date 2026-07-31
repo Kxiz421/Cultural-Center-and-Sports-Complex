@@ -19,9 +19,41 @@ export default function ClientReservationsPage() {
     packageId: "",
     notes: "",
   });
+  const [packages, setPackages] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function loadPackages() {
+      try {
+        const res = await fetch("/api/packages");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setPackages(data);
+        }
+      } catch (err) {
+        console.error("Failed to load packages:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadPackages();
+  }, []);
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handlePackageSelect = (packageId) => {
+    if (packageId && packageId !== "0") {
+      const selectedPkg = packages.find(p => String(p.packageId) === packageId);
+      if (selectedPkg) {
+        // Auto-fill the time slot based on the package's timeSlotId
+        setForm(prev => ({ ...prev, packageId, timeSlotId: String(selectedPkg.timeSlotId) }));
+        return;
+      }
+    }
+    // If "None" selected, clear time slot auto-fill
+    setForm(prev => ({ ...prev, packageId }));
   };
 
   const handleSubmit = async (e) => {
@@ -135,14 +167,19 @@ export default function ClientReservationsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="package">Package (Optional)</Label>
-                <Select value={form.packageId} onValueChange={(v) => handleChange("packageId", v)}>
+                <Select value={form.packageId} onValueChange={handlePackageSelect}>
                   <SelectTrigger id="package">
-                    <SelectValue placeholder="Select package" />
+                    <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0">None</SelectItem>
-                    <SelectItem value="1">Basic Package</SelectItem>
-                    <SelectItem value="2">Premium Package</SelectItem>
+                    {packages
+                      .filter(p => p.statusId === 1)
+                      .map((pkg) => (
+                      <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
+                        {pkg.packageName} — {pkg.timeSlot} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

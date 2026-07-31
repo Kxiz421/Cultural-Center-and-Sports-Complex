@@ -39,6 +39,7 @@ export async function GET() {
       ledWallNightRate: pkg.ledWallNightRate ? Number(pkg.ledWallNightRate) : null,
       statusId: pkg.statusId,
       statusName: getStatusName(pkg.statusId),
+      timeSlotId: pkg.timeSlotId,
       timeSlot: `${pkg.timeSlot.startTime} — ${pkg.timeSlot.endTime}`,
       inclusions: pkg.inclusions.map((inc) => ({
         itemId: inc.itemId,
