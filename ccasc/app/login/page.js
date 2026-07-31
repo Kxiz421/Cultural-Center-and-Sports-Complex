@@ -162,6 +162,8 @@ export default function LoginPage() {
       const roleType = data.type;
       if (roleType === "accounting clerk") {
         window.location.href = "/panel/accounting-clerk/dashboard";
+      } else if (roleType === "local treasury operations officer") {
+        window.location.href = "/panel/local-treasury-officer/dashboard";
       } else if (roleType === "provincial-agency") {
         window.location.href = "/panel/provincial-agency/dashboard";
       } else if (roleType === "client") {
