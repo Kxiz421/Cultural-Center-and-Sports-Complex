@@ -125,17 +125,38 @@ export default function LTOOPaymentsPage() {
     });
   };
 
+  // Filter bookings based on client type
+  const getFilteredBookings = React.useCallback(() => {
+    return bookings.filter((b) => {
+      if (!addForm.clientType) return true;
+      if (addForm.clientType === "client") return b.clientType === "client" || b.clientType === "walk-in";
+      if (addForm.clientType === "provincial") return b.clientType === "provincial-agency";
+      return true;
+    });
+  }, [bookings, addForm.clientType]);
+
   const handleClientTypeChange = (value) => {
-    setAddForm((f) => ({ ...f, clientType: value, paymentStatus: value === "provincial" ? "Fully Paid" : "" }));
+    setAddForm((f) => ({ ...f, clientType: value, selectedBookingId: "", paymentStatus: value === "provincial" ? "Fully Paid" : "" }));
   };
 
-  // Filter bookings based on client type
-  const filteredBookings = bookings.filter((b) => {
-    if (!addForm.clientType) return true;
-    if (addForm.clientType === "client") return b.clientType === "client" || b.clientType === "walk-in";
-    if (addForm.clientType === "provincial") return b.clientType === "provincial-agency";
-    return true;
-  });
+  const handleReservationSelect = (reservationId) => {
+    const currentFiltered = getFilteredBookings();
+    const selected = currentFiltered.find((b) => String(b.reservationId || b.id) === reservationId);
+    if (selected) {
+      const clientType = selected.clientType === "provincial-agency" ? "provincial" : "client";
+      setAddForm((f) => ({
+        ...f,
+        selectedBookingId: reservationId,
+        clientType,
+        clientName: selected.clientName,
+        activityName: selected.eventType || "",
+        activityDate: selected.eventDate || "",
+        paymentStatus: clientType === "provincial" ? "Fully Paid" : f.paymentStatus,
+      }));
+    } else {
+      setAddForm((f) => ({ ...f, selectedBookingId: reservationId }));
+    }
+  };
 
   const handleAddPayment = async () => {
     if (!addForm.clientType || !addForm.clientName || !addForm.totalAmount || !addForm.orNumber) {
@@ -221,18 +242,18 @@ export default function LTOOPaymentsPage() {
               </div>
 
                 <div className="space-y-2">
-                  <Label>Select Reservation (Optional)</Label>
-                  <Select value={addForm.selectedBookingId} onValueChange={(v) => setAddForm((f) => ({ ...f, selectedBookingId: v }))}>
+                  <Label>Select Reservation</Label>
+                  <Select value={addForm.selectedBookingId} onValueChange={handleReservationSelect}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a reservation" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredBookings.length === 0 ? (
+                      {getFilteredBookings().length === 0 ? (
                         <div className="p-2 text-sm text-muted-foreground text-center">No reservations found</div>
                       ) : (
-                        filteredBookings.map((b) => (
+                        getFilteredBookings().map((b) => (
                           <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
-                            {b.clientName} — {b.eventType || b.activityName} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
+                            {b.clientName} — {b.eventType} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
                           </SelectItem>
                         ))
                       )}
@@ -240,7 +261,7 @@ export default function LTOOPaymentsPage() {
                   </Select>
                 </div>
 
-              {addForm.clientType && (
+              {addForm.clientType && !addForm.selectedBookingId && (
                 <>
 
                   <div className="space-y-2">
@@ -307,6 +328,11 @@ export default function LTOOPaymentsPage() {
                     </div>
                   )}
                 </>
+              )}
+              {addForm.selectedBookingId && (
+                <div className="rounded-lg border bg-green-50 p-3 text-sm">
+                  <p className="text-green-700 font-medium">Reservation details loaded. Fill in payment info below.</p>
+                </div>
               )}
             </div>
             <DialogFooter>
