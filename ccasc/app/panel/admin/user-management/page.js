@@ -239,8 +239,8 @@ export default function UserManagementPage() {
           performedBy: currentUserId,
           performedByName: currentUserName,
           roleType: form.role.includes('coord') || form.role === 'acct' || form.role === 'ltoo' ? 'staff' : 'client',
-          roleId: form.role === 'coord-cc' ? 1 :
-                 form.role === 'coord-sc' ? 1 :
+          roleId: form.role === 'coord-cc' ? 2 :
+                 form.role === 'coord-sc' ? 2 :
                   form.role === 'acct' ? 3 :
                   form.role === 'ltoo' ? 4 :
                   form.role === 'provincial-agency' ? 'PROV' : 'PUB',
