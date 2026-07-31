@@ -85,6 +85,7 @@ export default function LTOOPaymentsPage() {
     selectedBookingId: "",
     paymentStatus: "",
   });
+  const [selectedReservation, setSelectedReservation] = React.useState(null);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState(null);
 
@@ -123,6 +124,7 @@ export default function LTOOPaymentsPage() {
       selectedBookingId: "",
       paymentStatus: "",
     });
+    setSelectedReservation(null);
   };
 
   // Filter bookings based on client type
@@ -137,6 +139,7 @@ export default function LTOOPaymentsPage() {
 
   const handleClientTypeChange = (value) => {
     setAddForm((f) => ({ ...f, clientType: value, selectedBookingId: "", paymentStatus: value === "provincial" ? "Fully Paid" : "" }));
+    setSelectedReservation(null);
   };
 
   const handleReservationSelect = (reservationId) => {
@@ -153,8 +156,23 @@ export default function LTOOPaymentsPage() {
         activityDate: selected.eventDate || "",
         paymentStatus: clientType === "provincial" ? "Fully Paid" : f.paymentStatus,
       }));
+      setSelectedReservation(selected);
     } else {
       setAddForm((f) => ({ ...f, selectedBookingId: reservationId }));
+      setSelectedReservation(null);
+    }
+  };
+
+  const handleTotalAmountChange = (value) => {
+    const cleaned = value.replace(/\D/g, "").slice(0, 5);
+    setAddForm((f) => ({ ...f, totalAmount: cleaned }));
+
+    // Auto-set to Fully Paid if amount >= package rate
+    if (selectedReservation) {
+      const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
+      if (pkgRate && parseInt(cleaned) >= pkgRate) {
+        setAddForm((prev) => ({ ...prev, totalAmount: cleaned, paymentStatus: "Fully Paid" }));
+      }
     }
   };
 
@@ -241,97 +259,99 @@ export default function LTOOPaymentsPage() {
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label>Select Reservation</Label>
+                <Select value={addForm.selectedBookingId} onValueChange={handleReservationSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a reservation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getFilteredBookings().length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">No reservations found</div>
+                    ) : (
+                      getFilteredBookings().map((b) => (
+                        <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
+                          {b.clientName} — {b.eventType} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedReservation && selectedReservation.packageName && (
+                <div className="rounded-lg border bg-blue-50 p-3 text-sm">
+                  <p className="text-blue-700 font-medium">Package: {selectedReservation.packageName}</p>
+                  {selectedReservation.packageDayRate && (
+                    <p className="text-blue-600 text-xs">Day Rate: {formatPHP(selectedReservation.packageDayRate)}</p>
+                  )}
+                  {selectedReservation.packageNightRate && (
+                    <p className="text-blue-600 text-xs">Night Rate: {formatPHP(selectedReservation.packageNightRate)}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="client-name">Client Name / Company *</Label>
+                <Input id="client-name" placeholder="e.g. Juan Dela Cruz" value={addForm.clientName} onChange={(e) => setAddForm((f) => ({ ...f, clientName: e.target.value }))} />
+              </div>
+
+              {addForm.clientType === "client" && (
                 <div className="space-y-2">
-                  <Label>Select Reservation</Label>
-                  <Select value={addForm.selectedBookingId} onValueChange={handleReservationSelect}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a reservation" />
+                  <Label htmlFor="company">Company (Optional)</Label>
+                  <Input id="company" placeholder="e.g. ABC Corporation" value={addForm.company} onChange={(e) => setAddForm((f) => ({ ...f, company: e.target.value }))} />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Textarea id="address" rows={2} placeholder="Client address..." value={addForm.address} onChange={(e) => setAddForm((f) => ({ ...f, address: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="contact">Contact Number</Label>
+                <Input id="contact" placeholder="e.g. +63 9XX XXX XXXX" value={addForm.contactNumber} onChange={(e) => setAddForm((f) => ({ ...f, contactNumber: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="activity">Activity Name</Label>
+                <Input id="activity" placeholder="e.g. Annual Conference" value={addForm.activityName} onChange={(e) => setAddForm((f) => ({ ...f, activityName: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="activity-date">Activity Date</Label>
+                <Input id="activity-date" type="date" value={addForm.activityDate} onChange={(e) => setAddForm((f) => ({ ...f, activityDate: e.target.value }))} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="total-amount">Total Amount (₱) *</Label>
+                <Input id="total-amount" type="text" inputMode="numeric" placeholder="e.g. 50000" value={addForm.totalAmount} onChange={handleTotalAmountChange} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="or-number">Official Receipt (OR) Number *</Label>
+                <Input id="or-number" placeholder="e.g. OR-2024-001" value={addForm.orNumber} onChange={(e) => setAddForm((f) => ({ ...f, orNumber: e.target.value }))} />
+              </div>
+
+              {addForm.clientType === "client" && (
+                <div className="space-y-2">
+                  <Label htmlFor="payment-status">Payment Status</Label>
+                  <Select value={addForm.paymentStatus} onValueChange={(v) => setAddForm((f) => ({ ...f, paymentStatus: v }))}>
+                    <SelectTrigger id="payment-status">
+                      <SelectValue placeholder="Select payment status" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getFilteredBookings().length === 0 ? (
-                        <div className="p-2 text-sm text-muted-foreground text-center">No reservations found</div>
-                      ) : (
-                        getFilteredBookings().map((b) => (
-                          <SelectItem key={b.reservationId || b.id} value={String(b.reservationId || b.id)}>
-                            {b.clientName} — {b.eventType} ({b.eventDate}) {b.hasBooking ? "✓ Booked" : ""}
-                          </SelectItem>
-                        ))
-                      )}
+                      {PAYMENT_STATUS_OPTIONS.map((ps) => (
+                        <SelectItem key={ps.id} value={ps.id}>{ps.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-              {addForm.clientType && !addForm.selectedBookingId && (
-                <>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="client-name">Client Name / Company *</Label>
-                    <Input id="client-name" placeholder="e.g. Juan Dela Cruz" value={addForm.clientName} onChange={(e) => setAddForm((f) => ({ ...f, clientName: e.target.value }))} />
-                  </div>
-
-                  {addForm.clientType === "client" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="company">Company (Optional)</Label>
-                      <Input id="company" placeholder="e.g. ABC Corporation" value={addForm.company} onChange={(e) => setAddForm((f) => ({ ...f, company: e.target.value }))} />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea id="address" rows={2} placeholder="Client address..." value={addForm.address} onChange={(e) => setAddForm((f) => ({ ...f, address: e.target.value }))} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="contact">Contact Number</Label>
-                    <Input id="contact" placeholder="e.g. +63 9XX XXX XXXX" value={addForm.contactNumber} onChange={(e) => setAddForm((f) => ({ ...f, contactNumber: e.target.value }))} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="activity">Activity Name</Label>
-                    <Input id="activity" placeholder="e.g. Annual Conference" value={addForm.activityName} onChange={(e) => setAddForm((f) => ({ ...f, activityName: e.target.value }))} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="activity-date">Activity Date</Label>
-                    <Input id="activity-date" type="date" value={addForm.activityDate} onChange={(e) => setAddForm((f) => ({ ...f, activityDate: e.target.value }))} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="total-amount">Total Amount (₱) *</Label>
-                    <Input id="total-amount" type="text" inputMode="numeric" placeholder="e.g. 50000" value={addForm.totalAmount} onChange={(e) => setAddForm((f) => ({ ...f, totalAmount: e.target.value.replace(/\D/g, "").slice(0, 5) }))} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="or-number">Official Receipt (OR) Number *</Label>
-                    <Input id="or-number" placeholder="e.g. OR-2024-001" value={addForm.orNumber} onChange={(e) => setAddForm((f) => ({ ...f, orNumber: e.target.value }))} />
-                  </div>
-
-                  {addForm.clientType === "client" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="payment-status">Payment Status</Label>
-                      <Select value={addForm.paymentStatus} onValueChange={(v) => setAddForm((f) => ({ ...f, paymentStatus: v }))}>
-                        <SelectTrigger id="payment-status">
-                          <SelectValue placeholder="Select payment status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_STATUS_OPTIONS.map((ps) => (
-                            <SelectItem key={ps.id} value={ps.id}>{ps.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {addForm.clientType === "provincial" && (
-                    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                      <p className="text-muted-foreground">Payment status will be automatically set to <span className="font-medium text-foreground">Fully Paid</span> for provincial department agencies.</p>
-                    </div>
-                  )}
-                </>
               )}
-              {addForm.selectedBookingId && (
-                <div className="rounded-lg border bg-green-50 p-3 text-sm">
-                  <p className="text-green-700 font-medium">Reservation details loaded. Fill in payment info below.</p>
+
+              {addForm.clientType === "provincial" && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <p className="text-muted-foreground">Payment status will be automatically set to <span className="font-medium text-foreground">Fully Paid</span> for provincial department agencies.</p>
                 </div>
               )}
             </div>

@@ -17,7 +17,7 @@ export async function GET(request) {
           reservationStatus: { not: "Cancelled" },
         },
         include: {
-          package: { select: { packageName: true } },
+          package: { select: { packageName: true, dayRate: true, nightRate: true } },
           venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
           bookings: { select: { bookingId: true } },
@@ -47,6 +47,8 @@ export async function GET(request) {
             venue: r.venue?.venue,
             timeSlot: r.timeSlot ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}` : "",
             packageName: r.package?.packageName,
+            packageDayRate: r.package?.dayRate ? Number(r.package.dayRate) : null,
+            packageNightRate: r.package?.nightRate ? Number(r.package.nightRate) : null,
             hasBooking: r.bookings.length > 0,
           };
         });
