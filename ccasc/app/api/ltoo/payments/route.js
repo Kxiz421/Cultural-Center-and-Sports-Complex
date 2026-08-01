@@ -20,7 +20,13 @@ export async function GET(request) {
           package: { select: { packageName: true, dayRate: true, nightRate: true } },
           venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
-          bookings: { select: { bookingId: true } },
+          bookings: {
+            include: {
+              payments: {
+                select: { amountPaid: true },
+              },
+            },
+          },
         },
         orderBy: { reservationId: "desc" },
       });
@@ -37,6 +43,15 @@ export async function GET(request) {
         .filter((r) => clientMap[r.clientId] !== undefined)
         .map((r) => {
           const client = clientMap[r.clientId];
+          // Calculate total paid so far
+          const totalPaid = r.bookings.reduce(
+            (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
+            0
+          );
+          // Get package rate
+          const pkgRate = r.package?.dayRate ? Number(r.package.dayRate) : r.package?.nightRate ? Number(r.package.nightRate) : null;
+          // Calculate balance
+          const balance = pkgRate ? Math.max(0, pkgRate - totalPaid) : null;
           return {
             id: r.reservationId,
             reservationId: r.reservationId,
@@ -49,6 +64,8 @@ export async function GET(request) {
             packageName: r.package?.packageName,
             packageDayRate: r.package?.dayRate ? Number(r.package.dayRate) : null,
             packageNightRate: r.package?.nightRate ? Number(r.package.nightRate) : null,
+            totalPaid: totalPaid,
+            balance: balance,
             hasBooking: r.bookings.length > 0,
           };
         });
