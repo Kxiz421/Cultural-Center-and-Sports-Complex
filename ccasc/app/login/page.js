@@ -623,6 +623,23 @@ export default function LoginPage() {
         </form>
         </Card>
 
+        <div className="mt-4 flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
+            onClick={() => router.push("/")}
+          >
+            ← Back to Home
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
+            onClick={() => router.push("/register")}
+          >
+            Register →
+          </Button>
+        </div>
+
         <p className="mt-8 max-w-lg text-center text-xs text-white/75 drop-shadow">
           Problems signing in? Contact your facility or provincial IT support.
         </p>
