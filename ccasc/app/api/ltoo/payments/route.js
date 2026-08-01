@@ -143,11 +143,11 @@ export async function POST(request) {
       });
     }
 
-    let bookingId = selectedBookingId ? parseInt(selectedBookingId) : null;
+    let reservationId = selectedBookingId ? parseInt(selectedBookingId) : null;
+    let bookingId = null;
 
-    // If no booking selected, create a reservation first
-    if (!bookingId) {
-      // Create a temporary client or use default
+    // If no reservation selected, create one
+    if (!reservationId) {
       let tempClient = await prisma.client.findFirst({
         where: { clientRoleId: clientType === "provincial" ? "PROV" : "INDV" },
       });
@@ -156,7 +156,6 @@ export async function POST(request) {
         tempClient = await prisma.client.findFirst();
       }
 
-      // Create reservation
       const reservation = await prisma.reservation.create({
         data: {
           eventDate: activityDate ? new Date(activityDate) : new Date(),
@@ -170,27 +169,34 @@ export async function POST(request) {
         },
       });
 
-      bookingId = reservation.reservationId;
+      reservationId = reservation.reservationId;
     }
-    
-    // If Fully Paid, create a booking from the reservation
-    if (statusToUse === "Fully Paid") {
-      // Check if booking already exists for this reservation
-      const existingBooking = await prisma.booking.findFirst({
-        where: { reservationId: bookingId },
-      });
 
-      if (!existingBooking) {
-        await prisma.booking.create({
-          data: {
-            reservationId: bookingId,
-            venueId: 1,
-            bookingStatusId: 2, // Booked
-            confirmationDate: new Date(),
-            staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
-          },
-        });
-      }
+    // Find or create a booking for this reservation
+    let existingBooking = await prisma.booking.findFirst({
+      where: { reservationId: reservationId },
+    });
+
+    if (!existingBooking) {
+      existingBooking = await prisma.booking.create({
+        data: {
+          reservationId: reservationId,
+          venueId: 1,
+          bookingStatusId: statusToUse === "Fully Paid" ? 2 : 1, // Booked or Pending
+          confirmationDate: new Date(),
+          staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+        },
+      });
+    }
+
+    bookingId = existingBooking.bookingId;
+
+    // Update booking status if Fully Paid
+    if (statusToUse === "Fully Paid") {
+      await prisma.booking.update({
+        where: { bookingId: bookingId },
+        data: { bookingStatusId: 2 },
+      });
     }
 
     // Create payment
@@ -213,17 +219,6 @@ export async function POST(request) {
         paymentId: payment.paymentId,
       },
     });
-
-    // Update booking status to Booked (statusId 2) if booking exists
-    const bookingExists = await prisma.booking.findFirst({
-      where: { bookingId: bookingId },
-    });
-    if (bookingExists) {
-      await prisma.booking.update({
-        where: { bookingId: bookingId },
-        data: { bookingStatusId: 2 },
-      });
-    }
 
     // Create audit log
     await prisma.auditLog.create({
