@@ -175,7 +175,9 @@ export default function LTOOPaymentsPage() {
       let newStatus = prev.paymentStatus;
       if (selectedReservation) {
         const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
-        if (pkgRate && parseInt(cleaned || "0") >= pkgRate) {
+        const existingPaid = selectedReservation.totalPaid || 0;
+        // If existing paid + new amount >= package rate, fully paid
+        if (pkgRate && (existingPaid + parseInt(cleaned || "0")) >= pkgRate) {
           newStatus = "Fully Paid";
         } else if (prev.clientType !== "provincial") {
           newStatus = parseInt(cleaned || "0") > 0 ? "Partially Paid" : "";
