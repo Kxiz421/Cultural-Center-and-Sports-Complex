@@ -54,6 +54,10 @@ export async function GET() {
       .filter((r) => clientMap[r.clientId] !== undefined)
       .map((r) => {
         const client = clientMap[r.clientId];
+        // Get the latest non-cancelled booking's status
+        const activeBookings = r.bookings.filter((b) => b.status?.status !== "Cancelled");
+        const latestBooking = activeBookings.length > 0 ? activeBookings[activeBookings.length - 1] : null;
+        const bookingStatus = latestBooking?.status?.status || "Unbooked";
         return {
           id: `RES-${r.reservationId}`,
           title: r.eventType,
@@ -66,7 +70,7 @@ export async function GET() {
           type: "event",
           clientName: `${client.firstName} ${client.lastName}`,
           packageName: r.package?.packageName || null,
-          bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
+          bookingStatus: bookingStatus,
         };
       });
 
