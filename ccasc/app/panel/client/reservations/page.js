@@ -166,7 +166,7 @@ export default function ClientReservationsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="package">Package (Optional)</Label>
+                <Label htmlFor="package">Package</Label>
                 <Select value={form.packageId} onValueChange={handlePackageSelect}>
                   <SelectTrigger id="package">
                     <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
