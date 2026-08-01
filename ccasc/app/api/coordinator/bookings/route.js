@@ -36,17 +36,17 @@ export async function GET() {
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
-    // Filter to only fully paid ones and skip orphaned
+      // Filter to only fully paid ones (case-insensitive) and skip orphaned
     const fullyPaid = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
       .filter((r) =>
         r.bookings.some((b) =>
-          b.payments.some((p) => p.status?.status === "Fully paid")
+          b.payments.some((p) => p.status?.status?.toLowerCase() === "fully paid")
         )
       );
 
     const formatted = fullyPaid.map((r) => {
-      const client = clientMap[r.clientId];
+      const client = clientMap[r.clientId] || { firstName: "Unknown", lastName: "", clientRole: { roleName: "N/A" } };
       const totalPaid = r.bookings.reduce(
         (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
         0
