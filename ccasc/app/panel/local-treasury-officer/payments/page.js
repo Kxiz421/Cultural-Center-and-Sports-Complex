@@ -87,7 +87,7 @@ export default function LTOOPaymentsPage() {
     activityName: "",
     activityDate: "",
     totalAmount: "",
-    orNumber: "",
+    orNumber: generateORNumber(),
     selectedBookingId: "",
     paymentStatus: "",
   });
@@ -153,6 +153,8 @@ export default function LTOOPaymentsPage() {
     const selected = currentFiltered.find((b) => String(b.reservationId || b.id) === reservationId);
     if (selected) {
       const clientType = selected.clientType === "provincial-agency" ? "provincial" : "client";
+      const pkgRate = selected.packageDayRate || selected.packageNightRate || 0;
+      const newStatus = (clientType === "provincial" || pkgRate > 0) ? "Fully Paid" : "";
       setAddForm((f) => ({
         ...f,
         selectedBookingId: reservationId,
@@ -160,7 +162,8 @@ export default function LTOOPaymentsPage() {
         clientName: selected.clientName,
         activityName: selected.eventType || "",
         activityDate: selected.eventDate || "",
-        paymentStatus: clientType === "provincial" ? "Fully Paid" : f.paymentStatus,
+        totalAmount: pkgRate > 0 ? String(pkgRate) : f.totalAmount,
+        paymentStatus: newStatus,
       }));
       setSelectedReservation(selected);
     } else {
