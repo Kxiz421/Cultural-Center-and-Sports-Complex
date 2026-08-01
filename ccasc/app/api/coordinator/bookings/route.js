@@ -36,9 +36,10 @@ export async function GET() {
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
-      // Filter to only fully paid ones (case-insensitive) and skip orphaned
+      // Filter to only fully paid ones (case-insensitive), skip orphaned, and skip already confirmed
     const fullyPaid = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
+      .filter((r) => r.reservationStatus !== "Confirmed")
       .filter((r) =>
         r.bookings.some((b) =>
           b.payments.some((p) => p.status?.status?.toLowerCase() === "fully paid")
@@ -93,6 +94,20 @@ export async function PATCH(request) {
     }
 
     if (action === "confirm") {
+      // Check if already confirmed to prevent double-confirm
+      const existing = await prisma.reservation.findUnique({
+        where: { reservationId: id },
+        select: { reservationStatus: true },
+      });
+
+      if (!existing) {
+        return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+      }
+
+      if (existing.reservationStatus === "Confirmed") {
+        return NextResponse.json({ error: "This booking has already been confirmed." }, { status: 400 });
+      }
+
       // Update reservation status to Confirmed
       await prisma.reservation.update({
         where: { reservationId: id },
