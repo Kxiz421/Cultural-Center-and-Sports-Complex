@@ -13,7 +13,6 @@ export async function GET() {
       },
       include: {
         venue: { select: { venue: true } },
-        client: { select: { firstName: true, lastName: true, clientRole: { select: { roleName: true } } } },
         timeSlot: { select: { startTime: true, endTime: true } },
         package: { select: { packageName: true } },
         bookings: {
@@ -29,14 +28,25 @@ export async function GET() {
       orderBy: { submittedAt: "desc" },
     });
 
-    // Filter to only fully paid ones
-    const fullyPaid = reservations.filter((r) =>
-      r.bookings.some((b) =>
-        b.payments.some((p) => p.status?.status === "Fully paid")
-      )
-    );
+    // Fetch valid client info separately
+    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    const clients = await prisma.client.findMany({
+      where: { clientId: { in: distinctClientIds } },
+      select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { roleName: true } } },
+    });
+    const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
+    // Filter to only fully paid ones and skip orphaned
+    const fullyPaid = reservations
+      .filter((r) => clientMap[r.clientId] !== undefined)
+      .filter((r) =>
+        r.bookings.some((b) =>
+          b.payments.some((p) => p.status?.status === "Fully paid")
+        )
+      );
 
     const formatted = fullyPaid.map((r) => {
+      const client = clientMap[r.clientId];
       const totalPaid = r.bookings.reduce(
         (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
         0
@@ -44,8 +54,8 @@ export async function GET() {
 
       return {
         id: `RES-${r.reservationId}`,
-        clientName: `${r.client.firstName} ${r.client.lastName}`,
-        clientType: r.client.clientRole?.roleName || "N/A",
+        clientName: `${client.firstName} ${client.lastName}`,
+        clientType: client.clientRole?.roleName || "N/A",
         venue: r.venue.venue,
         eventType: r.eventType,
         eventDate: r.eventDate.toISOString().split("T")[0],
@@ -101,7 +111,31 @@ export async function PATCH(request) {
         });
       }
 
-      return NextResponse.json({ success: true, message: "Booking confirmed" });
+      // Get reservation details for notification
+      const reservation = await prisma.reservation.findUnique({
+        where: { reservationId: id },
+        select: {
+          clientId: true,
+          eventType: true,
+          eventDate: true,
+          venue: { select: { venue: true } },
+        },
+      });
+
+      // Send notification to client
+      if (reservation) {
+        await prisma.notification.create({
+          data: {
+            clientId: reservation.clientId,
+            staffId: 1, // Default staff ID
+            message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
+            type: "Booking Confirmation",
+            sentAt: new Date(),
+          },
+        });
+      }
+
+      return NextResponse.json({ success: true, message: "Booking confirmed. The client has been notified." });
     } else if (action === "cancel") {
       // Update reservation status to Cancelled
       await prisma.reservation.update({
@@ -109,7 +143,7 @@ export async function PATCH(request) {
         data: { reservationStatus: "Cancelled" },
       });
 
-      return NextResponse.json({ success: true, message: "Booking cancelled" });
+      return NextResponse.json({ success: true, message: "Booking cancelled." });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
