@@ -172,7 +172,6 @@ export default function LTOOPaymentsPage() {
   const handleTotalAmountChange = (value) => {
     const cleaned = value.replace(/\D/g, "").slice(0, 5);
     setAddForm((prev) => {
-      // Determine payment status based on amount vs package rate
       let newStatus = prev.paymentStatus;
       if (selectedReservation) {
         const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
@@ -189,8 +188,12 @@ export default function LTOOPaymentsPage() {
   };
 
   const handleAddPayment = async () => {
-    if (!addForm.clientType || !addForm.clientName || !addForm.totalAmount || !addForm.orNumber) {
-      toast.error("Client type, name, total amount, and OR number are required");
+    if (!addForm.clientType || !addForm.totalAmount || !addForm.orNumber) {
+      toast.error("Client type, total amount, and OR number are required");
+      return;
+    }
+    if (!addForm.selectedBookingId && !addForm.clientName) {
+      toast.error("Client name is required when no reservation is selected");
       return;
     }
 
@@ -316,12 +319,12 @@ export default function LTOOPaymentsPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address">Address (Optional)</Label>
                 <Textarea id="address" rows={2} placeholder="Client address..." value={addForm.address} onChange={(e) => setAddForm((f) => ({ ...f, address: e.target.value }))} />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact">Contact Number</Label>
+                <Label htmlFor="contact">Contact Number (Optional)</Label>
                 <Input id="contact" placeholder="e.g. +63 9XX XXX XXXX" value={addForm.contactNumber} onChange={(e) => setAddForm((f) => ({ ...f, contactNumber: e.target.value }))} />
               </div>
 
@@ -341,8 +344,8 @@ export default function LTOOPaymentsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="or-number">Official Receipt (OR) Number *</Label>
-                <Input id="or-number" value={addForm.orNumber} onChange={(e) => setAddForm((f) => ({ ...f, orNumber: e.target.value }))} />
+                <Label htmlFor="or-number">Official Receipt (OR) Number</Label>
+                <Input id="or-number" value={addForm.orNumber} readOnly className="bg-muted" />
               </div>
 
               {addForm.clientType === "client" && (
