@@ -303,6 +303,12 @@ export default function LTOOPaymentsPage() {
                   {selectedReservation.packageNightRate && (
                     <p className="text-blue-600 text-xs">Night Rate: {formatPHP(selectedReservation.packageNightRate)}</p>
                   )}
+                  {selectedReservation.totalPaid > 0 && (
+                    <p className="text-amber-600 text-xs mt-1">Paid: {formatPHP(selectedReservation.totalPaid)}</p>
+                  )}
+                  {selectedReservation.balance !== null && selectedReservation.balance > 0 && (
+                    <p className="text-red-600 text-xs font-semibold mt-1">Balance Remaining: {formatPHP(selectedReservation.balance)}</p>
+                  )}
                 </div>
               )}
 
