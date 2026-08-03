@@ -7,6 +7,7 @@ import {
   CalendarSync,
   Package,
   FileBarChart,
+  Bell,
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,6 +46,11 @@ const navMain = [
     title: "Amenities Management",
     url: "/panel/program-coordinator/amenities",
     icon: Package,
+  },
+  {
+    title: "Notifications",
+    url: "/panel/program-coordinator/notifications",
+    icon: Bell,
   },
   {
     title: "Report Generation",
