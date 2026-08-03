@@ -73,7 +73,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { venueId, eventType, eventDate, timeSlotId, packageId, clientId, notes } = await request.json();
+    const { venueId, eventType, eventDate, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail } = await request.json();
 
     if (!venueId || !eventType || !eventDate || !timeSlotId || !clientId) {
       return NextResponse.json(
@@ -82,6 +82,11 @@ export async function POST(request) {
       );
     }
 
+    const isWalkIn = notes && notes.startsWith("Walk-in client:");
+    const parsedClientId = parseInt(clientId, 10);
+    const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
+    const venueName = venueNames[parseInt(venueId, 10)] || "Unknown Venue";
+
     const reservation = await prisma.reservation.create({
       data: {
         venueId: parseInt(venueId, 10),
@@ -89,7 +94,7 @@ export async function POST(request) {
         eventDate: new Date(eventDate),
         timeSlotId: parseInt(timeSlotId, 10),
         packageId: packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null,
-        clientId: parseInt(clientId, 10),
+        clientId: parsedClientId,
         reservationStatus: "Pending",
         eventStatus: "Upcoming",
         submittedAt: new Date(),
@@ -97,8 +102,50 @@ export async function POST(request) {
       },
     });
 
+    const reservationId = `RES-${reservation.reservationId}`;
+
+    // For walk-in reservations, send notifications
+    if (isWalkIn) {
+      const displayName = clientName || "Walk-in Client";
+      const timeSlotNames = { 1: "Day (8:00 AM - 5:00 PM)", 2: "Night (5:00 PM - 10:00 PM)" };
+      const timeSlotName = timeSlotNames[parseInt(timeSlotId, 10)] || "Unknown Time Slot";
+
+      // 1. Notify provincial department agencies (PDA) about the new walk-in reservation
+      const provincialAgencies = await prisma.client.findMany({
+        where: {
+          clientRoleId: "PROV",
+        },
+        select: { clientId: true },
+      });
+
+      const pdaNotificationMessage = `New walk-in reservation: ${displayName} booked ${venueName} for "${eventType}" on ${eventDate} (${timeSlotName}).`;
+
+      for (const agency of provincialAgencies) {
+        await prisma.notification.create({
+          data: {
+            message: pdaNotificationMessage,
+            type: "booking",
+            staffId: 1,
+            clientId: agency.clientId,
+            sentAt: new Date(),
+          },
+        });
+      }
+
+      // 2. Notify the client about their new reservation
+      await prisma.notification.create({
+        data: {
+          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${eventDate} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}`,
+          type: "booking",
+          staffId: 1,
+          clientId: parsedClientId,
+          sentAt: new Date(),
+        },
+      });
+    }
+
     return NextResponse.json({
-      id: `RES-${reservation.reservationId}`,
+      id: reservationId,
       message: "Reservation created successfully",
     }, { status: 201 });
   } catch (error) {

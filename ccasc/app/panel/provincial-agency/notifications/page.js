@@ -11,16 +11,26 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
-  const fetchNotifications = React.useCallback(async () => {
-    try {
-      const res = await fetch('/api/notifications');
-      const data = await res.json();
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to load notifications:", err);
-    } finally {
-      setLoading(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
+      if (!clientId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/notifications?clientId=${clientId}`);
+        const data = await res.json();
+        if (!cancelled) setNotifications(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!cancelled) console.error("Failed to load notifications:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   async function markAsRead(notificationId) {
@@ -32,7 +42,7 @@ export default function NotificationsPage() {
       });
       if (!res.ok) throw new Error('Failed to mark as read');
       setNotifications((prev) =>
-        prev.filter((n) => n.notificationId !== notificationId)
+        prev.filter((n) => n.id !== notificationId)
       );
       toast.success("Notification marked as read");
     } catch (err) {
@@ -61,7 +71,7 @@ export default function NotificationsPage() {
       ) : (
         <div className="space-y-3">
           {notifications.map((notification) => (
-            <Card key={notification.notificationId}>
+            <Card key={notification.id}>
               <CardContent className="flex items-start justify-between p-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -79,7 +89,7 @@ export default function NotificationsPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => markAsRead(notification.notificationId)}
+                  onClick={() => markAsRead(notification.id)}
                 >
                   <CheckCheck className="size-4" />
                 </Button>
