@@ -52,26 +52,35 @@ export default function ClientDocumentsPage() {
 
     setUploading(true);
     try {
-      // Convert file to base64 data URI
-      const reader = new FileReader();
-      const dataUri = await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+      // Step 1: Upload the image file via FormData to /api/upload/id-proof
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await fetch("/api/upload/id-proof", {
+        method: "POST",
+        body: formData,
       });
 
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
+        throw new Error(errData.error || "Failed to upload image");
+      }
+
+      const { url } = await uploadRes.json();
+
+      // Step 2: Submit the document with the data URI
       const res = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documentTypeId: parseInt(docType, 10),
-          filePath: dataUri,
+          filePath: url,
         }),
       });
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || "Failed to upload document");
+        throw new Error(errData.error || "Failed to submit document");
       }
 
       toast.success("Document uploaded successfully!");
