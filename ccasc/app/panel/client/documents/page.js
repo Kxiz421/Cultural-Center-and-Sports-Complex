@@ -33,7 +33,9 @@ export default function ClientDocumentsPage() {
       try {
         const userId = localStorage.getItem("user_id");
         if (!userId) return;
-        const res = await fetch(`/api/reservations?clientId=${userId}`);
+        // Strip "CLT-" prefix from user_id if present
+        const cleanId = (userId || "").replace("CLT-", "");
+        const res = await fetch(`/api/reservations?clientId=${cleanId}`);
         const data = await res.json();
         setReservations(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -76,7 +78,7 @@ export default function ClientDocumentsPage() {
       const formData = new FormData();
       formData.append("documentTypeId", docType);
       formData.append("file", file);
-      if (selectedBookingId) {
+      if (selectedBookingId && selectedBookingId !== "none") {
         formData.append("reservationId", selectedBookingId);
       }
 
@@ -188,7 +190,7 @@ export default function ClientDocumentsPage() {
                   <SelectValue placeholder="Select a reservation to link this document" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None (standalone document)</SelectItem>
+                  <SelectItem value="none">None (standalone document)</SelectItem>
                   {reservations.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.venue} - {r.eventDate} ({r.eventType})
@@ -196,7 +198,7 @@ export default function ClientDocumentsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedBookingId && (
+              {selectedBookingId && selectedBookingId !== "none" && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Calendar className="size-3" />
                   Document will be linked to this reservation

@@ -6,11 +6,18 @@ const prisma = new PrismaClient();
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get("clientId");
+      let clientId = searchParams.get("clientId");
+
+    // Strip "CLT-" prefix if present
+    if (clientId) {
+      clientId = clientId.replace("CLT-", "");
+    }
+
+    const parsedClientId = clientId ? parseInt(clientId, 10) : null;
 
     // Get reservations WITHOUT client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
-      where: clientId ? { clientId: parseInt(clientId, 10) } : {},
+      where: parsedClientId ? { clientId: parsedClientId } : {},
       include: {
         venue: { select: { venue: true } },
         timeSlot: { select: { startTime: true, endTime: true } },
