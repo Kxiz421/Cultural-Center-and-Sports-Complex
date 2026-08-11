@@ -9,7 +9,7 @@ export async function POST(request) {
     const formData = await request.formData();
     const documentTypeId = formData.get("documentTypeId");
     const file = formData.get("file");
-    const bookingId = formData.get("bookingId");
+    const reservationId = formData.get("reservationId");
 
     if (!documentTypeId || !file) {
       return NextResponse.json(
@@ -42,6 +42,21 @@ export async function POST(request) {
     const mimeType = file.type;
     const dataUri = `data:${mimeType};base64,${base64}`;
 
+    // Resolve bookingId from reservationId if provided
+    let finalBookingId = null;
+    if (reservationId) {
+      const resId = parseInt(reservationId.replace("RES-", ""), 10);
+      if (!isNaN(resId)) {
+        const booking = await prisma.booking.findFirst({
+          where: { reservationId: resId },
+          orderBy: { bookingId: "asc" },
+        });
+        if (booking) {
+          finalBookingId = booking.bookingId;
+        }
+      }
+    }
+
     // Create document record
     const document = await prisma.document.create({
       data: {
@@ -49,7 +64,7 @@ export async function POST(request) {
         filePath: dataUri,
         status: "Pending",
         documentStatus: "Pending",
-        bookingId: bookingId ? parseInt(bookingId) : null,
+        bookingId: finalBookingId,
         submittedAt: new Date(),
       },
     });

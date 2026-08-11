@@ -7,14 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Upload, Eye, CheckCircle, XCircle, Clock } from "lucide-react";
+import { FileText, Upload, Eye, CheckCircle, XCircle, Clock, Calendar } from "lucide-react";
 import { toast } from "sonner";
 
 const DOCUMENT_TYPES = [
   { id: "1", name: "Billing Statement", target: "LTOO" },
   { id: "2", name: "Contract of Lease", target: "Program Coordinator" },
   { id: "3", name: "Certification", target: "Program Coordinator" },
-  { id: "4", name: "Request Letter", target: "Program Coordinator" },
   { id: "5", name: "Official Receipt", target: "LTOO" },
 ];
 
@@ -25,6 +24,8 @@ export default function DocumentsPage() {
   const [preview, setPreview] = React.useState("");
   const [docType, setDocType] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
+  const [reservations, setReservations] = React.useState([]);
+  const [selectedBookingId, setSelectedBookingId] = React.useState("");
 
   const loadDocuments = React.useCallback(async () => {
     try {
@@ -47,6 +48,20 @@ export default function DocumentsPage() {
   React.useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  // Fetch reservations for booking selector
+  React.useEffect(() => {
+    async function fetchReservations() {
+      try {
+        const res = await fetch("/api/reservations");
+        const data = await res.json();
+        setReservations(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load reservations:", err);
+      }
+    }
+    fetchReservations();
+  }, []);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files?.[0];
@@ -78,10 +93,12 @@ export default function DocumentsPage() {
 
     setUploading(true);
     try {
-      // Upload file directly via FormData
       const formData = new FormData();
       formData.append("documentTypeId", docType);
       formData.append("file", file);
+      if (selectedBookingId) {
+        formData.append("reservationId", selectedBookingId);
+      }
 
       const res = await fetch("/api/documents", {
         method: "POST",
@@ -97,6 +114,7 @@ export default function DocumentsPage() {
       setFile(null);
       setPreview("");
       setDocType("");
+      setSelectedBookingId("");
       loadDocuments();
     } catch (err) {
       toast.error(err.message);
@@ -163,6 +181,30 @@ export default function DocumentsPage() {
               </div>
             </div>
 
+            {/* Booking/Reservation Selector */}
+            <div className="space-y-2">
+              <Label htmlFor="booking-select">Link to Reservation (Optional)</Label>
+              <Select value={selectedBookingId} onValueChange={setSelectedBookingId}>
+                <SelectTrigger id="booking-select">
+                  <SelectValue placeholder="Select a reservation to link this document" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None (standalone document)</SelectItem>
+                  {reservations.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.venue} - {r.eventDate} ({r.eventType})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedBookingId && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="size-3" />
+                  Document will be linked to this reservation
+                </p>
+              )}
+            </div>
+
             {preview && (
               <div className="relative w-full max-w-md h-48 overflow-hidden rounded-md border bg-muted/20">
                 <img
@@ -224,6 +266,12 @@ export default function DocumentsPage() {
                       <p className="text-xs text-muted-foreground">
                         Submitted: {doc.submittedAt ? new Date(doc.submittedAt).toLocaleDateString() : "—"}
                       </p>
+                      {doc.bookingInfo && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="size-3" />
+                          {doc.bookingInfo}
+                        </p>
+                      )}
                     </div>
                     {doc.filePath && (
                       <Button variant="outline" size="sm" onClick={() => window.open(doc.filePath, "_blank")}>

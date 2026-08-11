@@ -22,6 +22,11 @@ export async function GET() {
                 status: { select: { status: true } },
               },
             },
+            documents: {
+              include: {
+                documentType: { select: { type: true } },
+              },
+            },
           },
         },
       },
@@ -53,6 +58,16 @@ export async function GET() {
         0
       );
 
+      // Collect documents from all bookings
+      const docs = r.bookings.flatMap(b => b.documents || []).map(d => ({
+        id: d.documentId,
+        type: d.documentType?.type || "Document",
+        status: d.status || "Pending",
+        filePath: d.filePath,
+        remarks: d.remarks,
+        submittedAt: d.submittedAt,
+      }));
+
       return {
         id: `RES-${r.reservationId}`,
         clientName: `${client.firstName} ${client.lastName}`,
@@ -64,6 +79,7 @@ export async function GET() {
         status: r.reservationStatus,
         amountPaid: totalPaid,
         packageName: r.package?.packageName || null,
+        documents: docs,
       };
     });
 

@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
 
-// Program Coordinator sees only Contract of Lease (2), Certification (3), and Request Letter (4)
-const COORDINATOR_DOCUMENT_TYPES = [2, 3, 4];
+// Program Coordinator sees only Contract of Lease (2) and Certification (3)
+const COORDINATOR_DOCUMENT_TYPES = [2, 3];
 
 export async function GET() {
   try {
