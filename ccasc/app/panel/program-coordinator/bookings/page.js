@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Search, CheckCircle2, XCircle, AlertTriangle, FileText } from "lucide-react";
+import { Search, CheckCircle2, XCircle, AlertTriangle, FileText, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -29,6 +30,9 @@ export default function CoordinatorBookingsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRes, setSelectedRes] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [resubmitDoc, setResubmitDoc] = useState(null);
+  const [resubmitMessage, setResubmitMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +94,46 @@ export default function CoordinatorBookingsPage() {
       setDetailOpen(false);
     } catch (err) {
       toast.error("Failed to cancel booking");
+    }
+  }
+
+  async function handleVerifyDocument(docId) {
+    try {
+      const res = await fetch("/api/documents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: docId, status: "Verified" }),
+      });
+      if (!res.ok) throw new Error("Failed to verify");
+      toast.success("Document verified");
+      refreshBookings();
+    } catch (err) {
+      toast.error("Failed to verify document");
+    }
+  }
+
+  async function handleRequestResubmit(docId) {
+    if (!resubmitMessage.trim()) {
+      toast.error("Please provide a reason for resubmission");
+      return;
+    }
+    try {
+      const res = await fetch("/api/documents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentId: docId,
+          status: "Declined",
+          remarks: resubmitMessage.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to decline");
+      toast.success("Resubmission requested. Client has been notified.");
+      setResubmitDoc(null);
+      setResubmitMessage("");
+      refreshBookings();
+    } catch (err) {
+      toast.error("Failed to request resubmission");
     }
   }
 
@@ -240,28 +284,69 @@ export default function CoordinatorBookingsPage() {
                     <span className="text-muted-foreground text-xs block mb-2">Uploaded Documents</span>
                     <div className="space-y-2">
                       {selectedRes.documents.map((doc) => (
-                        <div key={doc.id} className="flex items-center justify-between rounded-md border p-2">
-                          <div className="flex items-center gap-2">
-                            <FileText className="size-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-medium">{doc.type}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Status: {doc.status}
-                                {doc.submittedAt && ` • ${new Date(doc.submittedAt).toLocaleDateString()}`}
-                              </p>
-                              {doc.remarks && (
-                                <p className="text-xs text-red-500">Remarks: {doc.remarks}</p>
+                        <div key={doc.id} className="rounded-md border p-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="size-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">{doc.type}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Status: {doc.status}
+                                  {doc.submittedAt && ` • ${new Date(doc.submittedAt).toLocaleDateString()}`}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {doc.filePath && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setPreviewDoc(doc)}
+                                >
+                                  <Eye className="size-4" />
+                                </Button>
                               )}
                             </div>
                           </div>
-                          {doc.filePath && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => window.open(doc.filePath, "_blank")}
-                            >
-                              View
-                            </Button>
+                          {doc.remarks && (
+                            <p className="text-xs text-red-500 mb-2">Remarks: {doc.remarks}</p>
+                          )}
+                          {doc.status !== "Verified" && doc.status !== "Declined" && (
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-green-600 border-green-300 hover:bg-green-50 text-xs"
+                                onClick={() => handleVerifyDocument(doc.id)}
+                              >
+                                <ThumbsUp className="size-3 mr-1" />
+                                Verify
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-300 hover:bg-red-50 text-xs"
+                                onClick={() => {
+                                  setResubmitDoc(doc);
+                                  setResubmitMessage("");
+                                }}
+                              >
+                                <ThumbsDown className="size-3 mr-1" />
+                                Request Resubmit
+                              </Button>
+                            </div>
+                          )}
+                          {doc.status === "Verified" && (
+                            <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+                              <CheckCircle2 className="size-3 mr-1" />
+                              Verified
+                            </Badge>
+                          )}
+                          {doc.status === "Declined" && (
+                            <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50">
+                              <XCircle className="size-3 mr-1" />
+                              Resubmission Requested
+                            </Badge>
                           )}
                         </div>
                       ))}
@@ -291,6 +376,77 @@ export default function CoordinatorBookingsPage() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-white rounded-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-3 border-b">
+              <h4 className="font-semibold text-sm">{previewDoc.type}</h4>
+              <button
+                onClick={() => setPreviewDoc(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="size-5" />
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center max-h-[70vh] overflow-auto">
+              <img
+                src={previewDoc.filePath}
+                alt={previewDoc.type}
+                className="max-w-full max-h-[65vh] object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resubmission Request Modal */}
+      {resubmitDoc && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setResubmitDoc(null)}
+        >
+          <div
+            className="max-w-md w-full bg-white rounded-lg shadow-lg p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="font-semibold mb-2">
+              Request Resubmission for {resubmitDoc.type}
+            </h4>
+            <p className="text-sm text-muted-foreground mb-4">
+              Provide a reason why this document needs to be resubmitted. This message will be sent to the client.
+            </p>
+            <Textarea
+              placeholder="Enter reason for resubmission..."
+              value={resubmitMessage}
+              onChange={(e) => setResubmitMessage(e.target.value)}
+              className="min-h-[100px] mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setResubmitDoc(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => handleRequestResubmit(resubmitDoc.id)}
+                disabled={!resubmitMessage.trim()}
+              >
+                Request Resubmission
+              </Button>
             </div>
           </div>
         </div>
