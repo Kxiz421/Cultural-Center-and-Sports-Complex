@@ -34,6 +34,7 @@ export default function ClientReservationsPage() {
   const [availLoading, setAvailLoading] = React.useState(false);
   const [particularQuantities, setParticularQuantities] = React.useState({});
   const [lastReservationId, setLastReservationId] = React.useState(null);
+  const [lastTotalAmount, setLastTotalAmount] = React.useState(0);
 
   // Load packages and particulars
   React.useEffect(() => {
@@ -198,6 +199,7 @@ export default function ClientReservationsPage() {
 
       const data = await res.json();
       setLastReservationId(data.id);
+      setLastTotalAmount(data.totalAmount || 0);
       toast.success(`Reservation ${data.id} created! Total: ₱${Number(data.totalAmount || 0).toLocaleString()}`);
       setForm({
         venueId: "",
@@ -519,7 +521,7 @@ export default function ClientReservationsPage() {
               Reference: <span className="font-medium text-foreground">{lastReservationId}</span>
             </p>
             <p className="text-sm text-muted-foreground">
-              Total Amount: <span className="font-bold text-foreground">₱{total.toLocaleString()}</span>
+              Total Amount: <span className="font-bold text-foreground">₱{lastTotalAmount.toLocaleString()}</span>
             </p>
           </div>
           <DialogFooter className="flex gap-2 sm:justify-between">
