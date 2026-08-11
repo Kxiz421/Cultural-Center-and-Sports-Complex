@@ -97,7 +97,33 @@ export default function CoordinatorBookingsPage() {
     }
   }
 
+  function updateDocumentInState(docId, updates) {
+    // Update selectedRes immediately
+    if (selectedRes) {
+      const updatedDocs = selectedRes.documents.map((d) =>
+        d.id === docId ? { ...d, ...updates } : d
+      );
+      setSelectedRes({ ...selectedRes, documents: updatedDocs });
+    }
+    // Also update in the reservations list
+    setReservations((prev) =>
+      prev.map((r) => {
+        if (r.id === selectedRes?.id) {
+          return {
+            ...r,
+            documents: r.documents?.map((d) =>
+              d.id === docId ? { ...d, ...updates } : d
+            ),
+          };
+        }
+        return r;
+      })
+    );
+  }
+
   async function handleVerifyDocument(docId) {
+    // Optimistically update UI
+    updateDocumentInState(docId, { status: "Verified" });
     try {
       const res = await fetch("/api/documents", {
         method: "PATCH",
@@ -106,17 +132,23 @@ export default function CoordinatorBookingsPage() {
       });
       if (!res.ok) throw new Error("Failed to verify");
       toast.success("Document verified");
-      refreshBookings();
     } catch (err) {
       toast.error("Failed to verify document");
+      // Revert on failure
+      updateDocumentInState(docId, { status: "Pending" });
     }
   }
 
   async function handleRequestResubmit(docId) {
-    if (!resubmitMessage.trim()) {
+    const message = resubmitMessage.trim();
+    if (!message) {
       toast.error("Please provide a reason for resubmission");
       return;
     }
+    // Optimistically update UI
+    updateDocumentInState(docId, { status: "Declined", remarks: message });
+    setResubmitDoc(null);
+    setResubmitMessage("");
     try {
       const res = await fetch("/api/documents", {
         method: "PATCH",
@@ -124,16 +156,15 @@ export default function CoordinatorBookingsPage() {
         body: JSON.stringify({
           documentId: docId,
           status: "Declined",
-          remarks: resubmitMessage.trim(),
+          remarks: message,
         }),
       });
       if (!res.ok) throw new Error("Failed to decline");
       toast.success("Resubmission requested. Client has been notified.");
-      setResubmitDoc(null);
-      setResubmitMessage("");
-      refreshBookings();
     } catch (err) {
       toast.error("Failed to request resubmission");
+      // Revert on failure
+      updateDocumentInState(docId, { status: "Pending", remarks: null });
     }
   }
 
