@@ -20,6 +20,14 @@ export async function GET(request) {
           package: { select: { packageName: true, dayRate: true, nightRate: true } },
           venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
+          additionalDates: { select: { eventDate: true } },
+          reservedParticulars: {
+            include: {
+              particular: {
+                select: { particularName: true, inventory: { select: { unitCost: true } } },
+              },
+            },
+          },
           bookings: {
             include: {
               payments: {
@@ -48,10 +56,25 @@ export async function GET(request) {
             (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
             0
           );
-          // Get package rate
-          const pkgRate = r.package?.dayRate ? Number(r.package.dayRate) : r.package?.nightRate ? Number(r.package.nightRate) : null;
+          // Calculate total amount from reservation (includes multi-day × rate + particulars)
+          const numDays = 1 + r.additionalDates.length;
+          const pkgRate = r.package?.dayRate
+            ? Number(r.package.dayRate)
+            : r.package?.nightRate
+              ? Number(r.package.nightRate)
+              : null;
+          const pkgTotal = pkgRate ? pkgRate * numDays : 0;
+          const particularsTotal = r.reservedParticulars.reduce((sum, rp) => {
+            const unitCost = rp.particular?.inventory?.unitCost
+              ? Number(rp.particular.inventory.unitCost)
+              : 0;
+            return sum + unitCost * rp.quantity;
+          }, 0);
+          const totalAmount = r.totalAmount
+            ? Number(r.totalAmount)
+            : (pkgTotal + particularsTotal);
           // Calculate balance
-          const balance = pkgRate ? Math.max(0, pkgRate - totalPaid) : null;
+          const balance = totalAmount - totalPaid;
           return {
             id: r.reservationId,
             reservationId: r.reservationId,
@@ -60,14 +83,27 @@ export async function GET(request) {
             clientType: client.clientRole?.clientRoleId === "PROV" ? "provincial-agency" : "client",
             eventType: r.eventType,
             eventDate: r.eventDate ? new Date(r.eventDate).toISOString().split("T")[0] : "",
+            eventDates: [
+              r.eventDate.toISOString().split("T")[0],
+              ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
+            ],
             venue: r.venue?.venue,
             timeSlot: r.timeSlot ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}` : "",
             packageName: r.package?.packageName,
             packageDayRate: r.package?.dayRate ? Number(r.package.dayRate) : null,
             packageNightRate: r.package?.nightRate ? Number(r.package.nightRate) : null,
+            totalAmount: totalAmount,
             totalPaid: totalPaid,
-            balance: balance,
+            balance: Math.max(0, balance),
+            balanceRemaining: Math.max(0, balance),
             hasBooking: r.bookings.length > 0,
+            particulars: r.reservedParticulars.map((rp) => ({
+              name: rp.particular.particularName,
+              quantity: rp.quantity,
+              unitCost: rp.particular?.inventory?.unitCost
+                ? Number(rp.particular.inventory.unitCost)
+                : 0,
+            })),
           };
         });
 
