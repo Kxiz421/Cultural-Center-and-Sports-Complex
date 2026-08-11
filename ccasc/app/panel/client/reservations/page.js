@@ -232,11 +232,11 @@ export default function ClientReservationsPage() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={prevMonth}>
+          <Button type="button" variant="ghost" size="sm" onClick={prevMonth}>
             <ChevronLeft className="size-4" />
           </Button>
           <span className="font-medium text-sm">{monthLabel}</span>
-          <Button variant="ghost" size="sm" onClick={nextMonth}>
+          <Button type="button" variant="ghost" size="sm" onClick={nextMonth}>
             <ChevronRight className="size-4" />
           </Button>
         </div>
@@ -407,7 +407,23 @@ export default function ClientReservationsPage() {
                             >
                               <Minus className="size-3" />
                             </Button>
-                            <span className="w-8 text-center text-sm font-medium">{qty}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={maxQty}
+                              value={qty}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (isNaN(val) || val < 0) {
+                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
+                                } else if (val > maxQty) {
+                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
+                                } else {
+                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
+                                }
+                              }}
+                              className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
                             <Button
                               type="button"
                               variant="outline"
