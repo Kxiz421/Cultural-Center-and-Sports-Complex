@@ -391,11 +391,11 @@ model Document {
   status         String   @default("Pending") @map("status") @db.VarChar(50) // Pending, Verified, Declined
   remarks        String?  @db.Text
   submittedAt    DateTime @map("submitted_at")
-  bookingId      Int      @map("booking_id")
+  bookingId      Int?     @map("booking_id")
   staffId        Int?     @map("staff_id")
 
   documentType DocumentType @relation(fields: [documentTypeId], references: [documentTypeId])
-  booking      Booking      @relation(fields: [bookingId], references: [bookingId])
+  booking      Booking?     @relation(fields: [bookingId], references: [bookingId])
   staff        Staff?       @relation(fields: [staffId], references: [staffId])
 
   @@map("Document")
