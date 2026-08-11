@@ -147,7 +147,31 @@ export async function PATCH(request) {
     const document = await prisma.document.update({
       where: { documentId: parseInt(documentId) },
       data: updateData,
+      include: {
+        documentType: { select: { type: true } },
+        booking: {
+          include: {
+            reservation: {
+              select: { clientId: true },
+            },
+          },
+        },
+      },
     });
+
+    // Send notification to client when document is declined (resubmission requested)
+    if (status === "Declined" && document.booking?.reservation?.clientId && remarks) {
+      const notificationMessage = `Your ${document.documentType?.type || "document"} requires resubmission: ${remarks}`;
+      await prisma.notification.create({
+        data: {
+          clientId: document.booking.reservation.clientId,
+          staffId: 1,
+          message: notificationMessage,
+          type: "Document Resubmission",
+          sentAt: new Date(),
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
