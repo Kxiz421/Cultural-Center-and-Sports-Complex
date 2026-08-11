@@ -3,23 +3,50 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Submit a new document (supports base64 image upload)
+// Submit a new document (supports image upload via FormData)
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { documentTypeId, filePath, bookingId } = body;
+    const formData = await request.formData();
+    const documentTypeId = formData.get("documentTypeId");
+    const file = formData.get("file");
+    const bookingId = formData.get("bookingId");
 
-    if (!documentTypeId || !filePath) {
+    if (!documentTypeId || !file) {
       return NextResponse.json(
-        { error: "Missing required fields: documentTypeId, filePath" },
+        { error: "Missing required fields: documentTypeId, file" },
         { status: 400 }
       );
     }
 
+    // Validate file type
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
+    if (!validTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed." },
+        { status: 400 }
+      );
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "File size too large. Maximum is 5MB." },
+        { status: 400 }
+      );
+    }
+
+    // Convert file to base64 data URI
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const base64 = buffer.toString("base64");
+    const mimeType = file.type;
+    const dataUri = `data:${mimeType};base64,${base64}`;
+
+    // Create document record
     const document = await prisma.document.create({
       data: {
         documentTypeId: parseInt(documentTypeId),
-        filePath,
+        filePath: dataUri,
         status: "Pending",
         documentStatus: "Pending",
         bookingId: bookingId ? parseInt(bookingId) : null,
@@ -31,7 +58,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Document submission error:", error);
     return NextResponse.json(
-      { error: "Failed to submit document" },
+      { error: "Failed to submit document: " + error.message },
       { status: 500 }
     );
   }
