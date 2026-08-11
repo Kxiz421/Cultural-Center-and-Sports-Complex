@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -31,6 +33,7 @@ export default function ClientReservationsPage() {
   const [availability, setAvailability] = React.useState({});
   const [availLoading, setAvailLoading] = React.useState(false);
   const [particularQuantities, setParticularQuantities] = React.useState({});
+  const [lastReservationId, setLastReservationId] = React.useState(null);
 
   // Load packages and particulars
   React.useEffect(() => {
@@ -194,6 +197,7 @@ export default function ClientReservationsPage() {
       }
 
       const data = await res.json();
+      setLastReservationId(data.id);
       toast.success(`Reservation ${data.id} created! Total: ₱${Number(data.totalAmount || 0).toLocaleString()}`);
       setForm({
         venueId: "",
@@ -500,6 +504,37 @@ export default function ClientReservationsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Success Dialog with Order of Payment */}
+      <Dialog open={!!lastReservationId} onOpenChange={() => setLastReservationId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reservation Submitted!</DialogTitle>
+            <DialogDescription>
+              Your reservation has been created successfully. You can view and print your Order of Payment below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <p className="text-sm text-muted-foreground">
+              Reference: <span className="font-medium text-foreground">{lastReservationId}</span>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Total Amount: <span className="font-bold text-foreground">₱{total.toLocaleString()}</span>
+            </p>
+          </div>
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="outline" onClick={() => setLastReservationId(null)}>
+              Close
+            </Button>
+            <Link href={`/panel/client/order-of-payment?id=${lastReservationId}`}>
+              <Button>
+                <Printer className="size-4 mr-2" />
+                View Order of Payment
+              </Button>
+            </Link>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
