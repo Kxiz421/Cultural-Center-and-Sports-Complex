@@ -39,8 +39,9 @@ export default function ClientDocumentsPage() {
         const data = await res.json();
         // Filter to only show bookings that have been recorded by LTOO (hasBooking: true)
         // and match the current client
+        const parsedClientId = parseInt(cleanId, 10);
         const userBookings = Array.isArray(data)
-          ? data.filter((b) => b.hasBooking && String(b.reservationId) === cleanId)
+          ? data.filter((b) => b.hasBooking && b.clientId === parsedClientId)
           : [];
         setBookings(userBookings);
       } catch (err) {
