@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Search, CheckCircle2, XCircle, AlertTriangle, FileText } from "lucide-react";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -233,6 +233,41 @@ export default function CoordinatorBookingsPage() {
                   <span className="text-muted-foreground text-xs">Package</span>
                   <p className="font-medium">{selectedRes.packageName || "N/A"}</p>
                 </div>
+
+                {/* Documents Section */}
+                {selectedRes.documents && selectedRes.documents.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-xs block mb-2">Uploaded Documents</span>
+                    <div className="space-y-2">
+                      {selectedRes.documents.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between rounded-md border p-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="size-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium">{doc.type}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Status: {doc.status}
+                                {doc.submittedAt && ` • ${new Date(doc.submittedAt).toLocaleDateString()}`}
+                              </p>
+                              {doc.remarks && (
+                                <p className="text-xs text-red-500">Remarks: {doc.remarks}</p>
+                              )}
+                            </div>
+                          </div>
+                          {doc.filePath && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(doc.filePath, "_blank")}
+                            >
+                              View
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-2 pt-2 border-t">
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
