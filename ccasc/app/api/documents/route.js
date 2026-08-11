@@ -45,7 +45,9 @@ export async function POST(request) {
     // Resolve bookingId from reservationId if provided
     let finalBookingId = null;
     if (reservationId) {
-      const resId = parseInt(reservationId.replace("RES-", ""), 10);
+      // Handle both "RES-123" and "123" formats
+      const cleanId = String(reservationId).replace("RES-", "");
+      const resId = parseInt(cleanId, 10);
       if (!isNaN(resId)) {
         const booking = await prisma.booking.findFirst({
           where: { reservationId: resId },
