@@ -292,9 +292,13 @@ export default function CoordinatorBookingsPage() {
                   <span className="text-muted-foreground text-xs">Event Type</span>
                   <p className="font-medium">{selectedRes.eventType}</p>
                 </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">Event Date</span>
-                  <p className="font-medium">{selectedRes.eventDate}</p>
+              <div>
+                  <span className="text-muted-foreground text-xs">Event Date{selectedRes.eventDates && selectedRes.eventDates.length > 1 ? 's' : ''}</span>
+                  <p className="font-medium">
+                    {selectedRes.eventDates && selectedRes.eventDates.length > 1
+                      ? `${selectedRes.eventDates[0]} — ${selectedRes.eventDates[selectedRes.eventDates.length - 1]} (${selectedRes.eventDates.length} days)`
+                      : selectedRes.eventDate}
+                  </p>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">Time Slot</span>

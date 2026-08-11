@@ -15,6 +15,7 @@ export async function GET() {
         venue: { select: { venue: true } },
         timeSlot: { select: { startTime: true, endTime: true } },
         package: { select: { packageName: true } },
+        additionalDates: { select: { eventDate: true } },
         bookings: {
           include: {
             payments: {
@@ -68,6 +69,11 @@ export async function GET() {
         submittedAt: d.submittedAt,
       }));
 
+      const allDates = [
+        r.eventDate.toISOString().split("T")[0],
+        ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
+      ].sort();
+
       return {
         id: `RES-${r.reservationId}`,
         clientName: `${client.firstName} ${client.lastName}`,
@@ -75,6 +81,7 @@ export async function GET() {
         venue: r.venue.venue,
         eventType: r.eventType,
         eventDate: r.eventDate.toISOString().split("T")[0],
+        eventDates: allDates,
         timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
         status: r.reservationStatus,
         amountPaid: totalPaid,
