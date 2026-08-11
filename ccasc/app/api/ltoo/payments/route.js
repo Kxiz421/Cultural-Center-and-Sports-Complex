@@ -14,7 +14,7 @@ export async function GET(request) {
       // Fetch reservations without client include to avoid orphaned FK errors
       const reservations = await prisma.reservation.findMany({
         where: {
-          reservationStatus: { not: "Cancelled" },
+          reservationStatus: { notIn: ["Cancelled", "Confirmed"] },
         },
         include: {
           package: { select: { packageName: true, dayRate: true, nightRate: true } },
