@@ -7,14 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FileText, CheckCircle, XCircle, Clock, Upload, Image as ImageIcon } from "lucide-react";
+import { FileText, CheckCircle, XCircle, Clock, Upload, Image as ImageIcon, Calendar } from "lucide-react";
 import { toast } from "sonner";
 
 const DOCUMENT_TYPES = [
   { id: "1", name: "Billing Statement", target: "LTOO" },
   { id: "2", name: "Contract of Lease", target: "Program Coordinator" },
   { id: "3", name: "Certification", target: "Program Coordinator" },
-  { id: "4", name: "Request Letter", target: "Program Coordinator" },
   { id: "5", name: "Official Receipt", target: "LTOO" },
 ];
 
@@ -25,27 +24,41 @@ export default function ClientDocumentsPage() {
   const [docType, setDocType] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [reservations, setReservations] = React.useState([]);
+  const [selectedBookingId, setSelectedBookingId] = React.useState("");
+
+  // Fetch user's reservations for booking selector
+  React.useEffect(() => {
+    async function fetchReservations() {
+      try {
+        const userId = localStorage.getItem("user_id");
+        if (!userId) return;
+        const res = await fetch(`/api/reservations?clientId=${userId}`);
+        const data = await res.json();
+        setReservations(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load reservations:", err);
+      }
+    }
+    fetchReservations();
+  }, []);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    // Validate file type
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
     if (!validTypes.includes(selectedFile.type)) {
       toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
       return;
     }
 
-    // Validate file size (max 5MB)
     if (selectedFile.size > 5 * 1024 * 1024) {
       toast.error("File size too large. Maximum is 5MB.");
       return;
     }
 
     setFile(selectedFile);
-
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target.result);
     reader.readAsDataURL(selectedFile);
@@ -60,10 +73,12 @@ export default function ClientDocumentsPage() {
 
     setUploading(true);
     try {
-      // Upload file directly via FormData
       const formData = new FormData();
       formData.append("documentTypeId", docType);
       formData.append("file", file);
+      if (selectedBookingId) {
+        formData.append("reservationId", selectedBookingId);
+      }
 
       const res = await fetch("/api/documents", {
         method: "POST",
@@ -79,7 +94,7 @@ export default function ClientDocumentsPage() {
       setFile(null);
       setPreview("");
       setDocType("");
-      // Refresh the list
+      setSelectedBookingId("");
       const refreshRes = await fetch('/api/documents');
       const refreshData = await refreshRes.json();
       setDocuments(refreshData || []);
@@ -163,6 +178,30 @@ export default function ClientDocumentsPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Booking/Reservation Selector */}
+            <div className="space-y-2">
+              <Label htmlFor="booking-select">Link to Reservation (Optional)</Label>
+              <Select value={selectedBookingId} onValueChange={setSelectedBookingId}>
+                <SelectTrigger id="booking-select">
+                  <SelectValue placeholder="Select a reservation to link this document" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None (standalone document)</SelectItem>
+                  {reservations.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.venue} - {r.eventDate} ({r.eventType})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedBookingId && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="size-3" />
+                  Document will be linked to this reservation
+                </p>
+              )}
             </div>
 
             {preview && (
