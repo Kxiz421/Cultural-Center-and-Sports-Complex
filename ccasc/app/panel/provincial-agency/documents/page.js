@@ -96,7 +96,7 @@ export default function DocumentsPage() {
       const formData = new FormData();
       formData.append("documentTypeId", docType);
       formData.append("file", file);
-      if (selectedBookingId) {
+      if (selectedBookingId && selectedBookingId !== "none") {
         formData.append("reservationId", selectedBookingId);
       }
 
@@ -188,8 +188,8 @@ export default function DocumentsPage() {
                 <SelectTrigger id="booking-select">
                   <SelectValue placeholder="Select a reservation to link this document" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None (standalone document)</SelectItem>
+                  <SelectContent>
+                    <SelectItem value="none">None (standalone document)</SelectItem>
                   {reservations.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.venue} - {r.eventDate} ({r.eventType})
@@ -197,7 +197,7 @@ export default function DocumentsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedBookingId && (
+              {selectedBookingId && selectedBookingId !== "none" && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Calendar className="size-3" />
                   Document will be linked to this reservation
