@@ -10,6 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FileText, Upload, Eye, CheckCircle, XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 
+const DOCUMENT_TYPES = [
+  { id: "1", name: "Billing Statement", target: "LTOO" },
+  { id: "2", name: "Contract of Lease", target: "Program Coordinator" },
+  { id: "3", name: "Certification", target: "Program Coordinator" },
+  { id: "4", name: "Request Letter", target: "Program Coordinator" },
+  { id: "5", name: "Official Receipt", target: "LTOO" },
+];
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -108,7 +116,7 @@ export default function DocumentsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Documents</h1>
         <p className="text-muted-foreground text-sm">
-          Submit and track required documents for your reservations
+          Submit and track required documents for your reservations.
         </p>
       </div>
 
@@ -130,12 +138,18 @@ export default function DocumentsPage() {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Billing Statement</SelectItem>
-                    <SelectItem value="2">Receipt</SelectItem>
-                    <SelectItem value="3">Contract of Lease</SelectItem>
-                    <SelectItem value="4">Certification</SelectItem>
+                    {DOCUMENT_TYPES.map((dt) => (
+                      <SelectItem key={dt.id} value={dt.id}>
+                        {dt.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {docType && (
+                  <p className="text-xs text-muted-foreground">
+                    Will be sent to: {DOCUMENT_TYPES.find(dt => dt.id === docType)?.target}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
