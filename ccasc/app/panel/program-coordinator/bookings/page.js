@@ -26,13 +26,16 @@ function formatPhp(amount) {
 
 export default function CoordinatorBookingsPage() {
   const [reservations, setReservations] = useState([]);
+  const [historyReservations, setHistoryReservations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRes, setSelectedRes] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [resubmitDoc, setResubmitDoc] = useState(null);
   const [resubmitMessage, setResubmitMessage] = useState("");
+  const [activeTab, setActiveTab] = useState("pending");
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +56,26 @@ export default function CoordinatorBookingsPage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/coordinator/bookings?history=true");
+      const data = await res.json();
+      setHistoryReservations(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      toast.error("Failed to load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "history" && historyReservations.length === 0) {
+      loadHistory();
+    }
+  }, [activeTab]);
 
   async function refreshBookings() {
     try {
@@ -196,6 +219,29 @@ export default function CoordinatorBookingsPage() {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 border-b pb-2">
+        <Button
+          variant={activeTab === "pending" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("pending")}
+        >
+          Pending Confirmation
+          {reservations.length > 0 && (
+            <span className="ml-2 text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">
+              {reservations.length}
+            </span>
+          )}
+        </Button>
+        <Button
+          variant={activeTab === "history" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("history")}
+        >
+          Confirmed History
+        </Button>
+      </div>
+
       {/* Search */}
       <div className="space-y-2">
         <Label>Search</Label>
@@ -211,55 +257,108 @@ export default function CoordinatorBookingsPage() {
       </div>
 
       {/* Bookings List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Fully Paid Bookings</CardTitle>
-          <CardDescription>
-            {filtered.length} booking(s) awaiting confirmation.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {filtered.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-8 text-center">
-                No fully paid bookings awaiting confirmation.
-              </p>
-            ) : (
-              filtered.map((res) => (
-                <div
-                  key={res.id}
-                  className="flex flex-col gap-2 rounded-lg border p-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => {
-                    setSelectedRes(res);
-                    setDetailOpen(true);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{res.clientName}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {res.clientType}
-                      </Badge>
+      {activeTab === "pending" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Fully Paid Bookings</CardTitle>
+            <CardDescription>
+              {filtered.length} booking(s) awaiting confirmation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {filtered.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">
+                  No fully paid bookings awaiting confirmation.
+                </p>
+              ) : (
+                filtered.map((res) => (
+                  <div
+                    key={res.id}
+                    className="flex flex-col gap-2 rounded-lg border p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => {
+                      setSelectedRes(res);
+                      setDetailOpen(true);
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{res.clientName}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {res.clientType}
+                        </Badge>
+                      </div>
+                      <Badge variant="default">Fully Paid</Badge>
                     </div>
-                    <Badge variant="default">Fully Paid</Badge>
-                  </div>
-                  <p className="text-muted-foreground text-sm">
-                    {res.venue} &middot; {res.eventDate} &middot; {res.eventType}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-muted-foreground text-xs">
-                      {res.timeSlot}
+                    <p className="text-muted-foreground text-sm">
+                      {res.venue} &middot; {res.eventDate} &middot; {res.eventType}
                     </p>
-                    <p className="text-xs font-medium tabular-nums">
-                      {formatPhp(res.amountPaid)}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-muted-foreground text-xs">
+                        {res.timeSlot}
+                      </p>
+                      <p className="text-xs font-medium tabular-nums">
+                        {formatPhp(res.amountPaid)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Confirmed History */}
+      {activeTab === "history" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Confirmed Booking History</CardTitle>
+            <CardDescription>
+              {historyLoading ? "Loading..." : `${historyReservations.length} confirmed booking(s).`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {historyLoading ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">Loading history...</p>
+              ) : historyReservations.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">No confirmed bookings yet.</p>
+              ) : (
+                historyReservations.map((res) => (
+                  <div
+                    key={res.id}
+                    className="flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50/30 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{res.clientName}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {res.clientType}
+                        </Badge>
+                      </div>
+                      <Badge className="bg-green-600">Confirmed</Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {res.venue} &middot; {res.eventDates && res.eventDates.length > 1
+                        ? `${res.eventDates[0]} — ${res.eventDates[res.eventDates.length - 1]} (${res.eventDates.length} days)`
+                        : res.eventDate} &middot; {res.eventType}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-muted-foreground text-xs">
+                        {res.timeSlot}
+                      </p>
+                      <p className="text-xs font-medium tabular-nums">
+                        {formatPhp(res.amountPaid)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detail Dialog */}
       {detailOpen && selectedRes && (
