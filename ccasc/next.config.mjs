@@ -1,9 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  turbopack: {
-    root: process.cwd(),
-  },
-  serverExternalPackages: ["@prisma/client", "mysql2"],
-};
+const nextConfig = {};
 
 export default nextConfig;
