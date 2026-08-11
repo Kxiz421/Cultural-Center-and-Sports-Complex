@@ -386,7 +386,7 @@ model Transaction {
 model Document {
   documentId     Int      @id @default(autoincrement()) @map("document_id")
   documentTypeId Int      @map("document_type_id")
-  filePath       String   @map("file_path") @db.VarChar(255)
+  filePath       String?  @map("file_path") @db.Text
   documentStatus String   @default("Pending") @map("document_status") @db.VarChar(50)
   status         String   @default("Pending") @map("status") @db.VarChar(50) // Pending, Verified, Declined
   remarks        String?  @db.Text

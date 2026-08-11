@@ -7,35 +7,76 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FileText, CheckCircle, XCircle, Clock } from "lucide-react";
+import { FileText, CheckCircle, XCircle, Clock, Upload, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ClientDocumentsPage() {
   const [documents, setDocuments] = React.useState([]);
-  const [filePath, setFilePath] = React.useState("");
+  const [file, setFile] = React.useState(null);
+  const [preview, setPreview] = React.useState("");
   const [docType, setDocType] = React.useState("");
+  const [uploading, setUploading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
 
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    if (!filePath || !docType) {
-      toast.error("Please enter a file path and select a document type");
+  const handleFileSelect = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    // Validate file type
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
+    if (!validTypes.includes(selectedFile.type)) {
+      toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
       return;
     }
 
+    // Validate file size (max 5MB)
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      toast.error("File size too large. Maximum is 5MB.");
+      return;
+    }
+
+    setFile(selectedFile);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => setPreview(e.target.result);
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!file || !docType) {
+      toast.error("Please select an image and document type");
+      return;
+    }
+
+    setUploading(true);
     try {
+      // Convert file to base64 data URI
+      const reader = new FileReader();
+      const dataUri = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
       const res = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documentTypeId: parseInt(docType, 10),
-          filePath,
+          filePath: dataUri,
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to upload document");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to upload document");
+      }
+
       toast.success("Document uploaded successfully!");
-      setFilePath("");
+      setFile(null);
+      setPreview("");
       setDocType("");
       // Refresh the list
       const refreshRes = await fetch('/api/documents');
@@ -43,6 +84,8 @@ export default function ClientDocumentsPage() {
       setDocuments(refreshData || []);
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -80,7 +123,7 @@ export default function ClientDocumentsPage() {
         <CardHeader>
           <CardTitle>Upload Document</CardTitle>
           <CardDescription>
-            Upload billing statements, receipts, Contracts of Lease, or certifications.
+            Upload billing statements, receipts, Contracts of Lease, or certifications as images.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -102,19 +145,32 @@ export default function ClientDocumentsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="file-path">File Path / URL</Label>
-                <Input
-                  id="file-path"
-                  placeholder="e.g. /uploads/document.pdf or https://..."
-                  value={filePath}
-                  onChange={(e) => setFilePath(e.target.value)}
-                />
+                <Label htmlFor="file-upload">Upload Image</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleFileSelect}
+                    className="flex-1"
+                  />
+                </div>
               </div>
             </div>
 
-            <Button type="submit">
-              <FileText className="mr-2 size-4" />
-              Upload Document
+            {preview && (
+              <div className="relative w-full max-w-md h-48 overflow-hidden rounded-md border bg-muted/20">
+                <img
+                  src={preview}
+                  alt="Preview"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+
+            <Button type="submit" disabled={uploading || !file || !docType}>
+              <Upload className="mr-2 size-4" />
+              {uploading ? "Uploading..." : "Upload Document"}
             </Button>
           </form>
         </CardContent>
@@ -141,6 +197,9 @@ export default function ClientDocumentsPage() {
                       <p className="text-xs text-muted-foreground">
                         Submitted: {new Date(doc.submittedAt).toLocaleDateString()}
                       </p>
+                      {doc.remarks && (
+                        <p className="text-xs text-red-500 mt-1">Remarks: {doc.remarks}</p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -157,6 +216,16 @@ export default function ClientDocumentsPage() {
                       {doc.status}
                     </Badge>
                     {getStatusIcon(doc.status)}
+                    {doc.filePath && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(doc.filePath, "_blank")}
+                        title="View document"
+                      >
+                        <ImageIcon className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
