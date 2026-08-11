@@ -170,14 +170,14 @@ export default function LTOOPaymentsPage() {
   };
 
   const handleTotalAmountChange = (value) => {
-    const cleaned = value.replace(/\D/g, "").slice(0, 5);
+    const cleaned = value.replace(/\D/g, "").slice(0, 6);
     setAddForm((prev) => {
       let newStatus = prev.paymentStatus;
       if (selectedReservation) {
-        const pkgRate = selectedReservation.packageDayRate || selectedReservation.packageNightRate;
+        const totalAmt = selectedReservation.totalAmount || 0;
         const existingPaid = selectedReservation.totalPaid || 0;
-        // If existing paid + new amount >= package rate, fully paid
-        if (pkgRate && (existingPaid + parseInt(cleaned || "0")) >= pkgRate) {
+        // If existing paid + new amount >= total amount, fully paid
+        if (totalAmt && (existingPaid + parseInt(cleaned || "0")) >= totalAmt) {
           newStatus = "Fully Paid";
         } else if (prev.clientType !== "provincial") {
           newStatus = parseInt(cleaned || "0") > 0 ? "Partially Paid" : "";
@@ -296,20 +296,30 @@ export default function LTOOPaymentsPage() {
                 </Select>
               </div>
 
-              {selectedReservation && selectedReservation.packageName && (
+              {selectedReservation && (
                 <div className="rounded-lg border bg-blue-50 p-3 text-sm">
-                  <p className="text-blue-700 font-medium">Package: {selectedReservation.packageName}</p>
-                  {selectedReservation.packageDayRate && (
-                    <p className="text-blue-600 text-xs">Day Rate: {formatPHP(selectedReservation.packageDayRate)}</p>
+                  {selectedReservation.packageName && (
+                    <p className="text-blue-700 font-medium">Package: {selectedReservation.packageName}</p>
                   )}
-                  {selectedReservation.packageNightRate && (
-                    <p className="text-blue-600 text-xs">Night Rate: {formatPHP(selectedReservation.packageNightRate)}</p>
+                  {selectedReservation.eventDates && selectedReservation.eventDates.length > 1 && (
+                    <p className="text-blue-600 text-xs">Event Dates: {selectedReservation.eventDates.length} days</p>
                   )}
+                  <p className="text-blue-700 text-sm font-semibold mt-1">Total Amount: {formatPHP(selectedReservation.totalAmount)}</p>
                   {selectedReservation.totalPaid > 0 && (
                     <p className="text-amber-600 text-xs mt-1">Paid: {formatPHP(selectedReservation.totalPaid)}</p>
                   )}
-                  {selectedReservation.balance !== null && selectedReservation.balance > 0 && (
-                    <p className="text-red-600 text-xs font-semibold mt-1">Balance Remaining: {formatPHP(selectedReservation.balance)}</p>
+                  {selectedReservation.balanceRemaining > 0 && (
+                    <p className="text-red-600 text-xs font-semibold mt-1">Balance Remaining: {formatPHP(selectedReservation.balanceRemaining)}</p>
+                  )}
+                  {selectedReservation.particulars && selectedReservation.particulars.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-blue-200">
+                      <p className="text-blue-600 text-xs font-medium mb-1">Particulars:</p>
+                      {selectedReservation.particulars.map((p, i) => (
+                        <p key={i} className="text-blue-500 text-xs">
+                          {p.name} × {p.quantity} — {formatPHP(p.unitCost * p.quantity)}
+                        </p>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
