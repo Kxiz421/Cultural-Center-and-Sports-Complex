@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+  import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 const STATUS_NAMES = {
@@ -17,7 +17,7 @@ export async function GET() {
     const items = await prisma.particular.findMany({
       include: {
         inventory: {
-          select: { itemId: true, itemName: true, quantityAvailable: true },
+          select: { itemId: true, itemName: true, quantityAvailable: true, unitCost: true },
         },
       },
       orderBy: { particularId: "asc" },
@@ -30,6 +30,7 @@ export async function GET() {
       description: item.description || "",
       category: item.category || "",
       totalQuantity: item.inventory?.quantityAvailable ?? 0,
+      unitCost: item.inventory?.unitCost ? Number(item.inventory.unitCost) : 0,
       inventoryName: item.inventory?.itemName || "",
       statusId: item.statusId,
       statusName: getStatusName(item.statusId),

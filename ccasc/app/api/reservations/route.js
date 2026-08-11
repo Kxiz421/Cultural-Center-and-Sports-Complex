@@ -29,8 +29,13 @@ export async function GET(request) {
         },
         reservedParticulars: {
           include: {
-            particular: { select: { particularName: true } },
+            particular: { 
+              select: { particularName: true, inventory: { select: { unitCost: true } } }
+            },
           },
+        },
+        additionalDates: {
+          select: { eventDate: true },
         },
       },
       orderBy: { submittedAt: "desc" },
@@ -48,6 +53,10 @@ export async function GET(request) {
       .filter((r) => clientMap[r.clientId] !== undefined) // Skip orphaned
       .map((r) => {
         const client = clientMap[r.clientId];
+        const allDates = [
+          r.eventDate.toISOString().split("T")[0],
+          ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
+        ];
         return {
           id: `RES-${r.reservationId}`,
           clientId: r.clientId,
@@ -56,6 +65,7 @@ export async function GET(request) {
           venue: r.venue.venue,
           eventType: r.eventType,
           eventDate: r.eventDate.toISOString().split("T")[0],
+          eventDates: allDates,
           timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
           status: r.reservationStatus,
           submittedAt: r.submittedAt.toISOString(),
@@ -63,7 +73,12 @@ export async function GET(request) {
           bookingVenueId: r.bookings[0]?.venueId || null,
           amountPaid: r.bookings.reduce((sum, b) => 
             sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0), 0),
-          particulars: r.reservedParticulars.map((rp) => rp.particular.particularName),
+          totalAmount: r.totalAmount ? Number(r.totalAmount) : null,
+          particulars: r.reservedParticulars.map((rp) => ({
+            name: rp.particular.particularName,
+            quantity: rp.quantity,
+            unitCost: rp.particular.inventory?.unitCost ? Number(rp.particular.inventory.unitCost) : 0,
+          })),
           notes: r.notes || null,
         };
       });
@@ -80,7 +95,8 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { venueId, eventType, eventDate, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail } = await request.json();
+    const body = await request.json();
+    const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars } = body;
 
     if (!venueId || !eventType || !eventDate || !timeSlotId || !clientId) {
       return NextResponse.json(
@@ -89,23 +105,130 @@ export async function POST(request) {
       );
     }
 
+    // Build the full list of dates including additional dates
+    const primaryDate = new Date(eventDate);
+    const additionalDates = (eventDates || [])
+      .filter((d) => d !== eventDate) // exclude the primary date
+      .map((d) => new Date(d));
+    const allDates = [primaryDate, ...additionalDates];
+
+    // CONFLICT CHECK: Check if any of the dates are already booked for this venue
+    // Check against confirmed/pending reservations
+    const conflictingReservations = await prisma.reservation.findMany({
+      where: {
+        venueId: parseInt(venueId, 10),
+        reservationStatus: { in: ["Pending", "Confirmed"] },
+        OR: [
+          { eventDate: { in: allDates } },
+          {
+            additionalDates: {
+              some: { eventDate: { in: allDates } },
+            },
+          },
+        ],
+      },
+      select: { eventDate: true, additionalDates: { select: { eventDate: true } } },
+    });
+
+    // Check against calendar blocks
+    const calendarBlocks = await prisma.calendarBlock.findMany({
+      where: {
+        venueId: parseInt(venueId, 10),
+        blockDate: { in: allDates },
+      },
+      select: { blockDate: true },
+    });
+
+    // Collect all conflicting dates
+    const conflictDates = new Set();
+    for (const r of conflictingReservations) {
+      conflictDates.add(r.eventDate.toISOString().split("T")[0]);
+      for (const ad of r.additionalDates) {
+        conflictDates.add(ad.eventDate.toISOString().split("T")[0]);
+      }
+    }
+    for (const b of calendarBlocks) {
+      conflictDates.add(b.blockDate.toISOString().split("T")[0]);
+    }
+
+    if (conflictDates.size > 0) {
+      return NextResponse.json({
+        error: `The following dates are already booked: ${[...conflictDates].join(", ")}`,
+        conflictDates: [...conflictDates],
+      }, { status: 409 });
+    }
+
     const isWalkIn = notes && notes.startsWith("Walk-in client:");
     const parsedClientId = parseInt(clientId, 10);
     const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
     const venueName = venueNames[parseInt(venueId, 10)] || "Unknown Venue";
 
+    // Calculate total amount
+    let totalAmount = 0;
+
+    // Package rate * number of days
+    const selectedPackage = packageId && parseInt(packageId, 10) > 0
+      ? await prisma.package.findUnique({ where: { packageId: parseInt(packageId, 10) } })
+      : null;
+
+    if (selectedPackage) {
+      const rate = parseInt(timeSlotId, 10) === 1
+        ? Number(selectedPackage.dayRate || 0)
+        : Number(selectedPackage.nightRate || 0);
+      totalAmount += rate * allDates.length;
+    }
+
+    // Particulars cost
+    let particularsData = [];
+    if (particulars && Array.isArray(particulars) && particulars.length > 0) {
+      for (const p of particulars) {
+        if (p.particularId && p.quantity > 0) {
+          const particular = await prisma.particular.findUnique({
+            where: { particularId: parseInt(p.particularId, 10) },
+            include: { inventory: { select: { unitCost: true } } },
+          });
+          if (particular) {
+            const unitCost = particular.inventory?.unitCost
+              ? Number(particular.inventory.unitCost)
+              : 0;
+            totalAmount += unitCost * p.quantity;
+            particularsData.push({
+              particularId: parseInt(p.particularId, 10),
+              quantity: p.quantity,
+            });
+          }
+        }
+      }
+    }
+
+    // Create the reservation with all dates and particulars
     const reservation = await prisma.reservation.create({
       data: {
         venueId: parseInt(venueId, 10),
         eventType,
-        eventDate: new Date(eventDate),
+        eventDate: primaryDate,
         timeSlotId: parseInt(timeSlotId, 10),
         packageId: packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null,
         clientId: parsedClientId,
         reservationStatus: "Pending",
         eventStatus: "Upcoming",
+        totalAmount: totalAmount > 0 ? totalAmount : null,
         submittedAt: new Date(),
         notes: notes || null,
+        // Create additional dates
+        additionalDates: additionalDates.length > 0
+          ? { create: additionalDates.map((d) => ({ eventDate: d })) }
+          : undefined,
+        // Create reserved particulars
+        reservedParticulars: particularsData.length > 0
+          ? { create: particularsData }
+          : undefined,
+      },
+      include: {
+        additionalDates: true,
+        reservedParticulars: {
+          include: { particular: { select: { particularName: true } } },
+        },
       },
     });
 
@@ -125,7 +248,8 @@ export async function POST(request) {
         select: { clientId: true },
       });
 
-      const pdaNotificationMessage = `New walk-in reservation: ${displayName} booked ${venueName} for "${eventType}" on ${eventDate} (${timeSlotName}).`;
+      const dateList = allDates.map((d) => d.toISOString().split("T")[0]).join(", ");
+      const pdaNotificationMessage = `New walk-in reservation: ${displayName} booked ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}).`;
 
       for (const agency of provincialAgencies) {
         await prisma.notification.create({
@@ -142,7 +266,7 @@ export async function POST(request) {
       // 2. Notify the client about their new reservation
       await prisma.notification.create({
         data: {
-          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${eventDate} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}`,
+          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}`,
           type: "booking",
           staffId: 1,
           clientId: parsedClientId,
@@ -153,6 +277,12 @@ export async function POST(request) {
 
     return NextResponse.json({
       id: reservationId,
+      totalAmount,
+      dates: allDates.map((d) => d.toISOString().split("T")[0]),
+      particulars: reservation.reservedParticulars.map((rp) => ({
+        name: rp.particular.particularName,
+        quantity: rp.quantity,
+      })),
       message: "Reservation created successfully",
     }, { status: 201 });
   } catch (error) {
