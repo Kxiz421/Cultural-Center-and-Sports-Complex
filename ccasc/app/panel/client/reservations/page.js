@@ -381,9 +381,10 @@ export default function ClientReservationsPage() {
                   <p className="text-sm text-muted-foreground">No particulars available.</p>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
-                    {particulars.map((p) => {
+                      {particulars.map((p) => {
                       const qty = particularQuantities[p.particularId] || 0;
                       const cost = p.unitCost ? Number(p.unitCost) : 0;
+                      const maxQty = p.totalQuantity || 999;
                       return (
                         <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
                           <div className="flex-1">
@@ -391,6 +392,9 @@ export default function ClientReservationsPage() {
                             {cost > 0 && (
                               <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
                             )}
+                            <p className="text-xs text-muted-foreground">
+                              Available: {maxQty}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -410,6 +414,7 @@ export default function ClientReservationsPage() {
                               size="icon"
                               className="size-7"
                               onClick={() => updateParticularQty(p.particularId, 1)}
+                              disabled={qty >= maxQty}
                             >
                               <Plus className="size-3" />
                             </Button>
