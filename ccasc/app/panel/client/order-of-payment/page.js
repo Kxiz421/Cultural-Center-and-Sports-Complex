@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Printer, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-export default function OrderOfPaymentPage() {
+function OrderOfPaymentContent() {
   const searchParams = useSearchParams();
   const reservationId = searchParams.get("id");
   const [data, setData] = React.useState(null);
@@ -72,7 +73,6 @@ export default function OrderOfPaymentPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Print Controls - hidden when printing */}
       <div className="flex items-center justify-between no-print">
         <Link href="/panel/client/reservations">
           <Button variant="ghost" size="sm">
@@ -86,10 +86,8 @@ export default function OrderOfPaymentPage() {
         </Button>
       </div>
 
-      {/* Order of Payment Document */}
       <Card className="print:shadow-none print:border-0">
         <CardContent className="p-8">
-          {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold tracking-tight">Republic of the Philippines</h1>
             <h2 className="text-xl font-semibold mt-1">Provincial Government of South Cotabato</h2>
@@ -100,7 +98,6 @@ export default function OrderOfPaymentPage() {
             <p className="text-sm text-muted-foreground">Reference No: {data.id}</p>
           </div>
 
-          {/* Client Info */}
           <div className="mb-6">
             <h5 className="font-semibold mb-2">Client Information</h5>
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -123,7 +120,6 @@ export default function OrderOfPaymentPage() {
             </div>
           </div>
 
-          {/* Event Dates */}
           <div className="mb-6">
             <h5 className="font-semibold mb-2">Event Dates</h5>
             <ul className="list-disc list-inside text-sm space-y-1">
@@ -136,7 +132,6 @@ export default function OrderOfPaymentPage() {
             </p>
           </div>
 
-          {/* Charges Breakdown */}
           <div className="mb-6">
             <h5 className="font-semibold mb-2">Charges Breakdown</h5>
             <table className="w-full text-sm">
@@ -176,7 +171,6 @@ export default function OrderOfPaymentPage() {
             </table>
           </div>
 
-          {/* Payment Instructions */}
           <div className="text-sm text-muted-foreground space-y-1">
             <p><strong>Payment Instructions:</strong></p>
             <p>Please present this Order of Payment to the Accounting Office to process your payment.</p>
@@ -199,5 +193,17 @@ export default function OrderOfPaymentPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function OrderOfPaymentPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    }>
+      <OrderOfPaymentContent />
+    </Suspense>
   );
 }
