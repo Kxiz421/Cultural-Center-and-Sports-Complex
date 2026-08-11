@@ -55,6 +55,7 @@ export async function GET(request) {
           return {
             id: r.reservationId,
             reservationId: r.reservationId,
+            clientId: r.clientId,
             clientName: `${client.firstName} ${client.lastName}`,
             clientType: client.clientRole?.clientRoleId === "PROV" ? "provincial-agency" : "client",
             eventType: r.eventType,

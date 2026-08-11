@@ -24,25 +24,30 @@ export default function ClientDocumentsPage() {
   const [docType, setDocType] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [reservations, setReservations] = React.useState([]);
+  const [bookings, setBookings] = React.useState([]);
   const [selectedBookingId, setSelectedBookingId] = React.useState("");
 
-  // Fetch user's reservations for booking selector
+  // Fetch user's bookings (reservations with LTOO payments recorded)
   React.useEffect(() => {
-    async function fetchReservations() {
+    async function fetchBookings() {
       try {
         const userId = localStorage.getItem("user_id");
         if (!userId) return;
         // Strip "CLT-" prefix from user_id if present
         const cleanId = (userId || "").replace("CLT-", "");
-        const res = await fetch(`/api/reservations?clientId=${cleanId}`);
+        const res = await fetch(`/api/ltoo/payments?bookings=true`);
         const data = await res.json();
-        setReservations(Array.isArray(data) ? data : []);
+        // Filter to only show bookings that have been recorded by LTOO (hasBooking: true)
+        // and match the current client
+        const userBookings = Array.isArray(data)
+          ? data.filter((b) => b.hasBooking && String(b.reservationId) === cleanId)
+          : [];
+        setBookings(userBookings);
       } catch (err) {
-        console.error("Failed to load reservations:", err);
+        console.error("Failed to load bookings:", err);
       }
     }
-    fetchReservations();
+    fetchBookings();
   }, []);
 
   const handleFileSelect = (e) => {
@@ -72,15 +77,17 @@ export default function ClientDocumentsPage() {
       toast.error("Please select an image and document type");
       return;
     }
+    if (!selectedBookingId) {
+      toast.error("Please select a booking to link this document");
+      return;
+    }
 
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append("documentTypeId", docType);
       formData.append("file", file);
-      if (selectedBookingId && selectedBookingId !== "none") {
-        formData.append("reservationId", selectedBookingId);
-      }
+      formData.append("reservationId", selectedBookingId);
 
       const res = await fetch("/api/documents", {
         method: "POST",
@@ -133,7 +140,7 @@ export default function ClientDocumentsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Documents</h2>
         <p className="text-muted-foreground text-sm">
-          Upload and track required documents for your reservations. Documents are routed to the appropriate officer.
+          Upload and track required documents for your bookings. Documents are routed to the appropriate officer.
         </p>
       </div>
 
@@ -182,26 +189,32 @@ export default function ClientDocumentsPage() {
               </div>
             </div>
 
-            {/* Booking/Reservation Selector */}
+            {/* Booking Selector - Required */}
             <div className="space-y-2">
-              <Label htmlFor="booking-select">Link to Reservation (Optional)</Label>
+              <Label htmlFor="booking-select">
+                Link to Booking <span className="text-red-500">*</span>
+              </Label>
               <Select value={selectedBookingId} onValueChange={setSelectedBookingId}>
                 <SelectTrigger id="booking-select">
-                  <SelectValue placeholder="Select a reservation to link this document" />
+                  <SelectValue placeholder="Select a booking to link this document" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None (standalone document)</SelectItem>
-                  {reservations.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.venue} - {r.eventDate} ({r.eventType})
+                  {bookings.length === 0 && (
+                    <SelectItem value="no-bookings" disabled>
+                      No bookings found
+                    </SelectItem>
+                  )}
+                  {bookings.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.venue} - {b.eventDate} ({b.eventType})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {selectedBookingId && selectedBookingId !== "none" && (
+              {selectedBookingId && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Calendar className="size-3" />
-                  Document will be linked to this reservation
+                  Document will be linked to this booking
                 </p>
               )}
             </div>
@@ -216,7 +229,7 @@ export default function ClientDocumentsPage() {
               </div>
             )}
 
-            <Button type="submit" disabled={uploading || !file || !docType}>
+            <Button type="submit" disabled={uploading || !file || !docType || !selectedBookingId}>
               <Upload className="mr-2 size-4" />
               {uploading ? "Uploading..." : "Upload Document"}
             </Button>
