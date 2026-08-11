@@ -5,14 +5,14 @@ export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
 
-// LTOO sees only Billing Statement (1) and Official Receipt (5)
-const LTOO_DOCUMENT_TYPES = [1, 5];
+// Program Coordinator sees only Contract of Lease (2), Certification (3), and Request Letter (4)
+const COORDINATOR_DOCUMENT_TYPES = [2, 3, 4];
 
 export async function GET() {
   try {
     const documents = await prisma.document.findMany({
       where: {
-        documentTypeId: { in: LTOO_DOCUMENT_TYPES },
+        documentTypeId: { in: COORDINATOR_DOCUMENT_TYPES },
       },
       include: {
         booking: {
@@ -61,7 +61,7 @@ export async function GET() {
         documentId: d.documentId,
         clientName,
         clientType,
-        documentType: d.documentType?.type || "Billing Statement",
+        documentType: d.documentType?.type || "Document",
         documentStatus: d.documentStatus || "Pending",
         filePath: d.filePath,
         remarks: d.remarks,
@@ -71,7 +71,7 @@ export async function GET() {
 
     return NextResponse.json(mapped);
   } catch (error) {
-    console.error("Documents GET error:", error);
+    console.error("Coordinator documents GET error:", error);
     return NextResponse.json(
       { error: "Failed to load documents" },
       { status: 500 }
