@@ -5,6 +5,13 @@ export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
 
+// Helper to add days to a date
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -31,7 +38,7 @@ export async function GET(request) {
           bookings: {
             include: {
               payments: {
-                select: { amountPaid: true },
+                select: { amountPaid: true, paymentType: true, forfeited: true },
               },
             },
           },
@@ -51,11 +58,17 @@ export async function GET(request) {
         .filter((r) => clientMap[r.clientId] !== undefined)
         .map((r) => {
           const client = clientMap[r.clientId];
-          // Calculate total paid so far
+          // Calculate total paid so far (excluding forfeited)
           const totalPaid = r.bookings.reduce(
-            (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
+            (sum, b) => sum + b.payments.filter(p => !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0),
             0
           );
+          // Calculate down payment and deposit paid
+          const downPaymentPaid = r.bookings.reduce((sum, b) =>
+            sum + b.payments.filter(p => p.paymentType === "DOWN_PAYMENT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+          const depositPaid = r.bookings.reduce((sum, b) =>
+            sum + b.payments.filter(p => p.paymentType === "DEPOSIT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+
           // Calculate total amount from reservation (includes multi-day × rate + particulars)
           const numDays = 1 + r.additionalDates.length;
           const pkgRate = r.package?.dayRate
@@ -75,6 +88,16 @@ export async function GET(request) {
             : (pkgTotal + particularsTotal);
           // Calculate balance
           const balance = totalAmount - totalPaid;
+
+          // Required payments
+          const requiredDownPayment = r.requiredDownPayment ? Number(r.requiredDownPayment) : (totalAmount * 0.5);
+          const requiredDeposit = r.requiredDeposit ? Number(r.requiredDeposit) : (totalAmount * 0.1);
+
+          // Check payment compliance
+          const downPaymentMet = downPaymentPaid >= requiredDownPayment;
+          const depositMet = depositPaid >= requiredDeposit;
+          const paymentStatus = r.paymentStatus;
+
           return {
             id: r.reservationId,
             reservationId: r.reservationId,
@@ -97,6 +120,19 @@ export async function GET(request) {
             balance: Math.max(0, balance),
             balanceRemaining: Math.max(0, balance),
             hasBooking: r.bookings.length > 0,
+            // Payment policy fields
+            paymentStatus: paymentStatus,
+            requiredDownPayment: requiredDownPayment,
+            requiredDeposit: requiredDeposit,
+            downPaymentPaid: downPaymentPaid,
+            depositPaid: depositPaid,
+            downPaymentMet: downPaymentMet,
+            depositMet: depositMet,
+            downPaymentDeadline: r.downPaymentDeadline ? r.downPaymentDeadline.toISOString().split("T")[0] : null,
+            balanceDeadline: r.balanceDeadline ? r.balanceDeadline.toISOString().split("T")[0] : null,
+            cancellationDeadline: r.cancellationDeadline ? r.cancellationDeadline.toISOString().split("T")[0] : null,
+            isFinal: r.isFinal,
+            calendarVisible: r.calendarVisible,
             particulars: r.reservedParticulars.map((rp) => ({
               name: rp.particular.particularName,
               quantity: rp.quantity,
@@ -143,6 +179,8 @@ export async function GET(request) {
       totalAmount: Number(p.amountPaid),
       amountPaid: Number(p.amountPaid),
       paymentStatus: p.status?.status || "Partially Paid",
+      paymentType: p.paymentType || "FULL",
+      forfeited: p.forfeited,
       activityName: p.booking?.reservation?.eventType || "",
       createdAt: p.transactions?.[0]?.paymentDate || p.booking?.confirmationDate,
     }));
@@ -172,6 +210,7 @@ export async function POST(request) {
       orNumber,
       selectedBookingId,
       paymentStatus,
+      paymentType, // "DOWN_PAYMENT", "DEPOSIT", "BALANCE", "FULL"
       performedBy,
       performedByName,
     } = body;
@@ -184,6 +223,7 @@ export async function POST(request) {
     }
 
     const amount = parseFloat(totalAmount);
+    const typeToUse = paymentType || "FULL";
     const statusToUse =
       clientType === "provincial" ? "Fully Paid" : paymentStatus || "Partially Paid";
 
@@ -220,6 +260,8 @@ export async function POST(request) {
           timeSlotId: 1,
           notes: `Payment recorded by LTOO. Client: ${clientName}, Company: ${company || "N/A"}, Address: ${address || "N/A"}, Contact: ${contactNumber || "N/A"}`,
           submittedAt: new Date(),
+          paymentStatus: "Pending",
+          calendarVisible: false,
         },
       });
 
@@ -245,14 +287,6 @@ export async function POST(request) {
 
     bookingId = existingBooking.bookingId;
 
-    // Update booking status if Fully Paid
-    if (statusToUse === "Fully Paid") {
-      await prisma.booking.update({
-        where: { bookingId: bookingId },
-        data: { bookingStatusId: 2 },
-      });
-    }
-
     // Create payment
     const payment = await prisma.payment.create({
       data: {
@@ -260,6 +294,8 @@ export async function POST(request) {
         paymentStatusId: paymentStatusRecord.statusId,
         bookingId: bookingId,
         staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+        paymentType: typeToUse,
+        forfeited: false,
       },
     });
 
@@ -274,6 +310,73 @@ export async function POST(request) {
       },
     });
 
+    // Update reservation payment status and calendar visibility based on payment type
+    const reservation = await prisma.reservation.findUnique({
+      where: { reservationId: reservationId },
+      include: {
+        bookings: {
+          include: {
+            payments: {
+              select: { amountPaid: true, paymentType: true, forfeited: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (reservation) {
+      const totalAmount = reservation.totalAmount ? Number(reservation.totalAmount) : 0;
+      const requiredDownPayment = reservation.requiredDownPayment ? Number(reservation.requiredDownPayment) : (totalAmount * 0.5);
+      const requiredDeposit = reservation.requiredDeposit ? Number(reservation.requiredDeposit) : (totalAmount * 0.1);
+
+      // Calculate what's been paid
+      const downPaymentPaid = reservation.bookings.reduce((sum, b) =>
+        sum + b.payments.filter(p => p.paymentType === "DOWN_PAYMENT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+      const depositPaid = reservation.bookings.reduce((sum, b) =>
+        sum + b.payments.filter(p => p.paymentType === "DEPOSIT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+      const totalPaid = reservation.bookings.reduce((sum, b) =>
+        sum + b.payments.filter(p => !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+
+      // Determine payment status
+      let newPaymentStatus = "Pending";
+      let newCalendarVisible = false;
+
+      const downPaymentMet = downPaymentPaid >= requiredDownPayment;
+      const depositMet = depositPaid >= requiredDeposit;
+      const balanceSettled = totalPaid >= totalAmount;
+
+      if (typeToUse === "DOWN_PAYMENT" && downPaymentMet) {
+        newPaymentStatus = "DownPaymentPaid";
+      }
+      if (depositMet) {
+        newPaymentStatus = newPaymentStatus === "DownPaymentPaid" ? "DepositPaid" : "Pending";
+      }
+      if (downPaymentMet && depositMet) {
+        newPaymentStatus = "DepositPaid";
+        newCalendarVisible = true; // Show on calendar once down payment + deposit are received
+      }
+      if (balanceSettled) {
+        newPaymentStatus = "BalanceSettled";
+        newCalendarVisible = true;
+      }
+
+      await prisma.reservation.update({
+        where: { reservationId: reservationId },
+        data: {
+          paymentStatus: newPaymentStatus,
+          calendarVisible: newCalendarVisible,
+        },
+      });
+
+      // Update booking status if fully paid
+      if (typeToUse === "BALANCE" && balanceSettled) {
+        await prisma.booking.update({
+          where: { bookingId: bookingId },
+          data: { bookingStatusId: 2 }, // Booked/Confirmed
+        });
+      }
+    }
+
     // Create audit log
     await prisma.auditLog.create({
       data: {
@@ -282,7 +385,7 @@ export async function POST(request) {
         targetName: clientName,
         performedById: performedBy || "LTOO",
         performedByName: performedByName || "Local Treasury Operations Officer",
-        details: `Payment of ${amount} recorded. OR: ${orNumber}. Status: ${statusToUse}`,
+        details: `Payment of ${amount} recorded. OR: ${orNumber}. Type: ${typeToUse}. Status: ${statusToUse}`,
       },
     });
 

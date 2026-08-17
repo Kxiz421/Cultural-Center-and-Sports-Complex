@@ -52,6 +52,17 @@ export async function GET() {
     // Transform reservations into calendar events, skip orphaned
     const events = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
+      .filter((r) => {
+        // Payment policy: Only show reservations that are calendarVisible
+        // Cancelled/Forfeited reservations are hidden
+        if (r.reservationStatus === "Cancelled") return false;
+        if (r.paymentStatus === "Forfeited") return false;
+        
+        // Only show if calendarVisible is true (down payment + deposit received)
+        // Or if the reservation is from before the policy was implemented (null = legacy)
+        if (r.calendarVisible === null) return true; // Legacy reservations
+        return r.calendarVisible === true;
+      })
       .map((r) => {
         const client = clientMap[r.clientId];
         // Get the latest non-cancelled booking's status
@@ -71,6 +82,7 @@ export async function GET() {
           clientName: `${client.firstName} ${client.lastName}`,
           packageName: r.package?.packageName || null,
           bookingStatus: bookingStatus,
+          paymentStatus: r.paymentStatus,
         };
       });
 

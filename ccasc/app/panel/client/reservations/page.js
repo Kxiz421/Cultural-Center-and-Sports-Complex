@@ -10,12 +10,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer } from "lucide-react";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer, Info } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
+
+// Helper to get min date (7 days from today)
+function getMinDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split("T")[0];
+}
 
 export default function ClientReservationsPage() {
   const [form, setForm] = React.useState({
@@ -35,6 +42,10 @@ export default function ClientReservationsPage() {
   const [particularQuantities, setParticularQuantities] = React.useState({});
   const [lastReservationId, setLastReservationId] = React.useState(null);
   const [lastTotalAmount, setLastTotalAmount] = React.useState(0);
+  const [lastDownPayment, setLastDownPayment] = React.useState(0);
+  const [lastDeposit, setLastDeposit] = React.useState(0);
+  const [lastDownPaymentDeadline, setLastDownPaymentDeadline] = React.useState("");
+  const [lastBalanceDeadline, setLastBalanceDeadline] = React.useState("");
 
   // Load packages and particulars
   React.useEffect(() => {
@@ -92,6 +103,12 @@ export default function ClientReservationsPage() {
 
   const toggleDate = (dateStr) => {
     if (!availability[dateStr]?.available) return;
+    // Also check 7-day minimum
+    const minDate = getMinDate();
+    if (dateStr < minDate) {
+      toast.error(`Reservations must be at least 7 days in advance. Earliest available date is ${minDate}.`);
+      return;
+    }
     setSelectedDates((prev) => {
       const next = new Set(prev);
       if (next.has(dateStr)) next.delete(dateStr);
@@ -145,6 +162,18 @@ export default function ClientReservationsPage() {
     return total;
   };
 
+  const calculatePayments = () => {
+    const total = calculateTotal();
+    return {
+      total,
+      downPayment: total * 0.5,
+      deposit: total * 0.1,
+      balance: total * 0.4,
+    };
+  };
+
+  const payments = calculatePayments();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -162,6 +191,15 @@ export default function ClientReservationsPage() {
     if (selectedDates.size === 0) {
       toast.error("Please select at least one date");
       return;
+    }
+
+    // Validate all selected dates against 7-day rule
+    const minDate = getMinDate();
+    for (const dateStr of selectedDates) {
+      if (dateStr < minDate) {
+        toast.error(`All selected dates must be at least 7 days from today. Earliest available date is ${minDate}.`);
+        return;
+      }
     }
 
     const sortedDates = [...selectedDates].sort();
@@ -200,6 +238,10 @@ export default function ClientReservationsPage() {
       const data = await res.json();
       setLastReservationId(data.id);
       setLastTotalAmount(data.totalAmount || 0);
+      setLastDownPayment(data.requiredDownPayment || (data.totalAmount * 0.5) || 0);
+      setLastDeposit(data.requiredDeposit || (data.totalAmount * 0.1) || 0);
+      setLastDownPaymentDeadline(data.downPaymentDeadline || "");
+      setLastBalanceDeadline(data.balanceDeadline || "");
       toast.success(`Reservation ${data.id} created! Total: ₱${Number(data.totalAmount || 0).toLocaleString()}`);
       setForm({
         venueId: "",
@@ -223,6 +265,7 @@ export default function ClientReservationsPage() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const minDate = getMinDate();
 
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
@@ -257,21 +300,26 @@ export default function ClientReservationsPage() {
             const isAvailable = avail?.available && !avail?.isPast;
             const isBlocked = avail?.blocked || avail?.isPast;
             const isPast = avail?.isPast || day.dt < today;
+            // Also block dates within 7-day window
+            const withinSevenDays = day.key < minDate;
 
             return (
               <button
                 key={day.key}
                 type="button"
-                disabled={!isAvailable}
+                disabled={!isAvailable || withinSevenDays}
                 onClick={() => toggleDate(day.key)}
                 className={`
                   py-2 rounded-md text-sm transition-colors
                   ${isSelected ? "bg-primary text-white font-semibold" : ""}
-                  ${isAvailable && !isSelected ? "hover:bg-primary/10 cursor-pointer" : ""}
-                  ${isBlocked || isPast ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
-                  ${!isBlocked && !isPast && !isSelected ? "text-foreground" : ""}
+                  ${isAvailable && !isSelected && !withinSevenDays ? "hover:bg-primary/10 cursor-pointer" : ""}
+                  ${isBlocked || isPast || withinSevenDays ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
+                  ${!isBlocked && !isPast && !isSelected && !withinSevenDays ? "text-foreground" : ""}
                 `}
-                title={isBlocked ? (avail?.reason || "Unavailable") : day.key}
+                title={
+                  withinSevenDays ? "Must be at least 7 days from today" :
+                  isBlocked ? (avail?.reason || "Unavailable") : day.key
+                }
               >
                 {day.date}
               </button>
@@ -299,9 +347,29 @@ export default function ClientReservationsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">New Reservation</h2>
         <p className="text-muted-foreground text-sm">
-          Fill in the details below to create a new reservation request. Select multiple dates if needed.
+          Fill in the details below to create a new reservation request. Reservations must be at least 7 days in advance.
         </p>
       </div>
+
+      {/* Payment Policy Notice */}
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Info className="size-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold mb-1">Payment Policy</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong>7-day advance booking</strong> required</li>
+                <li><strong>50% Down Payment</strong> + <strong>10% Deposit</strong> (total 60%) due within the 7-day window</li>
+                <li>10% deposit covers damages and extended time</li>
+                <li>Remaining <strong>40% balance</strong> due <strong>2 days before</strong> the event</li>
+                <li>Reservation appears on calendar only after down payment + deposit are received</li>
+                <li>Cancellations <strong>30+ days</strong> before event = refundable. Less than 30 days = forfeiture of payments</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -372,7 +440,7 @@ export default function ClientReservationsPage() {
             {/* Date Picker - Calendar Grid */}
             <div className="space-y-2">
               <Label>Select Dates <span className="text-red-500">*</span></Label>
-              <p className="text-xs text-muted-foreground">Click on available dates to select them. Blocked dates are unavailable.</p>
+              <p className="text-xs text-muted-foreground">Dates must be at least 7 days from today. Click on available dates to select them.</p>
               {form.venueId ? renderCalendar() : (
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
@@ -497,6 +565,28 @@ export default function ClientReservationsPage() {
                   <span>Total</span>
                   <span className="tabular-nums">₱{total.toLocaleString()}</span>
                 </div>
+
+                {/* Payment Schedule */}
+                {total > 0 && (
+                  <>
+                    <Separator className="border-amber-200" />
+                    <div className="bg-amber-50 rounded-md p-3 space-y-1">
+                      <p className="font-semibold text-amber-800 text-xs">Required Payment Schedule</p>
+                      <div className="flex justify-between text-amber-700">
+                        <span>50% Down Payment</span>
+                        <span className="font-medium">₱{payments.downPayment.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-700">
+                        <span>10% Deposit (Damages/Extension)</span>
+                        <span className="font-medium">₱{payments.deposit.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-700">
+                        <span>40% Balance (due 2 days before event)</span>
+                        <span className="font-medium">₱{payments.balance.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -513,7 +603,7 @@ export default function ClientReservationsPage() {
           <DialogHeader>
             <DialogTitle>Reservation Submitted!</DialogTitle>
             <DialogDescription>
-              Your reservation has been created successfully. You can view and print your Order of Payment below.
+              Your reservation has been created successfully. Review the payment schedule below.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-4">
@@ -522,6 +612,29 @@ export default function ClientReservationsPage() {
             </p>
             <p className="text-sm text-muted-foreground">
               Total Amount: <span className="font-bold text-foreground">₱{lastTotalAmount.toLocaleString()}</span>
+            </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="font-semibold text-amber-800 text-sm mb-2">Payment Deadlines</p>
+              <div className="space-y-1 text-sm text-amber-700">
+                <div className="flex justify-between">
+                  <span>50% Down Payment (₱{(lastTotalAmount * 0.5).toLocaleString()})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>10% Deposit (₱{(lastTotalAmount * 0.1).toLocaleString()})</span>
+                </div>
+                <div className="flex justify-between text-amber-800 font-medium">
+                  <span>Total Due: ₱{(lastTotalAmount * 0.6).toLocaleString()}</span>
+                </div>
+                {lastDownPaymentDeadline && (
+                  <p className="text-xs text-amber-600 mt-1">Due by: {lastDownPaymentDeadline}</p>
+                )}
+                {lastBalanceDeadline && (
+                  <p className="text-xs text-amber-600">Balance due by: {lastBalanceDeadline}</p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your reservation will be visible on the calendar once the 50% down payment and 10% deposit are received.
             </p>
           </div>
           <DialogFooter className="flex gap-2 sm:justify-between">
