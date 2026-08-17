@@ -43,6 +43,9 @@ import {
   Building2,
   Info,
   DollarSign,
+  CalendarDays,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 function formatPHP(amount) {
@@ -61,7 +64,6 @@ function generateORNumber() {
 
 export default function LTOOPaymentsPage() {
   const [reservations, setReservations] = React.useState([]);
-  const [payments, setPayments] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [paymentFilter, setPaymentFilter] = React.useState("all");
@@ -72,133 +74,101 @@ export default function LTOOPaymentsPage() {
   const [paymentAmount, setPaymentAmount] = React.useState("");
   const [paymentStatus, setPaymentStatus] = React.useState("Partially Paid");
   const [orNumber, setOrNumber] = React.useState(generateORNumber());
-  const [detailsOpen, setDetailsOpen] = React.useState(false);
-  const [selectedPayment, setSelectedPayment] = React.useState(null);
 
   React.useEffect(() => {
-    async function loadData() {
-      try {
-        const [payRes, bookRes] = await Promise.all([
-          fetch("/api/ltoo/payments"),        // Payment records
-          fetch("/api/ltoo/payments?bookings=true"), // Reservations with payment status
-        ]);
-        const payData = await payRes.json();
-        const bookData = await bookRes.json();
-        setPayments(Array.isArray(payData) ? payData : []);
-        setReservations(Array.isArray(bookData) ? bookData : []);
-      } catch (err) {
-        console.error("Failed to load data:", err);
-        toast.error("Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
+    loadReservations();
   }, []);
 
-  // Merge reservations into the display list
-  const displayItems = React.useMemo(() => {
-    const items = [];
+  async function loadReservations() {
+    setLoading(true);
+    try {
+      // Get all reservations with payment info from the bookings endpoint
+      const res = await fetch("/api/ltoo/payments?bookings=true");
+      const data = await res.json();
+      setReservations(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    // Add payment records (for Paid/Partially Paid history)
-    payments.forEach((p) => {
-      items.push({
-        type: "payment",
-        id: p.paymentId || p.id,
-        key: `pay-${p.paymentId || p.id}`,
-        clientName: p.clientName,
-        clientType: p.clientType,
-        activityName: p.activityName || "",
-        orNumber: p.orNumber,
-        amount: p.totalAmount || p.amountPaid || 0,
-        paymentStatus: p.paymentStatus || "Partially Paid",
-        createdAt: p.createdAt,
-        reservationId: null,
-        canRecord: false,
-      });
+  // Compute payment breakdown for each reservation
+  const enrichedReservations = React.useMemo(() => {
+    return reservations.map((r) => {
+      const totalAmt = r.totalAmount || 0;
+      const totalPaid = r.totalPaid || 0;
+      const requiredDownPayment = totalAmt * 0.5;
+      const requiredDeposit = totalAmt * 0.1;
+      const requiredTotal = requiredDownPayment + requiredDeposit; // 60%
+
+      const downPaymentMet = totalPaid >= requiredDownPayment;
+      const depositMet = totalPaid >= requiredTotal; // 50% + 10%
+      const balanceSettled = totalPaid >= totalAmt;
+
+      let status = "Pending";
+      if (totalPaid <= 0) status = "No Payment";
+      else if (totalPaid >= totalAmt) status = "Fully Paid";
+      else if (totalPaid >= requiredTotal) status = "DepositPaid";
+      else if (totalPaid >= requiredDownPayment) status = "DownPaymentPaid";
+      else status = "IncompletePayment";
+
+      return {
+        ...r,
+        requiredDownPayment,
+        requiredDeposit,
+        downPaymentMet,
+        depositMet,
+        balanceSettled,
+        computedStatus: status,
+        remainingBalance: Math.max(0, totalAmt - totalPaid),
+      };
     });
+  }, [reservations]);
 
-    // Add reservations with no payments (Unpaid)
-    reservations
-      .filter((r) => {
-        // Only show if no payment records exist yet (or totalPaid is 0)
-        const hasPaymentRecord = payments.some(
-          (p) => String(p.booking?.reservationId || p.reservationId) === String(r.reservationId)
-        );
-        return !hasPaymentRecord || r.totalPaid <= 0;
-      })
-      .forEach((r) => {
-        items.push({
-          type: "reservation",
-          id: r.reservationId,
-          key: `res-${r.reservationId}`,
-          clientName: r.clientName,
-          clientType: r.clientType === "provincial-agency" ? "provincial" : r.clientType,
-          activityName: r.eventType || "",
-          orNumber: "",
-          amount: r.totalPaid || 0,
-          paymentStatus: r.totalPaid <= 0 ? "No Payment" : (r.paymentStatus || "Pending"),
-          createdAt: null,
-          reservationId: r.reservationId,
-          canRecord: true,
-          totalAmount: r.totalAmount,
-          totalPaid: r.totalPaid,
-          reservationData: r,
-        });
-      });
-
-    return items;
-  }, [payments, reservations]);
-
-  // Filter by status
-  const filteredItems = React.useMemo(() => {
-    let items = displayItems;
+  // Filter
+  const filteredReservations = React.useMemo(() => {
+    let items = enrichedReservations;
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(
-        (i) =>
-          i.clientName?.toLowerCase().includes(q) ||
-          i.activityName?.toLowerCase().includes(q) ||
-          i.orNumber?.toLowerCase().includes(q)
+        (r) =>
+          r.clientName?.toLowerCase().includes(q) ||
+          r.eventType?.toLowerCase().includes(q)
       );
     }
     if (paymentFilter === "paid") {
-      return items.filter((i) => i.paymentStatus === "Fully Paid");
+      return items.filter((r) => r.computedStatus === "Fully Paid");
     }
     if (paymentFilter === "partial") {
-      return items.filter(
-        (i) =>
-          i.paymentStatus === "Partially Paid" ||
-          i.paymentStatus === "DownPaymentPaid" ||
-          i.paymentStatus === "DepositPaid" ||
-          i.paymentStatus === "IncompletePayment"
+      return items.filter((r) =>
+        ["DownPaymentPaid", "DepositPaid", "IncompletePayment"].includes(r.computedStatus)
       );
     }
     if (paymentFilter === "unpaid") {
-      return items.filter(
-        (i) =>
-          i.paymentStatus === "No Payment" ||
-          i.paymentStatus === "Pending"
+      return items.filter((r) =>
+        ["No Payment", "Pending"].includes(r.computedStatus)
       );
     }
     return items;
-  }, [displayItems, search, paymentFilter]);
+  }, [enrichedReservations, search, paymentFilter]);
 
-  const countByStatus = React.useMemo(() => ({
-    all: displayItems.length,
-    paid: displayItems.filter((i) => i.paymentStatus === "Fully Paid").length,
-    partial: displayItems.filter((i) =>
-      ["Partially Paid", "DownPaymentPaid", "DepositPaid", "IncompletePayment"].includes(i.paymentStatus)
+  const counts = React.useMemo(() => ({
+    all: enrichedReservations.length,
+    paid: enrichedReservations.filter((r) => r.computedStatus === "Fully Paid").length,
+    partial: enrichedReservations.filter((r) =>
+      ["DownPaymentPaid", "DepositPaid", "IncompletePayment"].includes(r.computedStatus)
     ).length,
-    unpaid: displayItems.filter((i) =>
-      ["No Payment", "Pending"].includes(i.paymentStatus)
+    unpaid: enrichedReservations.filter((r) =>
+      ["No Payment", "Pending"].includes(r.computedStatus)
     ).length,
-  }), [displayItems]);
+  }), [enrichedReservations]);
 
-  const openRecordPayment = (item) => {
-    setSelectedReservation(item);
+  const openRecordPayment = (reservation) => {
+    setSelectedReservation(reservation);
     setPaymentAmount("");
-    setPaymentStatus(item.clientType === "provincial" ? "Fully Paid" : "Partially Paid");
+    setPaymentStatus(reservation.clientType === "provincial" ? "Fully Paid" : "Partially Paid");
     setOrNumber(generateORNumber());
     setRecordOpen(true);
   };
@@ -220,7 +190,7 @@ export default function LTOOPaymentsPage() {
           orNumber,
           clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
           clientName: selectedReservation.clientName,
-          activityName: selectedReservation.activityName,
+          activityName: selectedReservation.eventType || "",
           paymentStatus,
           performedBy,
           performedByName,
@@ -232,19 +202,11 @@ export default function LTOOPaymentsPage() {
         throw new Error(errData.error || "Failed to record payment");
       }
 
+      // Also update booking status to Confirmed if fully paid
       toast.success("Payment recorded successfully");
       setRecordOpen(false);
       setSelectedReservation(null);
-
-      // Refresh data
-      const [payRes, bookRes] = await Promise.all([
-        fetch("/api/ltoo/payments"),
-        fetch("/api/ltoo/payments?bookings=true"),
-      ]);
-      const payData = await payRes.json();
-      const bookData = await bookRes.json();
-      setPayments(Array.isArray(payData) ? payData : []);
-      setReservations(Array.isArray(bookData) ? bookData : []);
+      await loadReservations();
     } catch (err) {
       toast.error(err.message || "Failed to record payment");
     } finally {
@@ -257,8 +219,14 @@ export default function LTOOPaymentsPage() {
     if (s === "fully paid") {
       return <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">Fully Paid</Badge>;
     }
-    if (["partially paid", "depositpaid", "downpaymentpaid", "incompletepayment"].includes(s)) {
-      return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">{status}</Badge>;
+    if (s === "depositpaid") {
+      return <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Deposit Paid</Badge>;
+    }
+    if (s === "downpaymentpaid") {
+      return <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">Down Payment Paid</Badge>;
+    }
+    if (s === "incompletepayment") {
+      return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">Partial</Badge>;
     }
     if (s === "no payment" || s === "pending") {
       return <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50">Unpaid</Badge>;
@@ -266,60 +234,50 @@ export default function LTOOPaymentsPage() {
     return <Badge variant="outline">{status}</Badge>;
   };
 
+  const getPaymentCheckIcon = (met) => {
+    return met
+      ? <CheckCircle2 className="size-4 text-green-500 inline" />
+      : <XCircle className="size-4 text-red-400 inline" />;
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
         <p className="text-muted-foreground text-sm">
-          Browse reservations, record payments, and view payment history. Click on an unpaid or partially paid reservation to record a payment.
+          Browse reservations and record payments. Each reservation shows once with its aggregated payment status. Click on unpaid/partial reservations to record a payment.
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>Reservations & Payments</CardTitle>
-          <CardDescription>Search and filter by payment status. Click on unpaid/partial reservations to record payment.</CardDescription>
+          <CardTitle>Reservations</CardTitle>
+          <CardDescription>Each reservation is shown once with total payments and 3 status indicators (50% Down, 10% Deposit, Balance).</CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className="text-muted-foreground absolute top-2.5 left-2 size-4" />
               <Input
                 className="pl-8"
-                placeholder="Search by client, activity, or OR number..."
+                placeholder="Search by client name or event..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant={paymentFilter === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPaymentFilter("all")}
-              >
-                All ({countByStatus.all})
+              <Button variant={paymentFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setPaymentFilter("all")}>
+                All ({counts.all})
               </Button>
-              <Button
-                variant={paymentFilter === "paid" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPaymentFilter("paid")}
-                className={paymentFilter === "paid" ? "bg-green-600 hover:bg-green-700" : ""}
-              >
-                Paid ({countByStatus.paid})
+              <Button variant={paymentFilter === "paid" ? "default" : "outline"} size="sm" onClick={() => setPaymentFilter("paid")}
+                className={paymentFilter === "paid" ? "bg-green-600 hover:bg-green-700" : ""}>
+                Paid ({counts.paid})
               </Button>
-              <Button
-                variant={paymentFilter === "partial" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPaymentFilter("partial")}
-                className={paymentFilter === "partial" ? "bg-amber-600 hover:bg-amber-700" : ""}
-              >
-                Partially Paid ({countByStatus.partial})
+              <Button variant={paymentFilter === "partial" ? "default" : "outline"} size="sm" onClick={() => setPaymentFilter("partial")}
+                className={paymentFilter === "partial" ? "bg-amber-600 hover:bg-amber-700" : ""}>
+                Partial ({counts.partial})
               </Button>
-              <Button
-                variant={paymentFilter === "unpaid" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPaymentFilter("unpaid")}
-                className={paymentFilter === "unpaid" ? "bg-red-600 hover:bg-red-700" : ""}
-              >
-                Unpaid ({countByStatus.unpaid})
+              <Button variant={paymentFilter === "unpaid" ? "default" : "outline"} size="sm" onClick={() => setPaymentFilter("unpaid")}
+                className={paymentFilter === "unpaid" ? "bg-red-600 hover:bg-red-700" : ""}>
+                Unpaid ({counts.unpaid})
               </Button>
             </div>
           </div>
@@ -330,98 +288,62 @@ export default function LTOOPaymentsPage() {
               <TableRow>
                 <TableHead>Client</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Activity / OR</TableHead>
-                <TableHead className="text-right">Amount / Total</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Event Date</TableHead>
+                <TableHead>Payments (Paid / Total)</TableHead>
+                <TableHead>50% Down</TableHead>
+                <TableHead>10% Deposit</TableHead>
+                <TableHead>Balance</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">Loading...</TableCell>
-                </TableRow>
-              ) : filteredItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
-                    {paymentFilter === "unpaid" ? "No unpaid reservations found. All reservations have at least a partial payment."
-                    : paymentFilter === "partial" ? "No partially paid reservations."
-                    : paymentFilter === "paid" ? "No fully paid reservations."
-                    : "No records found."}
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-8 text-center">Loading...</TableCell></TableRow>
+              ) : filteredReservations.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-8 text-center">
+                  {paymentFilter === "unpaid" ? "No unpaid reservations."
+                  : paymentFilter === "partial" ? "No partially paid reservations."
+                  : paymentFilter === "paid" ? "No fully paid reservations."
+                  : "No reservations found."}
+                </TableCell></TableRow>
               ) : (
-                filteredItems.map((item) => (
+                filteredReservations.map((r) => (
                   <TableRow
-                    key={item.key}
-                    className={item.canRecord ? "cursor-pointer hover:bg-muted/50" : ""}
-                    onClick={() => item.canRecord && openRecordPayment(item)}
+                    key={r.reservationId || r.id}
+                    className={r.computedStatus !== "Fully Paid" ? "cursor-pointer hover:bg-muted/50" : ""}
+                    onClick={() => r.computedStatus !== "Fully Paid" && openRecordPayment(r)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {item.clientType === "provincial" ? <Building2 className="size-4 text-muted-foreground" /> : <User className="size-4 text-muted-foreground" />}
-                        <span className="font-medium">{item.clientName}</span>
+                        {r.clientType === "provincial" ? <Building2 className="size-4 text-muted-foreground" /> : <User className="size-4 text-muted-foreground" />}
+                        <span className="font-medium">{r.clientName}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {item.clientType === "provincial" ? "Provincial" : "Client"}
-                      </Badge>
+                    <TableCell><Badge variant="outline" className="text-xs">{r.clientType === "provincial" ? "Provincial" : "Client"}</Badge></TableCell>
+                    <TableCell className="text-sm">{r.eventType || "—"}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="size-3 text-muted-foreground" />
+                        {r.eventDate || "—"}
+                      </span>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {item.type === "reservation" ? (
-                        <span>{item.activityName}</span>
-                      ) : (
-                        <span className="font-mono text-xs">{item.orNumber || "—"}</span>
-                      )}
+                    <TableCell className="tabular-nums">
+                      <span className="font-medium">{formatPHP(r.totalPaid)}</span>
+                      <span className="text-muted-foreground text-xs"> / {formatPHP(r.totalAmount)}</span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {item.type === "reservation" ? (
-                        <div>
-                          <span className="font-medium">{formatPHP(item.totalPaid)}</span>
-                          <span className="text-muted-foreground text-xs"> / {formatPHP(item.totalAmount)}</span>
-                        </div>
-                      ) : (
-                        <span className="font-medium">{formatPHP(item.amount)}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(item.paymentStatus)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {item.createdAt
-                        ? new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                        : item.type === "reservation" ? "—" : "—"}
-                    </TableCell>
+                    <TableCell className="text-center">{getPaymentCheckIcon(r.downPaymentMet)}</TableCell>
+                    <TableCell className="text-center">{getPaymentCheckIcon(r.depositMet)}</TableCell>
+                    <TableCell className="text-center">{getPaymentCheckIcon(r.balanceSettled)}</TableCell>
+                    <TableCell>{getStatusBadge(r.computedStatus)}</TableCell>
                     <TableCell className="text-right">
-                      {item.canRecord ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); openRecordPayment(item); }}
-                          className="text-blue-600"
-                        >
-                          <DollarSign className="size-4 mr-1" />
-                          Pay
+                      {r.computedStatus !== "Fully Paid" ? (
+                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openRecordPayment(r); }} className="text-blue-600">
+                          <DollarSign className="size-4 mr-1" />Pay
                         </Button>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedPayment({
-                              clientName: item.clientName,
-                              clientType: item.clientType,
-                              activityName: item.activityName,
-                              orNumber: item.orNumber,
-                              amount: item.amount,
-                              paymentStatus: item.paymentStatus,
-                            });
-                            setDetailsOpen(true);
-                          }}
-                        >
-                          <Wallet className="size-4" />
-                        </Button>
+                        <span className="text-xs text-green-600">✓</span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -438,37 +360,45 @@ export default function LTOOPaymentsPage() {
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              Recording payment for <strong>{selectedReservation?.clientName}</strong> — {selectedReservation?.activityName}
+              Recording payment for <strong>{selectedReservation?.clientName}</strong>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {selectedReservation?.reservationData && (
-              <div className="rounded-lg border bg-blue-50 p-3 text-sm">
-                <div className="flex items-center gap-1 mb-2">
+            {selectedReservation && (
+              <div className="rounded-lg border bg-blue-50 p-3 text-sm space-y-2">
+                <div className="flex items-center gap-1">
                   <Info className="size-4 text-blue-600" />
-                  <span className="font-medium text-blue-800 text-xs">Reservation Summary</span>
+                  <span className="font-medium text-blue-800 text-xs">Reservation Details</span>
                 </div>
-                <p className="text-blue-700 font-medium">{selectedReservation.clientName} — {selectedReservation.activityName}</p>
-                <p className="text-blue-600 text-xs">Total Amount: {formatPHP(selectedReservation.reservationData.totalAmount)}</p>
+                <p className="text-blue-700 font-medium">{selectedReservation.clientName} — {selectedReservation.eventType}</p>
+                <p className="text-blue-600 text-xs flex items-center gap-1">
+                  <CalendarDays className="size-3" /> Event Date: {selectedReservation.eventDate || "—"}
+                </p>
+                <p className="text-blue-600 text-xs">Total Amount: {formatPHP(selectedReservation.totalAmount)}</p>
                 <p className="text-blue-600 text-xs">Already Paid: {formatPHP(selectedReservation.totalPaid)}</p>
-                <p className="text-blue-600 text-xs">Remaining: {formatPHP(Math.max(0, (selectedReservation.reservationData.totalAmount || 0) - (selectedReservation.totalPaid || 0)))}</p>
-                {selectedReservation.totalPaid <= 0 && (
-                  <p className="text-amber-600 text-xs mt-1">
-                    50% Down Payment ({formatPHP((selectedReservation.reservationData.totalAmount || 0) * 0.5)}) + 10% Deposit ({formatPHP((selectedReservation.reservationData.totalAmount || 0) * 0.1)}) required
-                  </p>
-                )}
+                <p className="text-blue-600 text-xs">Remaining: {formatPHP(selectedReservation.remainingBalance)}</p>
+
+                <div className="border-t border-blue-200 pt-2 mt-2">
+                  <p className="text-xs font-medium text-blue-700 mb-1">Payment Requirements:</p>
+                  <div className="flex items-center gap-1 text-xs text-blue-600">
+                    {getPaymentCheckIcon(selectedReservation.downPaymentMet)}
+                    <span>50% Down Payment: {formatPHP(selectedReservation.requiredDownPayment)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-blue-600">
+                    {getPaymentCheckIcon(selectedReservation.depositMet)}
+                    <span>10% Deposit: {formatPHP(selectedReservation.requiredDeposit)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-blue-600">
+                    {getPaymentCheckIcon(selectedReservation.balanceSettled)}
+                    <span>Balance: {formatPHP(selectedReservation.remainingBalance)}</span>
+                  </div>
+                </div>
               </div>
             )}
 
             <div className="space-y-2">
               <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
-              <Input
-                id="pay-amount"
-                type="number"
-                placeholder="e.g. 50000"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-              />
+              <Input id="pay-amount" type="number" step="0.01" placeholder="e.g. 5000.00" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
             </div>
 
             <div className="space-y-2">
@@ -480,19 +410,13 @@ export default function LTOOPaymentsPage() {
               <div className="space-y-2">
                 <Label htmlFor="pay-status">Payment Status</Label>
                 <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-                  <SelectTrigger id="pay-status">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger id="pay-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Partially Paid">Partially Paid</SelectItem>
                     <SelectItem value="Fully Paid">Fully Paid</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            )}
-
-            {selectedReservation?.clientType === "provincial" && (
-              <p className="text-xs text-muted-foreground">Payment status will be set to Fully Paid for provincial agencies.</p>
             )}
           </div>
           <DialogFooter>
@@ -509,13 +433,12 @@ export default function LTOOPaymentsPage() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Wallet className="size-5" />Confirm Payment</DialogTitle>
-            <DialogDescription>
-              Recording payment for {selectedReservation?.clientName}
-            </DialogDescription>
+            <DialogDescription>Recording payment for {selectedReservation?.clientName}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Client:</span><span className="font-medium">{selectedReservation?.clientName}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Activity:</span><span className="font-medium">{selectedReservation?.activityName}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Event:</span><span className="font-medium">{selectedReservation?.eventType}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Date:</span><span className="font-medium">{selectedReservation?.eventDate}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span><span className="font-medium">{formatPHP(paymentAmount)}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">OR:</span><span className="font-medium">{orNumber}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><span className="font-medium">{paymentStatus}</span></div>
@@ -526,24 +449,6 @@ export default function LTOOPaymentsPage() {
               {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Details Dialog */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Wallet className="size-5" />Payment Details</DialogTitle>
-          </DialogHeader>
-          {selectedPayment && (
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Client:</span><span className="font-medium">{selectedPayment.clientName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Type:</span><Badge variant="outline">{selectedPayment.clientType === "provincial" ? "Provincial" : "Client"}</Badge></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">OR:</span><span className="font-medium font-mono">{selectedPayment.orNumber}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span><span className="font-medium">{formatPHP(selectedPayment.amount)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Status:</span>{getStatusBadge(selectedPayment.paymentStatus)}</div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
