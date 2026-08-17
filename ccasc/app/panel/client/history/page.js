@@ -4,7 +4,7 @@ import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { History, Calendar, CreditCard, Clock, Info } from "lucide-react";
+import { History, Calendar, CreditCard, Clock } from "lucide-react";
 
 export default function ClientHistoryPage() {
   const [reservations, setReservations] = React.useState([]);
@@ -56,17 +56,6 @@ export default function ClientHistoryPage() {
         amount: r.amountPaid || 0,
         packageName: r.packageName || null,
         submittedAt: r.submittedAt || r.eventDate,
-        // Payment policy fields
-        paymentStatus: r.paymentStatus,
-        calendarVisible: r.calendarVisible,
-        downPaymentDeadline: r.downPaymentDeadline,
-        balanceDeadline: r.balanceDeadline,
-        cancellationDeadline: r.cancellationDeadline,
-        isFinal: r.isFinal,
-        requiredDownPayment: r.requiredDownPayment,
-        requiredDeposit: r.requiredDeposit,
-        downPaymentPaid: r.downPaymentPaid,
-        depositPaid: r.depositPaid,
       });
     });
 
@@ -105,25 +94,6 @@ export default function ClientHistoryPage() {
     else if (s === "cancelled" || s === "declined") className = "text-red-600 border-red-300";
     else if (s === "ongoing") className = "text-purple-600 border-purple-300";
     return <Badge variant="outline" className={className}>{status || "N/A"}</Badge>;
-  };
-
-  const getPaymentStatusBadge = (paymentStatus) => {
-    if (!paymentStatus) return null;
-    const s = paymentStatus.toLowerCase();
-    if (s === "balancesettled") {
-      return <Badge variant="outline" className="text-green-600 border-green-300">Balance Settled</Badge>;
-    } else if (s === "depositpaid") {
-      return <Badge variant="outline" className="text-blue-600 border-blue-300">Deposit Paid</Badge>;
-    } else if (s === "downpaymentpaid") {
-      return <Badge variant="outline" className="text-purple-600 border-purple-300">Down Payment Paid</Badge>;
-    } else if (s === "forfeited") {
-      return <Badge variant="destructive">Forfeited</Badge>;
-    } else if (s === "cancelled") {
-      return <Badge variant="outline" className="text-red-600 border-red-300">Cancelled</Badge>;
-    } else if (s === "incompletepayment") {
-      return <Badge variant="outline" className="text-red-600 border-red-300">Incomplete Payment</Badge>;
-    }
-    return <Badge variant="outline">{paymentStatus}</Badge>;
   };
 
   const getTypeBadge = (type) => {
@@ -209,19 +179,6 @@ export default function ClientHistoryPage() {
                           </span>
                         )}
                       </div>
-                      {/* Payment policy status */}
-                      {item.paymentStatus && (
-                        <div className="flex items-center gap-2 flex-wrap mt-1">
-                          {getPaymentStatusBadge(item.paymentStatus)}
-                          {item.isFinal && <Badge variant="secondary">Final</Badge>}
-                          {item.downPaymentDeadline && item.paymentStatus === "Pending" && (
-                            <span className="text-xs text-amber-600 flex items-center gap-1">
-                              <Info className="size-3" />
-                              Down payment due: {item.downPaymentDeadline}
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

@@ -289,16 +289,6 @@ model Reservation {
   timeSlotId         Int      @map("time_slot_id")
   notes              String?  @map("notes") @db.Text
 
-  // New payment policy fields
-  paymentStatus      String   @default("Pending") @map("payment_status") @db.VarChar(50)
-  calendarVisible    Boolean  @default(false) @map("calendar_visible")
-  downPaymentDeadline DateTime? @map("down_payment_deadline") @db.Date
-  balanceDeadline     DateTime? @map("balance_deadline") @db.Date
-  cancellationDeadline DateTime? @map("cancellation_deadline") @db.Date
-  isFinal            Boolean  @default(false) @map("is_final")
-  requiredDownPayment Decimal? @map("required_down_payment") @db.Decimal(12, 2)
-  requiredDeposit     Decimal? @map("required_deposit") @db.Decimal(12, 2)
-
   venue     FacilityVenue       @relation(fields: [venueId], references: [venueId])
   client    Client              @relation(fields: [clientId], references: [clientId])
   package   Package?            @relation(fields: [packageId], references: [packageId])
@@ -372,10 +362,6 @@ model Payment {
   paymentStatusId Int     @map("payment_status_id")
   staffId         Int?    @map("staff_id")
   bookingId       Int     @map("booking_id")
-
-  // New fields for payment policy
-  paymentType     String  @default("FULL") @map("payment_type") @db.VarChar(50)
-  forfeited       Boolean @default(false) @map("forfeited")
 
   status  PaymentStatus @relation(fields: [paymentStatusId], references: [statusId])
   staff   Staff?        @relation(fields: [staffId], references: [staffId])

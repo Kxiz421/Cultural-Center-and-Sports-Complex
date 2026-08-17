@@ -44,11 +44,11 @@ export async function GET() {
           : "Partially Paid"
         : "No Payment";
 
-      // Calculate cancellation eligibility
+      // Calculate cancellation eligibility based on 30-day rule
       const eventDate = b.reservation?.eventDate ? new Date(b.reservation.eventDate) : null;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       let daysUntilEvent = null;
       let canCancel = false;
       let isWithin30Days = false;
@@ -57,18 +57,13 @@ export async function GET() {
       if (eventDate) {
         eventDate.setHours(0, 0, 0, 0);
         daysUntilEvent = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
-        
-        // 30-day rule: cancellation must be at least 30 days before event
         canCancel = daysUntilEvent >= 30;
         isWithin30Days = daysUntilEvent < 30 && daysUntilEvent >= 0;
-        
+
         if (isWithin30Days && paymentStatus !== "No Payment") {
           forfeitureWarning = "Cancellation within 30 days of the event will result in forfeiture of the 50% down payment and 10% deposit.";
         }
       }
-
-      // Check if reservation is marked as final (created within 30-day window)
-      const isFinal = b.reservation?.isFinal || false;
 
       return {
         id: b.bookingId,
@@ -89,15 +84,10 @@ export async function GET() {
           : "",
         paymentStatus,
         bookingStatus: b.status?.status || "Confirmed",
-        // Cancellation policy fields
         daysUntilEvent,
         canCancel,
         isWithin30Days,
-        isFinal,
         forfeitureWarning,
-        cancellationDeadline: b.reservation?.cancellationDeadline
-          ? b.reservation.cancellationDeadline.toISOString().split("T")[0]
-          : null,
       };
     });
 
@@ -131,9 +121,7 @@ export async function POST(request) {
             client: { select: { firstName: true, lastName: true } },
           },
         },
-        payments: {
-          include: { status: { select: { status: true } } },
-        },
+        payments: true,
       },
     });
 
@@ -145,33 +133,18 @@ export async function POST(request) {
       ? `${booking.reservation.client.firstName} ${booking.reservation.client.lastName}`
       : "Unknown";
 
-    // Check cancellation eligibility based on 30-day rule
+    // Check 30-day forfeiture rule
     const eventDate = booking.reservation?.eventDate;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
     let isForfeiture = false;
-    let forfeitureDetails = "";
 
     if (eventDate) {
       const event = new Date(eventDate);
       event.setHours(0, 0, 0, 0);
       const daysUntilEvent = Math.ceil((event - today) / (1000 * 60 * 60 * 24));
-
       if (daysUntilEvent < 30) {
-        // Within 30 days - forfeiture applies
         isForfeiture = true;
-        
-        // Mark all non-forfeited payments as forfeited
-        const nonForfeitedPayments = booking.payments.filter(p => !p.forfeited);
-        for (const payment of nonForfeitedPayments) {
-          await prisma.payment.update({
-            where: { paymentId: payment.paymentId },
-            data: { forfeited: true },
-          });
-        }
-
-        forfeitureDetails = `Cancellation within 30-day window. The 50% down payment and 10% deposit are forfeited (non-refundable). Payment records preserved for audit.`;
       }
     }
 
@@ -184,11 +157,7 @@ export async function POST(request) {
     // Update reservation status to Cancelled
     await prisma.reservation.update({
       where: { reservationId: booking.reservationId },
-      data: {
-        reservationStatus: "Cancelled",
-        paymentStatus: isForfeiture ? "Forfeited" : "Cancelled",
-        calendarVisible: false,
-      },
+      data: { reservationStatus: "Cancelled" },
     });
 
     // Create audit log
@@ -200,8 +169,8 @@ export async function POST(request) {
         performedById: performedBy || "LTOO",
         performedByName: performedByName || "Local Treasury Operations Officer",
         details: isForfeiture
-          ? `Booking #${bookingId} for ${clientName} cancelled within 30-day window. ${forfeitureDetails}`
-          : `Booking #${bookingId} for ${clientName} has been cancelled. Payments are refundable.`,
+          ? `Booking #${bookingId} for ${clientName} cancelled within 30-day window. Payments forfeited (non-refundable). Records preserved for audit.`
+          : `Booking #${bookingId} for ${clientName} has been cancelled. Payments are eligible for refund.`,
       },
     });
 
@@ -209,7 +178,7 @@ export async function POST(request) {
       success: true,
       isForfeiture,
       message: isForfeiture
-        ? "Booking cancelled. The 50% down payment and 10% deposit are forfeited (non-refundable). Payment records preserved."
+        ? "Booking cancelled. Payments are forfeited (non-refundable). Records preserved for audit."
         : "Booking cancelled successfully. Payments are eligible for refund.",
     });
   } catch (error) {

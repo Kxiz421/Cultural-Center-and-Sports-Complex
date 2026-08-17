@@ -3,20 +3,17 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Helper to calculate the date N days from now (date-only, no time)
 function addDays(date, days) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-// Helper to check if event date is at least 7 days from today
 function validateAdvanceBooking(eventDate) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const event = new Date(eventDate);
   event.setHours(0, 0, 0, 0);
-
   const minDate = addDays(today, 7);
   if (event < minDate) {
     const minDateStr = minDate.toISOString().split("T")[0];
@@ -29,19 +26,31 @@ function validateAdvanceBooking(eventDate) {
   return { valid: true };
 }
 
+function computePaymentStatus(totalAmount, payments) {
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
+  if (totalAmount <= 0 || totalPaid <= 0) return "Pending";
+  if (totalPaid >= totalAmount) return "BalanceSettled";
+  // 50% down payment + 10% deposit = 60%
+  const percentPaid = totalPaid / totalAmount;
+  if (percentPaid >= 0.6) return "DepositPaid";
+  if (percentPaid >= 0.5) return "DownPaymentPaid";
+  return "IncompletePayment";
+}
+
+function computeCalendarVisible(totalAmount, payments) {
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
+  if (totalAmount <= 0) return false;
+  // Show on calendar if at least 60% (50% down + 10% deposit) paid
+  return (totalPaid / totalAmount) >= 0.6;
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-      let clientId = searchParams.get("clientId");
-
-    // Strip "CLT-" prefix if present
-    if (clientId) {
-      clientId = clientId.replace("CLT-", "");
-    }
-
+    let clientId = searchParams.get("clientId");
+    if (clientId) clientId = clientId.replace("CLT-", "");
     const parsedClientId = clientId ? parseInt(clientId, 10) : null;
 
-    // Get reservations WITHOUT client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
       where: parsedClientId ? { clientId: parsedClientId } : {},
       include: {
@@ -50,13 +59,7 @@ export async function GET(request) {
         bookings: {
           include: {
             status: { select: { status: true } },
-            payments: {
-              select: {
-                amountPaid: true,
-                paymentType: true,
-                forfeited: true,
-              },
-            },
+            payments: { select: { amountPaid: true } },
           },
         },
         reservedParticulars: {
@@ -66,14 +69,11 @@ export async function GET(request) {
             },
           },
         },
-        additionalDates: {
-          select: { eventDate: true },
-        },
+        additionalDates: { select: { eventDate: true } },
       },
       orderBy: { submittedAt: "desc" },
     });
 
-    // Fetch valid client info separately
     const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
@@ -82,7 +82,7 @@ export async function GET(request) {
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
     const formatted = reservations
-      .filter((r) => clientMap[r.clientId] !== undefined) // Skip orphaned
+      .filter((r) => clientMap[r.clientId] !== undefined)
       .map((r) => {
         const client = clientMap[r.clientId];
         const allDates = [
@@ -90,19 +90,19 @@ export async function GET(request) {
           ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
         ];
 
-        // Calculate total paid amounts by type
-        const totalPaid = r.bookings.reduce((sum, b) => 
-          sum + b.payments.filter(p => !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
-        const downPaymentPaid = r.bookings.reduce((sum, b) => 
-          sum + b.payments.filter(p => p.paymentType === "DOWN_PAYMENT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
-        const depositPaid = r.bookings.reduce((sum, b) => 
-          sum + b.payments.filter(p => p.paymentType === "DEPOSIT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
-        const balancePaid = r.bookings.reduce((sum, b) => 
-          sum + b.payments.filter(p => p.paymentType === "BALANCE" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
-
+        const allPayments = r.bookings.flatMap(b => b.payments);
+        const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
         const totalAmount = r.totalAmount ? Number(r.totalAmount) : null;
-        const requiredDownPayment = r.requiredDownPayment ? Number(r.requiredDownPayment) : (totalAmount ? totalAmount * 0.5 : null);
-        const requiredDeposit = r.requiredDeposit ? Number(r.requiredDeposit) : (totalAmount ? totalAmount * 0.1 : null);
+
+        const event = new Date(r.eventDate);
+        const downPaymentDeadline = addDays(event, -7).toISOString().split("T")[0];
+        const balanceDeadline = addDays(event, -2).toISOString().split("T")[0];
+        const cancellationDeadline = addDays(event, -30).toISOString().split("T")[0];
+
+        const today = new Date(); today.setHours(0,0,0,0);
+        const isFinal = today >= addDays(event, -30);
+        const paymentStatus = computePaymentStatus(totalAmount || 0, allPayments);
+        const calendarVisible = computeCalendarVisible(totalAmount || 0, allPayments);
 
         return {
           id: `RES-${r.reservationId}`,
@@ -120,18 +120,14 @@ export async function GET(request) {
           bookingVenueId: r.bookings[0]?.venueId || null,
           amountPaid: totalPaid,
           totalAmount: totalAmount,
-          // Payment policy fields
-          paymentStatus: r.paymentStatus,
-          calendarVisible: r.calendarVisible,
-          downPaymentDeadline: r.downPaymentDeadline ? r.downPaymentDeadline.toISOString().split("T")[0] : null,
-          balanceDeadline: r.balanceDeadline ? r.balanceDeadline.toISOString().split("T")[0] : null,
-          cancellationDeadline: r.cancellationDeadline ? r.cancellationDeadline.toISOString().split("T")[0] : null,
-          isFinal: r.isFinal,
-          requiredDownPayment: requiredDownPayment,
-          requiredDeposit: requiredDeposit,
-          downPaymentPaid: downPaymentPaid,
-          depositPaid: depositPaid,
-          balancePaid: balancePaid,
+          paymentStatus,
+          calendarVisible,
+          downPaymentDeadline,
+          balanceDeadline,
+          cancellationDeadline,
+          isFinal,
+          requiredDownPayment: totalAmount ? totalAmount * 0.5 : null,
+          requiredDeposit: totalAmount ? totalAmount * 0.1 : null,
           remarks: r.notes || null,
           particulars: r.reservedParticulars.map((rp) => ({
             name: rp.particular.particularName,
@@ -164,7 +160,6 @@ export async function POST(request) {
       );
     }
 
-    // VALIDATION: Event date must be at least 7 days from now
     const advanceCheck = validateAdvanceBooking(eventDate);
     if (!advanceCheck.valid) {
       return NextResponse.json(
@@ -173,32 +168,25 @@ export async function POST(request) {
       );
     }
 
-    // Build the full list of dates including additional dates
     const primaryDate = new Date(eventDate);
     const additionalDates = (eventDates || [])
-      .filter((d) => d !== eventDate) // exclude the primary date
+      .filter((d) => d !== eventDate)
       .map((d) => new Date(d));
     const allDates = [primaryDate, ...additionalDates];
 
-    // CONFLICT CHECK: Check if any of the dates are already booked for this venue
-    // Check against confirmed/pending reservations
+    // Conflict check
     const conflictingReservations = await prisma.reservation.findMany({
       where: {
         venueId: parseInt(venueId, 10),
         reservationStatus: { in: ["Pending", "Confirmed"] },
         OR: [
           { eventDate: { in: allDates } },
-          {
-            additionalDates: {
-              some: { eventDate: { in: allDates } },
-            },
-          },
+          { additionalDates: { some: { eventDate: { in: allDates } } } },
         ],
       },
       select: { eventDate: true, additionalDates: { select: { eventDate: true } } },
     });
 
-    // Check against calendar blocks
     const calendarBlocks = await prisma.calendarBlock.findMany({
       where: {
         venueId: parseInt(venueId, 10),
@@ -207,17 +195,12 @@ export async function POST(request) {
       select: { blockDate: true },
     });
 
-    // Collect all conflicting dates
     const conflictDates = new Set();
     for (const r of conflictingReservations) {
       conflictDates.add(r.eventDate.toISOString().split("T")[0]);
-      for (const ad of r.additionalDates) {
-        conflictDates.add(ad.eventDate.toISOString().split("T")[0]);
-      }
+      for (const ad of r.additionalDates) conflictDates.add(ad.eventDate.toISOString().split("T")[0]);
     }
-    for (const b of calendarBlocks) {
-      conflictDates.add(b.blockDate.toISOString().split("T")[0]);
-    }
+    for (const b of calendarBlocks) conflictDates.add(b.blockDate.toISOString().split("T")[0]);
 
     if (conflictDates.size > 0) {
       return NextResponse.json({
@@ -231,10 +214,8 @@ export async function POST(request) {
     const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
     const venueName = venueNames[parseInt(venueId, 10)] || "Unknown Venue";
 
-    // Calculate total amount
+    // Calculate total
     let totalAmount = 0;
-
-    // Package rate * number of days
     const selectedPackage = packageId && parseInt(packageId, 10) > 0
       ? await prisma.package.findUnique({ where: { packageId: parseInt(packageId, 10) } })
       : null;
@@ -246,7 +227,6 @@ export async function POST(request) {
       totalAmount += rate * allDates.length;
     }
 
-    // Particulars cost
     let particularsData = [];
     if (particulars && Array.isArray(particulars) && particulars.length > 0) {
       for (const p of particulars) {
@@ -256,41 +236,21 @@ export async function POST(request) {
             include: { inventory: { select: { unitCost: true } } },
           });
           if (particular) {
-            const unitCost = particular.inventory?.unitCost
-              ? Number(particular.inventory.unitCost)
-              : 0;
+            const unitCost = particular.inventory?.unitCost ? Number(particular.inventory.unitCost) : 0;
             totalAmount += unitCost * p.quantity;
-            particularsData.push({
-              particularId: parseInt(p.particularId, 10),
-              quantity: p.quantity,
-            });
+            particularsData.push({ particularId: parseInt(p.particularId, 10), quantity: p.quantity });
           }
         }
       }
     }
 
-    // Calculate payment policy deadlines
-    // Event date
+    const today = new Date(); today.setHours(0,0,0,0);
     const event = new Date(eventDate);
-    event.setHours(0, 0, 0, 0);
+    const downPaymentDeadline = addDays(event, -7).toISOString().split("T")[0];
+    const balanceDeadline = addDays(event, -2).toISOString().split("T")[0];
+    const cancellationDeadline = addDays(event, -30).toISOString().split("T")[0];
+    const isFinal = today >= addDays(event, -30);
 
-    // 50% down payment deadline: 7 days before event
-    const downPaymentDeadline = addDays(event, -7);
-    // Final balance deadline: 2 days before event
-    const balanceDeadline = addDays(event, -2);
-    // Cancellation deadline: 30 days before event
-    const cancellationDeadline = addDays(event, -30);
-
-    // Check if we're within the 30-day window from today (isFinal)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isFinal = today >= cancellationDeadline;
-
-    // Calculate required down payment and deposit
-    const requiredDownPayment = totalAmount > 0 ? Math.round(totalAmount * 0.5 * 100) / 100 : null;
-    const requiredDeposit = totalAmount > 0 ? Math.round(totalAmount * 0.1 * 100) / 100 : null;
-
-    // Create the reservation with all dates and particulars
     const reservation = await prisma.reservation.create({
       data: {
         venueId: parseInt(venueId, 10),
@@ -304,20 +264,9 @@ export async function POST(request) {
         totalAmount: totalAmount > 0 ? totalAmount : null,
         submittedAt: new Date(),
         notes: notes || null,
-        // Payment policy defaults
-        paymentStatus: "Pending",
-        calendarVisible: false, // Hidden until down payment + deposit are received
-        downPaymentDeadline: downPaymentDeadline,
-        balanceDeadline: balanceDeadline,
-        cancellationDeadline: cancellationDeadline,
-        isFinal: isFinal,
-        requiredDownPayment: requiredDownPayment,
-        requiredDeposit: requiredDeposit,
-        // Create additional dates
         additionalDates: additionalDates.length > 0
           ? { create: additionalDates.map((d) => ({ eventDate: d })) }
           : undefined,
-        // Create reserved particulars
         reservedParticulars: particularsData.length > 0
           ? { create: particularsData }
           : undefined,
@@ -332,17 +281,13 @@ export async function POST(request) {
 
     const reservationId = `RES-${reservation.reservationId}`;
 
-    // For walk-in reservations, send notifications
     if (isWalkIn) {
       const displayName = clientName || "Walk-in Client";
       const timeSlotNames = { 1: "Day (8:00 AM - 5:00 PM)", 2: "Night (5:00 PM - 10:00 PM)" };
       const timeSlotName = timeSlotNames[parseInt(timeSlotId, 10)] || "Unknown Time Slot";
 
-      // 1. Notify provincial department agencies (PDA) about the new walk-in reservation
       const provincialAgencies = await prisma.client.findMany({
-        where: {
-          clientRoleId: "PROV",
-        },
+        where: { clientRoleId: "PROV" },
         select: { clientId: true },
       });
 
@@ -361,10 +306,9 @@ export async function POST(request) {
         });
       }
 
-      // 2. Notify the client about their new reservation
       await prisma.notification.create({
         data: {
-          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(requiredDownPayment || 0).toLocaleString()}) + 10% deposit (₱${(requiredDeposit || 0).toLocaleString()}) is required by ${downPaymentDeadline.toISOString().split("T")[0]}.`,
+          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(totalAmount * 0.5 || 0).toLocaleString()}) + 10% deposit (₱${(totalAmount * 0.1 || 0).toLocaleString()}) is required by ${downPaymentDeadline}.`,
           type: "booking",
           staffId: 1,
           clientId: parsedClientId,
@@ -376,18 +320,18 @@ export async function POST(request) {
     return NextResponse.json({
       id: reservationId,
       totalAmount,
-      requiredDownPayment,
-      requiredDeposit,
-      downPaymentDeadline: downPaymentDeadline.toISOString().split("T")[0],
-      balanceDeadline: balanceDeadline.toISOString().split("T")[0],
-      cancellationDeadline: cancellationDeadline.toISOString().split("T")[0],
+      requiredDownPayment: totalAmount * 0.5,
+      requiredDeposit: totalAmount * 0.1,
+      downPaymentDeadline,
+      balanceDeadline,
+      cancellationDeadline,
       isFinal,
       dates: allDates.map((d) => d.toISOString().split("T")[0]),
       particulars: reservation.reservedParticulars.map((rp) => ({
         name: rp.particular.particularName,
         quantity: rp.quantity,
       })),
-      message: "Reservation created successfully. Note: A 50% down payment and 10% deposit must be paid by " + downPaymentDeadline.toISOString().split("T")[0] + ". Final balance must be settled by " + balanceDeadline.toISOString().split("T")[0] + ".",
+      message: `Reservation created successfully. Note: A 50% down payment and 10% deposit must be paid by ${downPaymentDeadline}. Final balance must be settled by ${balanceDeadline}.`,
     }, { status: 201 });
   } catch (error) {
     console.error("Failed to create reservation:", error);
