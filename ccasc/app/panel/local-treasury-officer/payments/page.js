@@ -241,8 +241,10 @@ export default function LTOOPaymentsPage() {
         fetch("/api/ltoo/payments"),
         fetch("/api/ltoo/payments?bookings=true"),
       ]);
-      setPayments(Array.isArray(await payRes.json()) ? await payRes.json() : []);
-      setReservations(Array.isArray(await bookRes.json()) ? await bookRes.json() : []);
+      const payData = await payRes.json();
+      const bookData = await bookRes.json();
+      setPayments(Array.isArray(payData) ? payData : []);
+      setReservations(Array.isArray(bookData) ? bookData : []);
     } catch (err) {
       toast.error(err.message || "Failed to record payment");
     } finally {
