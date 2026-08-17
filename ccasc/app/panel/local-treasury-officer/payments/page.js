@@ -44,6 +44,8 @@ import {
   Search,
   User,
   Building2,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 
 function formatPHP(amount) {
@@ -59,9 +61,11 @@ const CLIENT_TYPES = [
   { id: "provincial", name: "Provincial Department Agency" },
 ];
 
-const PAYMENT_STATUS_OPTIONS = [
-  { id: "Partially Paid", name: "Partially Paid" },
-  { id: "Fully Paid", name: "Fully Paid" },
+const PAYMENT_TYPES = [
+  { id: "DOWN_PAYMENT", name: "50% Down Payment" },
+  { id: "DEPOSIT", name: "10% Deposit (Damages/Extension)" },
+  { id: "BALANCE", name: "Remaining Balance (40%)" },
+  { id: "FULL", name: "Full Payment" },
 ];
 
 function generateORNumber() {
@@ -90,6 +94,7 @@ export default function LTOOPaymentsPage() {
     orNumber: generateORNumber(),
     selectedBookingId: "",
     paymentStatus: "",
+    paymentType: "",
   });
   const [selectedReservation, setSelectedReservation] = React.useState(null);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -129,6 +134,7 @@ export default function LTOOPaymentsPage() {
       orNumber: generateORNumber(),
       selectedBookingId: "",
       paymentStatus: "",
+      paymentType: "",
     });
     setSelectedReservation(null);
   };
@@ -210,6 +216,7 @@ export default function LTOOPaymentsPage() {
         body: JSON.stringify({
           ...addForm,
           totalAmount: addForm.totalAmount || null,
+          paymentType: addForm.paymentType || "FULL",
           performedBy,
           performedByName,
         }),
@@ -233,6 +240,21 @@ export default function LTOOPaymentsPage() {
     }
   };
 
+  const getPaymentTypeBadge = (type) => {
+    switch(type) {
+      case "DOWN_PAYMENT":
+        return <Badge variant="outline" className="text-blue-600 border-blue-300">50% Down</Badge>;
+      case "DEPOSIT":
+        return <Badge variant="outline" className="text-purple-600 border-purple-300">10% Deposit</Badge>;
+      case "BALANCE":
+        return <Badge variant="outline" className="text-green-600 border-green-300">Balance</Badge>;
+      case "FULL":
+        return <Badge variant="outline" className="text-amber-600 border-amber-300">Full</Badge>;
+      default:
+        return <Badge variant="outline">{type}</Badge>;
+    }
+  };
+
   const filteredPayments = payments.filter((p) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -249,7 +271,7 @@ export default function LTOOPaymentsPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
           <p className="text-muted-foreground text-sm">
-            Record payments from clients and provincial department agencies.
+            Record payments from clients and provincial department agencies. All payments are recorded by the Local Treasury Operations Officer.
           </p>
         </div>
         <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetAddForm(); }}>
@@ -259,7 +281,7 @@ export default function LTOOPaymentsPage() {
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Record New Payment</DialogTitle>
-              <DialogDescription>Enter payment details for client or provincial department agency.</DialogDescription>
+              <DialogDescription>Enter payment details. Select payment type to track down payments, deposits, and balances.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -298,6 +320,10 @@ export default function LTOOPaymentsPage() {
 
               {selectedReservation && (
                 <div className="rounded-lg border bg-blue-50 p-3 text-sm">
+                  <div className="flex items-center gap-1 mb-2">
+                    <Info className="size-4 text-blue-600" />
+                    <span className="font-medium text-blue-800">Reservation Payment Status</span>
+                  </div>
                   {selectedReservation.packageName && (
                     <p className="text-blue-700 font-medium">Package: {selectedReservation.packageName}</p>
                   )}
@@ -305,12 +331,36 @@ export default function LTOOPaymentsPage() {
                     <p className="text-blue-600 text-xs">Event Dates: {selectedReservation.eventDates.length} days</p>
                   )}
                   <p className="text-blue-700 text-sm font-semibold mt-1">Total Amount: {formatPHP(selectedReservation.totalAmount)}</p>
-                  {selectedReservation.totalPaid > 0 && (
-                    <p className="text-amber-600 text-xs mt-1">Paid: {formatPHP(selectedReservation.totalPaid)}</p>
-                  )}
-                  {selectedReservation.balanceRemaining > 0 && (
-                    <p className="text-red-600 text-xs font-semibold mt-1">Balance Remaining: {formatPHP(selectedReservation.balanceRemaining)}</p>
-                  )}
+                  
+                  {/* Payment breakdown */}
+                  <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
+                    <p className="text-xs font-medium text-blue-700">Payment Requirements:</p>
+                    <p className="text-xs text-blue-600">
+                      50% Down Payment: {formatPHP(selectedReservation.requiredDownPayment)}
+                      {selectedReservation.downPaymentMet ? " ✓" : " ✗"}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      10% Deposit: {formatPHP(selectedReservation.requiredDeposit)}
+                      {selectedReservation.depositMet ? " ✓" : " ✗"}
+                    </p>
+                    {selectedReservation.totalPaid > 0 && (
+                      <p className="text-amber-600 text-xs mt-1">Total Paid: {formatPHP(selectedReservation.totalPaid)}</p>
+                    )}
+                    {selectedReservation.balanceRemaining > 0 && (
+                      <p className="text-red-600 text-xs font-semibold mt-1">Balance Remaining: {formatPHP(selectedReservation.balanceRemaining)}</p>
+                    )}
+                    {selectedReservation.downPaymentDeadline && (
+                      <p className="text-xs text-blue-500">
+                        Down Payment/Deposit Due: {selectedReservation.downPaymentDeadline}
+                      </p>
+                    )}
+                    {selectedReservation.balanceDeadline && (
+                      <p className="text-xs text-blue-500">
+                        Balance Due: {selectedReservation.balanceDeadline}
+                      </p>
+                    )}
+                  </div>
+                  
                   {selectedReservation.particulars && selectedReservation.particulars.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-blue-200">
                       <p className="text-blue-600 text-xs font-medium mb-1">Particulars:</p>
@@ -356,6 +406,24 @@ export default function LTOOPaymentsPage() {
                 <Input id="activity-date" type="date" value={addForm.activityDate} onChange={(e) => setAddForm((f) => ({ ...f, activityDate: e.target.value }))} />
               </div>
 
+              {/* Payment Type Selector */}
+              <div className="space-y-2">
+                <Label htmlFor="payment-type">Payment Type *</Label>
+                <Select value={addForm.paymentType} onValueChange={(v) => setAddForm((f) => ({ ...f, paymentType: v }))}>
+                  <SelectTrigger id="payment-type">
+                    <SelectValue placeholder="Select payment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_TYPES.map((pt) => (
+                      <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select the type of payment being recorded. Down payment and deposit are required 7 days before the event.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="total-amount">Total Amount (₱) *</Label>
                 <Input id="total-amount" type="text" inputMode="numeric" placeholder="e.g. 50000" value={addForm.totalAmount} onChange={(e) => handleTotalAmountChange(e.target.value)} />
@@ -374,9 +442,8 @@ export default function LTOOPaymentsPage() {
                       <SelectValue placeholder="Select payment status" />
                     </SelectTrigger>
                     <SelectContent>
-                      {PAYMENT_STATUS_OPTIONS.map((ps) => (
-                        <SelectItem key={ps.id} value={ps.id}>{ps.name}</SelectItem>
-                      ))}
+                      <SelectItem value="Partially Paid">Partially Paid</SelectItem>
+                      <SelectItem value="Fully Paid">Fully Paid</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -419,10 +486,11 @@ export default function LTOOPaymentsPage() {
               <TableRow>
                 <TableHead>Client</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Payment Type</TableHead>
                 <TableHead>Activity</TableHead>
                 <TableHead>OR Number</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Payment Status</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -430,11 +498,11 @@ export default function LTOOPaymentsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">Loading...</TableCell>
+                  <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">Loading...</TableCell>
                 </TableRow>
               ) : filteredPayments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">No payments found. Record a payment to get started.</TableCell>
+                  <TableCell colSpan={9} className="text-muted-foreground py-8 text-center">No payments found. Record a payment to get started.</TableCell>
                 </TableRow>
               ) : (
                 filteredPayments.map((p) => (
@@ -447,6 +515,10 @@ export default function LTOOPaymentsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{p.clientType === "provincial" ? "Provincial" : "Client"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {getPaymentTypeBadge(p.paymentType)}
+                      {p.forfeited && <Badge variant="destructive" className="ml-1">Forfeited</Badge>}
                     </TableCell>
                     <TableCell className="text-sm">{p.activityName || "—"}</TableCell>
                     <TableCell className="text-sm font-mono">{p.orNumber}</TableCell>
@@ -483,6 +555,12 @@ export default function LTOOPaymentsPage() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Client:</span>
               <span className="font-medium text-right">{addForm.clientName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payment Type:</span>
+              <span className="font-medium text-right">
+                {PAYMENT_TYPES.find(pt => pt.id === addForm.paymentType)?.name || "Full Payment"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount:</span>
@@ -523,6 +601,16 @@ export default function LTOOPaymentsPage() {
                 <span className="text-muted-foreground">Type:</span>
                 <Badge variant="outline">{selectedPayment.clientType === "provincial" ? "Provincial" : "Client"}</Badge>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Payment Type:</span>
+                {getPaymentTypeBadge(selectedPayment.paymentType)}
+              </div>
+              {selectedPayment.forfeited && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Forfeited:</span>
+                  <Badge variant="destructive">Yes</Badge>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Activity:</span>
                 <span className="font-medium">{selectedPayment.activityName || "—"}</span>

@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2 } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, AlertTriangle, Info } from "lucide-react";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
@@ -40,6 +40,13 @@ const TIME_SLOTS = [
   { id: 1, name: "Day (8:00 AM - 5:00 PM)" },
   { id: 2, name: "Night (5:00 PM - 10:00 PM)" },
 ];
+
+// Helper to get min date (7 days from today)
+function getMinDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split("T")[0];
+}
 
 export default function WalkInReservationPage() {
   // Toggle state
@@ -148,9 +155,31 @@ export default function WalkInReservationPage() {
     setPackageId(value);
   };
 
+  // Calculate estimated payment amounts
+  const getEstimatedPayments = () => {
+    let totalAmount = 0;
+    const pkg = packages.find(p => String(p.packageId) === packageId);
+    if (pkg) {
+      const rate = timeSlotId === "1" ? Number(pkg.dayRate || 0) : Number(pkg.nightRate || 0);
+      totalAmount += rate;
+    }
+    return {
+      totalAmount,
+      downPayment: totalAmount * 0.5,
+      deposit: totalAmount * 0.1,
+    };
+  };
+
   const handleGenerateOrder = () => {
     if (!venueId || !eventDate || !timeSlotId || !eventType) {
       toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    // Validate 7-day advance booking
+    const minDate = getMinDate();
+    if (eventDate < minDate) {
+      toast.error(`Reservations must be at least 7 days in advance. Earliest available date is ${minDate}.`);
       return;
     }
 
@@ -166,6 +195,9 @@ export default function WalkInReservationPage() {
 
     setShowOrder(true);
   };
+
+  // Get calendar info for minimum date
+  const minEventDate = getMinDate();
 
   const handleSubmitReservation = async () => {
     setSubmitting(true);
@@ -262,6 +294,7 @@ export default function WalkInReservationPage() {
     };
   };
 
+  const estimates = getEstimatedPayments();
   const displayClient = getDisplayClientInfo();
 
   return (
@@ -271,9 +304,27 @@ export default function WalkInReservationPage() {
           Walk-In Reservation
         </h2>
         <p className="text-muted-foreground text-sm">
-          Create reservations on behalf of walk-in clients. Toggle to search for existing users or enter new client details manually.
+          Create reservations on behalf of walk-in clients. All reservations must be filed at least 7 days before the event.
         </p>
       </div>
+
+      {/* Payment Policy Notice */}
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Info className="size-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold mb-1">Payment Policy Reminder</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Reservations must be made at least <strong>7 days</strong> before the event</li>
+                <li>A <strong>50% down payment</strong> + <strong>10% deposit</strong> is required within the 7-day window</li>
+                <li>The remaining <strong>40% balance</strong> must be settled <strong>2 days</strong> before the event</li>
+                <li>Cancellations must be made <strong>30+ days</strong> before the event to avoid forfeiture</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Toggle: Existing User or Walk-in */}
       <Card>
@@ -476,9 +527,12 @@ export default function WalkInReservationPage() {
               <Input
                 type="date"
                 value={eventDate}
-                min={new Date().toISOString().split("T")[0]}
+                min={minEventDate}
                 onChange={(e) => setEventDate(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Earliest available date: {minEventDate} (7-day advance booking required)
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Time Slot *</Label>
@@ -585,8 +639,7 @@ export default function WalkInReservationPage() {
             )}
             <Separator />
             <p className="text-muted-foreground text-xs">
-              This reservation will be saved to the database with status "Pending" and will appear in the facility calendar.
-              {isExistingUser && selectedClient && " The client will receive a notification about this reservation."}
+              This reservation will be saved to the database with status "Pending". It will not appear on the calendar until the 50% down payment and 10% deposit are received.
             </p>
           </div>
 
@@ -646,15 +699,38 @@ export default function WalkInReservationPage() {
               )}
             </div>
 
+            {/* Payment Schedule */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-800 mb-2">Required Payments</p>
+              <div className="space-y-1 text-sm text-amber-700">
+                <div className="flex justify-between">
+                  <span>50% Down Payment</span>
+                  <span className="font-medium">₱{estimates.downPayment.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>10% Deposit (Damages/Extension)</span>
+                  <span className="font-medium">₱{estimates.deposit.toLocaleString()}</span>
+                </div>
+                <Separator className="bg-amber-300" />
+                <div className="flex justify-between font-semibold">
+                  <span>Total Due (60% Upfront)</span>
+                  <span>₱{(estimates.downPayment + estimates.deposit).toLocaleString()}</span>
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 mt-2">
+                Due by 7 days before event. Remaining 40% balance due 2 days before event.
+              </p>
+            </div>
+
             <div className="text-muted-foreground text-xs">
               {isExistingUser && selectedClient ? (
                 <p>
                   This reservation will be linked to <strong>{selectedClient.fullName}</strong>'s account.
-                  They will receive a notification. The program coordinator will also be notified.
+                  The client must pay the 50% down payment + 10% deposit within the 7-day window for the reservation to appear on the calendar.
                 </p>
               ) : (
                 <p>
-                  This reservation will be saved with status "Pending" and will be visible in the facility calendar. The accounting clerk can process payments after submission.
+                  This reservation will be saved with status "Pending". The client must pay the 50% down payment + 10% deposit for the reservation to become visible on the calendar.
                 </p>
               )}
             </div>

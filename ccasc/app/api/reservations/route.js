@@ -3,6 +3,32 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Helper to calculate the date N days from now (date-only, no time)
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+// Helper to check if event date is at least 7 days from today
+function validateAdvanceBooking(eventDate) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const event = new Date(eventDate);
+  event.setHours(0, 0, 0, 0);
+
+  const minDate = addDays(today, 7);
+  if (event < minDate) {
+    const minDateStr = minDate.toISOString().split("T")[0];
+    return {
+      valid: false,
+      error: `Reservations must be filed at least 7 days before the event. The earliest available date is ${minDateStr}.`,
+      minDate: minDateStr,
+    };
+  }
+  return { valid: true };
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -24,7 +50,13 @@ export async function GET(request) {
         bookings: {
           include: {
             status: { select: { status: true } },
-            payments: { select: { amountPaid: true } },
+            payments: {
+              select: {
+                amountPaid: true,
+                paymentType: true,
+                forfeited: true,
+              },
+            },
           },
         },
         reservedParticulars: {
@@ -57,6 +89,21 @@ export async function GET(request) {
           r.eventDate.toISOString().split("T")[0],
           ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
         ];
+
+        // Calculate total paid amounts by type
+        const totalPaid = r.bookings.reduce((sum, b) => 
+          sum + b.payments.filter(p => !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+        const downPaymentPaid = r.bookings.reduce((sum, b) => 
+          sum + b.payments.filter(p => p.paymentType === "DOWN_PAYMENT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+        const depositPaid = r.bookings.reduce((sum, b) => 
+          sum + b.payments.filter(p => p.paymentType === "DEPOSIT" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+        const balancePaid = r.bookings.reduce((sum, b) => 
+          sum + b.payments.filter(p => p.paymentType === "BALANCE" && !p.forfeited).reduce((s, p) => s + Number(p.amountPaid), 0), 0);
+
+        const totalAmount = r.totalAmount ? Number(r.totalAmount) : null;
+        const requiredDownPayment = r.requiredDownPayment ? Number(r.requiredDownPayment) : (totalAmount ? totalAmount * 0.5 : null);
+        const requiredDeposit = r.requiredDeposit ? Number(r.requiredDeposit) : (totalAmount ? totalAmount * 0.1 : null);
+
         return {
           id: `RES-${r.reservationId}`,
           clientId: r.clientId,
@@ -71,9 +118,21 @@ export async function GET(request) {
           submittedAt: r.submittedAt.toISOString(),
           bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
           bookingVenueId: r.bookings[0]?.venueId || null,
-          amountPaid: r.bookings.reduce((sum, b) => 
-            sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0), 0),
-          totalAmount: r.totalAmount ? Number(r.totalAmount) : null,
+          amountPaid: totalPaid,
+          totalAmount: totalAmount,
+          // Payment policy fields
+          paymentStatus: r.paymentStatus,
+          calendarVisible: r.calendarVisible,
+          downPaymentDeadline: r.downPaymentDeadline ? r.downPaymentDeadline.toISOString().split("T")[0] : null,
+          balanceDeadline: r.balanceDeadline ? r.balanceDeadline.toISOString().split("T")[0] : null,
+          cancellationDeadline: r.cancellationDeadline ? r.cancellationDeadline.toISOString().split("T")[0] : null,
+          isFinal: r.isFinal,
+          requiredDownPayment: requiredDownPayment,
+          requiredDeposit: requiredDeposit,
+          downPaymentPaid: downPaymentPaid,
+          depositPaid: depositPaid,
+          balancePaid: balancePaid,
+          remarks: r.notes || null,
           particulars: r.reservedParticulars.map((rp) => ({
             name: rp.particular.particularName,
             quantity: rp.quantity,
@@ -101,6 +160,15 @@ export async function POST(request) {
     if (!venueId || !eventType || !eventDate || !timeSlotId || !clientId) {
       return NextResponse.json(
         { error: "Missing required fields: venueId, eventType, eventDate, timeSlotId, clientId" },
+        { status: 400 }
+      );
+    }
+
+    // VALIDATION: Event date must be at least 7 days from now
+    const advanceCheck = validateAdvanceBooking(eventDate);
+    if (!advanceCheck.valid) {
+      return NextResponse.json(
+        { error: advanceCheck.error, minDate: advanceCheck.minDate },
         { status: 400 }
       );
     }
@@ -201,6 +269,27 @@ export async function POST(request) {
       }
     }
 
+    // Calculate payment policy deadlines
+    // Event date
+    const event = new Date(eventDate);
+    event.setHours(0, 0, 0, 0);
+
+    // 50% down payment deadline: 7 days before event
+    const downPaymentDeadline = addDays(event, -7);
+    // Final balance deadline: 2 days before event
+    const balanceDeadline = addDays(event, -2);
+    // Cancellation deadline: 30 days before event
+    const cancellationDeadline = addDays(event, -30);
+
+    // Check if we're within the 30-day window from today (isFinal)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isFinal = today >= cancellationDeadline;
+
+    // Calculate required down payment and deposit
+    const requiredDownPayment = totalAmount > 0 ? Math.round(totalAmount * 0.5 * 100) / 100 : null;
+    const requiredDeposit = totalAmount > 0 ? Math.round(totalAmount * 0.1 * 100) / 100 : null;
+
     // Create the reservation with all dates and particulars
     const reservation = await prisma.reservation.create({
       data: {
@@ -215,6 +304,15 @@ export async function POST(request) {
         totalAmount: totalAmount > 0 ? totalAmount : null,
         submittedAt: new Date(),
         notes: notes || null,
+        // Payment policy defaults
+        paymentStatus: "Pending",
+        calendarVisible: false, // Hidden until down payment + deposit are received
+        downPaymentDeadline: downPaymentDeadline,
+        balanceDeadline: balanceDeadline,
+        cancellationDeadline: cancellationDeadline,
+        isFinal: isFinal,
+        requiredDownPayment: requiredDownPayment,
+        requiredDeposit: requiredDeposit,
         // Create additional dates
         additionalDates: additionalDates.length > 0
           ? { create: additionalDates.map((d) => ({ eventDate: d })) }
@@ -266,7 +364,7 @@ export async function POST(request) {
       // 2. Notify the client about their new reservation
       await prisma.notification.create({
         data: {
-          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}`,
+          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(requiredDownPayment || 0).toLocaleString()}) + 10% deposit (₱${(requiredDeposit || 0).toLocaleString()}) is required by ${downPaymentDeadline.toISOString().split("T")[0]}.`,
           type: "booking",
           staffId: 1,
           clientId: parsedClientId,
@@ -278,12 +376,18 @@ export async function POST(request) {
     return NextResponse.json({
       id: reservationId,
       totalAmount,
+      requiredDownPayment,
+      requiredDeposit,
+      downPaymentDeadline: downPaymentDeadline.toISOString().split("T")[0],
+      balanceDeadline: balanceDeadline.toISOString().split("T")[0],
+      cancellationDeadline: cancellationDeadline.toISOString().split("T")[0],
+      isFinal,
       dates: allDates.map((d) => d.toISOString().split("T")[0]),
       particulars: reservation.reservedParticulars.map((rp) => ({
         name: rp.particular.particularName,
         quantity: rp.quantity,
       })),
-      message: "Reservation created successfully",
+      message: "Reservation created successfully. Note: A 50% down payment and 10% deposit must be paid by " + downPaymentDeadline.toISOString().split("T")[0] + ". Final balance must be settled by " + balanceDeadline.toISOString().split("T")[0] + ".",
     }, { status: 201 });
   } catch (error) {
     console.error("Failed to create reservation:", error);
