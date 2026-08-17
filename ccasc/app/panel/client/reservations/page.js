@@ -228,7 +228,8 @@ export default function ClientReservationsPage() {
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const dt = new Date(year, month, d);
-      const key = dt.toISOString().split("T")[0];
+      // Use local date string to avoid UTC offset shifting the date
+      const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       days.push({ date: d, key, dt });
     }
 
@@ -369,16 +370,7 @@ export default function ClientReservationsPage() {
               </div>
             </div>
 
-            {/* Date Picker - Calendar Grid */}
-            <div className="space-y-2">
-              <Label>Select Dates <span className="text-red-500">*</span></Label>
-              <p className="text-xs text-muted-foreground">Click on available dates to select them. Blocked dates are unavailable.</p>
-              {form.venueId ? renderCalendar() : (
-                <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
-              )}
-            </div>
-
-            {/* Particulars Selector */}
+            {/* Particulars Selector - moved above dates */}
             <div className="space-y-2">
               <Label>Additional Services / Particulars</Label>
               <p className="text-xs text-muted-foreground">Select the quantity for each service you need.</p>
@@ -447,6 +439,15 @@ export default function ClientReservationsPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Date Picker - Calendar Grid */}
+            <div className="space-y-2">
+              <Label>Select Dates <span className="text-red-500">*</span></Label>
+              <p className="text-xs text-muted-foreground">Click on available dates to select them. Blocked dates are unavailable.</p>
+              {form.venueId ? renderCalendar() : (
+                <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
+              )}
             </div>
 
             <div className="space-y-2">
