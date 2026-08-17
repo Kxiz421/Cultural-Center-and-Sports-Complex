@@ -41,8 +41,6 @@ import {
   AlertTriangle,
   User,
   Building2,
-  Info,
-  Clock,
 } from "lucide-react";
 
 export default function LTOOCancellationsPage() {
@@ -92,12 +90,7 @@ export default function LTOOCancellationsPage() {
         throw new Error(errData.error || "Failed to cancel booking");
       }
 
-      const result = await res.json();
-      if (result.isForfeiture) {
-        toast.warning("Booking cancelled with forfeiture. Payments are non-refundable but records preserved.");
-      } else {
-        toast.success("Booking cancelled successfully");
-      }
+      toast.success("Booking cancelled successfully");
       setConfirmOpen(false);
       setSelectedBooking(null);
       // Refresh
@@ -112,30 +105,14 @@ export default function LTOOCancellationsPage() {
   };
 
   const canCancel = (booking) => {
+    // For private/walk-in clients, can cancel if event is at least 2 days away and payment not completed
     if (booking.clientType === "provincial") return false;
-    // 30-day rule: can only cancel if event is 30+ days away
-    if (booking.daysUntilEvent !== null && booking.daysUntilEvent < 30) return false;
-    if (booking.isFinal) return false;
-    return true;
-  };
-
-  const getCancelActionLabel = (booking) => {
-    if (booking.clientType === "provincial") return "Provincial";
-    if (booking.isFinal) return "Final";
-    if (booking.daysUntilEvent !== null && booking.daysUntilEvent < 30) {
-      return `${booking.daysUntilEvent}d left`;
-    }
-    return "Cancel";
-  };
-
-  const getDaysBadge = (days) => {
-    if (days === null) return null;
-    if (days >= 30) {
-      return <Badge variant="outline" className="text-green-600 border-green-300">{days} days</Badge>;
-    } else if (days >= 0) {
-      return <Badge variant="outline" className="text-red-600 border-red-300">{days} days</Badge>;
-    }
-    return <Badge variant="outline" className="text-gray-600">Past</Badge>;
+    if (booking.paymentStatus === "Fully Paid") return false;
+    
+    const eventDate = new Date(booking.eventDate);
+    const today = new Date();
+    const diffDays = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
+    return diffDays >= 2;
   };
 
   const filteredBookings = bookings.filter((b) => {
@@ -156,33 +133,15 @@ export default function LTOOCancellationsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Booking Cancellation</h2>
         <p className="text-muted-foreground text-sm">
-          Manage booking cancellations. Cancellations must be made at least 30 days before the event to avoid forfeiture of the 50% down payment and 10% deposit.
+          View all confirmed bookings. Cancel private/walk-in bookings if payment is not completed at least 2 days before the event.
         </p>
       </div>
-
-      {/* Cancellation Policy Notice */}
-      <Card className="border-amber-200 bg-amber-50">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <Info className="size-5 text-amber-600 mt-0.5 shrink-0" />
-            <div className="text-sm text-amber-800">
-              <p className="font-semibold mb-1">Cancellation Policy</p>
-              <ul className="list-disc pl-4 space-y-1">
-                <li>Cancellations made <strong>30+ days</strong> before the event are eligible for refund</li>
-                <li>Cancellations made <strong>within 30 days</strong> will result in <strong>forfeiture</strong> of the 50% down payment and 10% deposit</li>
-                <li>Forfeited payments are kept in records for audit/log purposes</li>
-                <li>Reservations created within the 30-day window are marked as <strong>"Final"</strong> and cannot be cancelled</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle>Confirmed Bookings</CardTitle>
-          <CardDescription>Overview of all bookings with client details, payment status, and cancellation options based on the 30-day rule.</CardDescription>
+          <CardDescription>Overview of all bookings with client details, payment status, and cancellation options.</CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className="text-muted-foreground absolute top-2.5 left-2 size-4" />
@@ -216,7 +175,7 @@ export default function LTOOCancellationsPage() {
                 <TableHead>Activity</TableHead>
                 <TableHead>Venue</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Days Until Event</TableHead>
+                <TableHead>Time Slot</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -246,15 +205,7 @@ export default function LTOOCancellationsPage() {
                     <TableCell className="text-sm">{b.activityName || b.eventType || "—"}</TableCell>
                     <TableCell className="text-sm">{b.venue || "—"}</TableCell>
                     <TableCell className="text-sm">{b.eventDate || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Clock className="size-3 text-muted-foreground" />
-                        {getDaysBadge(b.daysUntilEvent)}
-                        {b.isWithin30Days && b.daysUntilEvent < 30 && b.daysUntilEvent >= 0 && (
-                          <span className="text-xs text-red-500">(Forfeit)</span>
-                        )}
-                      </div>
-                    </TableCell>
+                    <TableCell className="text-sm">{b.timeSlot || "—"}</TableCell>
                     <TableCell>
                       <Badge
                         variant={b.paymentStatus === "Fully Paid" ? "outline" : b.paymentStatus === "Partially Paid" ? "secondary" : "secondary"}
@@ -273,7 +224,6 @@ export default function LTOOCancellationsPage() {
                       <Badge variant={b.bookingStatus === "Booked" || b.bookingStatus === "Confirmed" ? "outline" : "secondary"}>
                         {b.bookingStatus || "Confirmed"}
                       </Badge>
-                      {b.isFinal && <Badge variant="secondary" className="ml-1">Final</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
                       {canCancel(b) && (
@@ -292,7 +242,7 @@ export default function LTOOCancellationsPage() {
                       )}
                       {!canCancel(b) && (
                         <span className="text-xs text-muted-foreground">
-                          {b.isFinal ? "Final" : b.clientType === "provincial" ? "Provincial" : getCancelActionLabel(b)}
+                          {b.paymentStatus === "Fully Paid" ? "Paid" : b.clientType === "provincial" ? "Provincial" : "Locked"}
                         </span>
                       )}
                     </TableCell>
@@ -313,7 +263,7 @@ export default function LTOOCancellationsPage() {
               Cancel Booking
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel the booking for &ldquo;{selectedBooking?.clientName}&rdquo;?
+              Are you sure you want to cancel the booking for &ldquo;{selectedBooking?.clientName}&rdquo;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
@@ -333,17 +283,6 @@ export default function LTOOCancellationsPage() {
               <span className="text-muted-foreground">Venue:</span>
               <span className="font-medium">{selectedBooking?.venue || "—"}</span>
             </div>
-            {selectedBooking?.daysUntilEvent !== null && selectedBooking?.daysUntilEvent < 30 && selectedBooking?.daysUntilEvent >= 0 && (
-              <div className="mt-2 rounded-md bg-red-50 border border-red-200 p-2">
-                <div className="flex items-center gap-1 text-red-700 text-xs">
-                  <AlertTriangle className="size-3" />
-                  <span className="font-medium">30-Day Forfeiture Rule Applied</span>
-                </div>
-                <p className="text-red-600 text-xs mt-1">
-                  This cancellation is within 30 days of the event. The 50% down payment and 10% deposit (if paid) will be forfeited (non-refundable). Payment records will be preserved for audit purposes.
-                </p>
-              </div>
-            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setConfirmOpen(false); setSelectedBooking(null); }}>Cancel</Button>
