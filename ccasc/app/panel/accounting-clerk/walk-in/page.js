@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Minus } from "lucide-react";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
@@ -69,29 +69,45 @@ export default function WalkInReservationPage() {
   const [packages, setPackages] = React.useState([]);
   const [packagesLoading, setPackagesLoading] = React.useState(true);
 
+  // Particulars
+  const [particulars, setParticulars] = React.useState([]);
+  const [particularQuantities, setParticularQuantities] = React.useState({});
+  const [particularsLoading, setParticularsLoading] = React.useState(true);
+
+  // Per-date customization for multi-day
+  const [customizePerDate, setCustomizePerDate] = React.useState(false);
+  const [dateCustomizations, setDateCustomizations] = React.useState({});
+  const [showCustomizeDialog, setShowCustomizeDialog] = React.useState(false);
+
   // Dialog and submission
   const [showOrder, setShowOrder] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [eventDates, setEventDates] = React.useState([]);
+  const [selectedDates, setSelectedDates] = React.useState(new Set());
 
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
 
-  // Load packages on mount
+  // Load packages and particulars on mount
   React.useEffect(() => {
-    async function loadPackages() {
+    async function loadData() {
       try {
-        const res = await fetch("/api/packages");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setPackages(data);
-        }
+        const [pkgRes, partRes] = await Promise.all([
+          fetch("/api/packages"),
+          fetch("/api/particulars"),
+        ]);
+        const pkgData = await pkgRes.json();
+        const partData = await partRes.json();
+        if (Array.isArray(pkgData)) setPackages(pkgData);
+        if (Array.isArray(partData)) setParticulars(partData);
       } catch (err) {
-        console.error("Failed to load packages:", err);
+        console.error("Failed to load data:", err);
       } finally {
         setPackagesLoading(false);
+        setParticularsLoading(false);
       }
     }
-    loadPackages();
+    loadData();
   }, []);
 
   // Search clients when query changes
@@ -148,6 +164,57 @@ export default function WalkInReservationPage() {
     setPackageId(value);
   };
 
+  const updateParticularQty = (particularId, delta) => {
+    setParticularQuantities((prev) => {
+      const current = prev[particularId] || 0;
+      const next = Math.max(0, current + delta);
+      return { ...prev, [particularId]: next };
+    });
+  };
+
+  // Per-date customization handlers
+  const handleDatePackageSelect = (date, pkgId) => {
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: { ...prev[date], packageId: pkgId },
+    }));
+  };
+
+  const handleDateParticularQty = (date, particularId, delta) => {
+    setDateCustomizations((prev) => {
+      const current = prev[date]?.particularQuantities?.[particularId] || 0;
+      const next = Math.max(0, current + delta);
+      return {
+        ...prev,
+        [date]: {
+          ...prev[date],
+          particularQuantities: {
+            ...(prev[date]?.particularQuantities || {}),
+            [particularId]: next,
+          },
+        },
+      };
+    });
+  };
+
+  const toggleCustomizeMode = () => {
+    if (!customizePerDate) {
+      const initial = {};
+      for (const date of selectedDates) {
+        initial[date] = {
+          packageId: packageId || "0",
+          particularQuantities: { ...particularQuantities },
+        };
+      }
+      setDateCustomizations(initial);
+      setShowCustomizeDialog(true);
+    } else {
+      setDateCustomizations({});
+      setShowCustomizeDialog(false);
+    }
+    setCustomizePerDate(!customizePerDate);
+  };
+
   const handleGenerateOrder = () => {
     if (!venueId || !eventDate || !timeSlotId || !eventType) {
       toast.error("Please fill in all required fields.");
@@ -161,6 +228,14 @@ export default function WalkInReservationPage() {
     if (eventDate < minDateStr) {
       toast.error(`Reservations must be filed at least 7 days before the event. The earliest available date is ${minDateStr}.`);
       return;
+    }
+
+    // Also validate multi-day dates
+    for (const date of selectedDates) {
+      if (date < minDateStr) {
+        toast.error(`All selected dates must be at least 7 days from today.`);
+        return;
+      }
     }
 
     if (isExistingUser && !selectedClient) {
@@ -209,20 +284,54 @@ export default function WalkInReservationPage() {
         notesStr = `Walk-in client: ${clientName} | Contact: ${clientContact || "N/A"} | Email: ${clientEmail || "N/A"}${notes ? ` | Notes: ${notes}` : ''}`;
       }
 
+      // Build particulars and package for submit
+      let selectedParticulars = [];
+      let selectedPackageId = packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null;
+
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        const aggregatedParticulars = {};
+        for (const [date, cust] of Object.entries(dateCustomizations)) {
+          if (cust.particularQuantities) {
+            for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
+              if (qty > 0) {
+                aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
+              }
+            }
+          }
+        }
+        selectedParticulars = Object.entries(aggregatedParticulars)
+          .filter(([, qty]) => qty > 0)
+          .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+        const sortedDates = [...selectedDates].sort();
+        const firstCust = dateCustomizations[sortedDates[0]];
+        if (firstCust && firstCust.packageId && firstCust.packageId !== "0") {
+          selectedPackageId = parseInt(firstCust.packageId, 10);
+        }
+      } else {
+        selectedParticulars = Object.entries(particularQuantities)
+          .filter(([, qty]) => qty > 0)
+          .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+      }
+
+      const sortedDates = [...selectedDates].sort();
+      const primaryDate = eventDate || sortedDates[0];
+
       const res = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           venueId: parseInt(venueId, 10),
           eventType,
-          eventDate,
+          eventDate: primaryDate,
+          eventDates: sortedDates.length > 0 ? sortedDates : [eventDate],
           timeSlotId: parseInt(timeSlotId, 10),
-          packageId: packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null,
+          packageId: selectedPackageId,
           clientId: actualClientId,
           notes: notesStr,
           clientName: isExistingUser && selectedClient ? selectedClient.fullName : clientName,
           clientContact: isExistingUser && selectedClient ? selectedClient.contact : clientContact,
           clientEmail: isExistingUser && selectedClient ? selectedClient.email : clientEmail,
+          particulars: selectedParticulars.length > 0 ? selectedParticulars : undefined,
         }),
       });
 
@@ -248,6 +357,11 @@ export default function WalkInReservationPage() {
       setSelectedClient(null);
       setSearchQuery("");
       setSearchResults([]);
+      setSelectedDates(new Set());
+      setParticularQuantities({});
+      setCustomizePerDate(false);
+      setDateCustomizations({});
+      setEventDates([]);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -523,6 +637,66 @@ export default function WalkInReservationPage() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Additional Dates</Label>
+              <p className="text-xs text-muted-foreground">Add multiple dates for multi-day events.</p>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  min={new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]}
+                  value={eventDates.length > 0 ? eventDates[eventDates.length - 1] : ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && !selectedDates.has(val) && val !== eventDate) {
+                      setSelectedDates((prev) => new Set(prev).add(val));
+                      setEventDates((prev) => [...prev, val]);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => {
+                  const d = new Date();
+                  const key = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+                  // Add a date helper - just show the date input field
+                }}>
+                  <Plus className="size-4" />
+                </Button>
+              </div>
+              {selectedDates.size > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {[...selectedDates].sort().map((d) => (
+                    <Badge key={d} variant="secondary" className="text-xs">
+                      {d} <button onClick={() => {
+                        const next = new Set(selectedDates);
+                        next.delete(d);
+                        setSelectedDates(next);
+                        setEventDates((prev) => prev.filter((ed) => ed !== d));
+                      }} className="ml-1 hover:text-red-500">×</button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {selectedDates.size > 0 && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant={customizePerDate ? "default" : "outline"}
+                    size="sm"
+                    onClick={toggleCustomizeMode}
+                    className="flex items-center gap-2"
+                  >
+                    <Layers className="size-4" />
+                    {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
+                  </Button>
+                  {customizePerDate && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCustomizeDialog(true)}>
+                      Edit Per-Date Details
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label>Additional Notes</Label>
               <Input
                 placeholder="Any special requests..."
@@ -676,6 +850,84 @@ export default function WalkInReservationPage() {
             <Button onClick={handleSubmitReservation} disabled={submitting}>
               {submitting ? "Saving..." : "Confirm & Save Reservation"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Per-Date Customization Dialog */}
+      <Dialog open={showCustomizeDialog} onOpenChange={setShowCustomizeDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="size-5" />
+              Customize Per Date
+            </DialogTitle>
+            <DialogDescription>
+              Set different packages and particulars for each selected date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {[...selectedDates].sort().map((date) => {
+              const cust = dateCustomizations[date] || { packageId: "0", particularQuantities: {} };
+              return (
+                <div key={date} className="rounded-lg border p-4">
+                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                    <Calendar className="size-4 text-muted-foreground" />
+                    {date}
+                  </h4>
+                  <div className="space-y-2 mb-3">
+                    <Label className="text-xs">Package for {date}</Label>
+                    <Select value={cust.packageId} onValueChange={(v) => handleDatePackageSelect(date, v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select package" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">None</SelectItem>
+                        {packages.filter(p => p.statusId === 1).map((pkg) => (
+                          <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
+                            {pkg.packageName} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Particulars for {date}</Label>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {particulars.map((p) => {
+                        const qty = cust.particularQuantities?.[p.particularId] || 0;
+                        const cost = p.unitCost ? Number(p.unitCost) : 0;
+                        const maxQty = p.totalQuantity || 999;
+                        return (
+                          <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{p.particularName}</p>
+                              {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button type="button" variant="outline" size="icon" className="size-6"
+                                onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                disabled={qty <= 0}>
+                                <Minus className="size-3" />
+                              </Button>
+                              <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                              <Button type="button" variant="outline" size="icon" className="size-6"
+                                onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                disabled={qty >= maxQty}>
+                                <Plus className="size-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomizeDialog(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
