@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer, Layers } from "lucide-react";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer, Layers, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -109,14 +109,18 @@ export default function ClientReservationsPage() {
   };
 
   const handlePackageSelect = (packageId) => {
-    if (packageId && packageId !== "0") {
+    if (packageId && packageId !== "0" && packageId !== "custom") {
       const selectedPkg = packages.find(p => String(p.packageId) === packageId);
       if (selectedPkg) {
         setForm(prev => ({ ...prev, packageId, timeSlotId: String(selectedPkg.timeSlotId) }));
+        setParticularQuantities({});
         return;
       }
     }
     setForm(prev => ({ ...prev, packageId }));
+    if (packageId === "custom" || packageId === "0") {
+      setParticularQuantities({});
+    }
   };
 
   const toggleDate = (dateStr) => {
@@ -198,7 +202,7 @@ export default function ClientReservationsPage() {
     if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
       // Calculate per-date totals
       for (const [date, cust] of Object.entries(dateCustomizations)) {
-        if (cust.packageId && cust.packageId !== "0") {
+        if (cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom") {
           const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
           if (pkg) {
             const rate = form.timeSlotId === "1"
@@ -206,14 +210,15 @@ export default function ClientReservationsPage() {
               : Number(pkg.nightRate || 0);
             total += rate;
           }
-        }
-        // Particulars for this date
-        if (cust.particularQuantities) {
-          for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
-            if (qty > 0) {
-              const part = particulars.find((p) => String(p.particularId) === partId);
-              if (part && part.unitCost) {
-                total += Number(part.unitCost) * qty;
+        } else if (cust.packageId === "custom" || cust.packageId === "0") {
+          // Only add particular costs for custom/no package
+          if (cust.particularQuantities) {
+            for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
+              if (qty > 0) {
+                const part = particulars.find((p) => String(p.particularId) === partId);
+                if (part && part.unitCost) {
+                  total += Number(part.unitCost) * qty;
+                }
               }
             }
           }
@@ -221,7 +226,7 @@ export default function ClientReservationsPage() {
       }
     } else {
       // Global calculation
-      if (form.packageId && form.packageId !== "0") {
+      if (form.packageId && form.packageId !== "0" && form.packageId !== "custom") {
         const pkg = packages.find((p) => String(p.packageId) === form.packageId);
         if (pkg) {
           const rate = form.timeSlotId === "1"
@@ -229,12 +234,14 @@ export default function ClientReservationsPage() {
             : Number(pkg.nightRate || 0);
           total += rate * numDays;
         }
-      }
-      for (const [partId, qty] of Object.entries(particularQuantities)) {
-        if (qty > 0) {
-          const part = particulars.find((p) => String(p.particularId) === partId);
-          if (part && part.unitCost) {
-            total += Number(part.unitCost) * qty;
+      } else if (form.packageId === "custom" || form.packageId === "0" || !form.packageId) {
+        // Only add particular costs for custom/no package
+        for (const [partId, qty] of Object.entries(particularQuantities)) {
+          if (qty > 0) {
+            const part = particulars.find((p) => String(p.particularId) === partId);
+            if (part && part.unitCost) {
+              total += Number(part.unitCost) * qty;
+            }
           }
         }
       }
@@ -269,11 +276,10 @@ export default function ClientReservationsPage() {
     let selectedPackageId = form.packageId || null;
 
     if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
-      // Build per-date data: send as separate reservations or with date-specific particulars
-      // For now, aggregate all particulars across all dates
+      // Build per-date data: aggregate only particulars from custom/no-package dates
       const aggregatedParticulars = {};
       for (const [date, cust] of Object.entries(dateCustomizations)) {
-        if (cust.particularQuantities) {
+        if ((cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities) {
           for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
             if (qty > 0) {
               aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
@@ -287,13 +293,21 @@ export default function ClientReservationsPage() {
       
       // Use the first date's package as the primary package
       const firstCust = dateCustomizations[primaryDate];
-      if (firstCust && firstCust.packageId && firstCust.packageId !== "0") {
+      if (firstCust && firstCust.packageId && firstCust.packageId !== "0" && firstCust.packageId !== "custom") {
         selectedPackageId = firstCust.packageId;
+      } else {
+        selectedPackageId = null;
       }
     } else {
-      selectedParticulars = Object.entries(particularQuantities)
-        .filter(([, qty]) => qty > 0)
-        .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+      // Only include particulars if custom or no package
+      if (form.packageId === "custom" || form.packageId === "0" || !form.packageId) {
+        selectedParticulars = Object.entries(particularQuantities)
+          .filter(([, qty]) => qty > 0)
+          .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+      } else {
+        selectedPackageId = form.packageId || null;
+        selectedParticulars = []; // Inclusions are free, don't send as paid particulars
+      }
     }
 
     try {
@@ -484,6 +498,7 @@ export default function ClientReservationsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0">None</SelectItem>
+                    <SelectItem value="custom">Custom — Pick Items</SelectItem>
                     {packages
                       .filter(p => p.statusId === 1)
                       .map((pkg) => (
@@ -495,79 +510,7 @@ export default function ClientReservationsPage() {
                 </Select>
               </div>
             </div>
-
-            {/* Particulars Selector */}
-            <div className="space-y-2">
-              <Label>Additional Services / Particulars</Label>
-              <p className="text-xs text-muted-foreground">Select the quantity for each service you need.</p>
-              <div className="space-y-2 border rounded-lg p-4">
-                {particulars.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No particulars available.</p>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                      {particulars.map((p) => {
-                      const qty = particularQuantities[p.particularId] || 0;
-                      const cost = p.unitCost ? Number(p.unitCost) : 0;
-                      const maxQty = p.totalQuantity || 999;
-                      return (
-                        <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">{p.particularName}</p>
-                            {cost > 0 && (
-                              <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Available: {maxQty}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="size-7"
-                              onClick={() => updateParticularQty(p.particularId, -1)}
-                              disabled={qty <= 0}
-                            >
-                              <Minus className="size-3" />
-                            </Button>
-                            <input
-                              type="number"
-                              min={0}
-                              max={maxQty}
-                              value={qty}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value, 10);
-                                if (isNaN(val) || val < 0) {
-                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
-                                } else if (val > maxQty) {
-                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
-                                } else {
-                                  setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
-                                }
-                              }}
-                              className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="size-7"
-                              onClick={() => updateParticularQty(p.particularId, 1)}
-                              disabled={qty >= maxQty}
-                            >
-                              <Plus className="size-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Date Picker - Calendar Grid */}
+{/* Date Picker - Calendar Grid */}
             <div className="space-y-2">
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">Click on available dates to select them. Blocked dates are unavailable.</p>
@@ -602,6 +545,85 @@ export default function ClientReservationsPage() {
               )}
             </div>
 
+            {/* Conditional: Package Inclusions or Particulars Selector */}
+            <div className="space-y-2">
+              {form.packageId && form.packageId !== "0" && form.packageId !== "custom" ? (
+                <>
+                  <Label>Package Inclusions</Label>
+                  <p className="text-xs text-muted-foreground">This package includes the following items at no additional cost.</p>
+                  <div className="border rounded-lg p-4">
+                    {(() => {
+                      const pkg = packages.find(p => String(p.packageId) === form.packageId);
+                      if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
+                        return <p className="text-sm text-muted-foreground">No inclusions for this package.</p>;
+                      }
+                      return (
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {pkg.inclusions.map((inc, idx) => (
+                            <div key={idx} className="flex items-center justify-between rounded-md border p-2 bg-muted/30">
+                              <p className="text-xs font-medium truncate">{inc.itemName}</p>
+                              <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Label>Additional Services / Particulars</Label>
+                    {Object.keys(particularQuantities).length > 0 && (
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setParticularQuantities({})}>
+                        <RotateCcw className="size-3 mr-1" />
+                        Restore to Default
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Select the quantity for each service you need.</p>
+                  <div className="space-y-2 border rounded-lg p-4">
+                    {particulars.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No particulars available.</p>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {particulars.map((p) => {
+                          const qty = particularQuantities[p.particularId] || 0;
+                          const cost = p.unitCost ? Number(p.unitCost) : 0;
+                          const maxQty = p.totalQuantity || 999;
+                          return (
+                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{p.particularName}</p>
+                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
+                                <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, -1)} disabled={qty <= 0}>
+                                  <Minus className="size-3" />
+                                </Button>
+                                <input type="number" min={0} max={maxQty} value={qty}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (isNaN(val) || val < 0) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
+                                    else if (val > maxQty) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
+                                    else setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
+                                  }}
+                                  className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, 1)} disabled={qty >= maxQty}>
+                                  <Plus className="size-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="notes">Additional Notes</Label>
               <Textarea
@@ -628,13 +650,13 @@ export default function ClientReservationsPage() {
                     return (
                       <div key={date} className="border-t pt-1 mt-1">
                         <p className="text-xs font-medium text-muted-foreground">{date}</p>
-                        {cust.packageId && cust.packageId !== "0" && (
+                        {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" && (
                           <div className="flex justify-between pl-2">
                             <span>{pkg?.packageName || "Package"}</span>
                             <span className="tabular-nums">₱{pkgRate.toLocaleString()}</span>
                           </div>
                         )}
-                        {cust.particularQuantities && Object.entries(cust.particularQuantities).filter(([, q]) => q > 0).map(([partId, qty]) => {
+                        {(cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities && Object.entries(cust.particularQuantities).filter(([, q]) => q > 0).map(([partId, qty]) => {
                           const part = particulars.find(pp => String(pp.particularId) === partId);
                           if (!part) return null;
                           return (
@@ -649,7 +671,7 @@ export default function ClientReservationsPage() {
                   })
                 ) : (
                   <>
-                    {form.packageId && form.packageId !== "0" && (
+                    {form.packageId && form.packageId !== "0" && form.packageId !== "custom" && (
                       <div className="flex justify-between">
                         <span>Package Rate × {selectedDates.size || 1} day(s)</span>
                         <span className="font-medium tabular-nums">
@@ -662,7 +684,7 @@ export default function ClientReservationsPage() {
                         </span>
                       </div>
                     )}
-                    {Object.entries(particularQuantities).filter(([, q]) => q > 0).map(([id, qty]) => {
+                    {(form.packageId === "custom" || form.packageId === "0" || !form.packageId) && Object.entries(particularQuantities).filter(([, q]) => q > 0).map(([id, qty]) => {
                       const p = particulars.find(pp => String(pp.particularId) === id);
                       if (!p) return null;
                       return (
@@ -725,6 +747,7 @@ export default function ClientReservationsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="0">None</SelectItem>
+                        <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         {packages
                           .filter(p => p.statusId === 1)
                           .map((pkg) => (
@@ -736,38 +759,77 @@ export default function ClientReservationsPage() {
                     </Select>
                   </div>
 
-                  {/* Particulars for this date */}
-                  <div className="space-y-2">
-                    <Label className="text-xs">Particulars for {date}</Label>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {particulars.map((p) => {
-                        const qty = cust.particularQuantities?.[p.particularId] || 0;
-                        const cost = p.unitCost ? Number(p.unitCost) : 0;
-                        const maxQty = p.totalQuantity || 999;
-                        return (
-                          <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate">{p.particularName}</p>
-                              {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                  {/* Conditional: Package Inclusions or Particulars for this date */}
+                  {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" ? (
+                    <div className="space-y-2">
+                      <Label className="text-xs">Package Inclusions for {date}</Label>
+                      <div className="border rounded-lg p-3 bg-muted/20">
+                        {(() => {
+                          const pkg = packages.find(p => String(p.packageId) === cust.packageId);
+                          if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
+                            return <p className="text-xs text-muted-foreground">No inclusions for this package.</p>;
+                          }
+                          return (
+                            <div className="grid gap-1 md:grid-cols-2">
+                              {pkg.inclusions.map((inc, idx) => (
+                                <div key={idx} className="flex items-center justify-between rounded-md border p-2">
+                                  <p className="text-xs font-medium truncate">{inc.itemName}</p>
+                                  <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Button type="button" variant="outline" size="icon" className="size-6"
-                                onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                disabled={qty <= 0}>
-                                <Minus className="size-3" />
-                              </Button>
-                              <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                              <Button type="button" variant="outline" size="icon" className="size-6"
-                                onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                disabled={qty >= maxQty}>
-                                <Plus className="size-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })()}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Particulars for {date}</Label>
+                        {Object.keys(cust.particularQuantities || {}).length > 0 && (
+                          <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground"
+                            onClick={() => {
+                              setDateCustomizations((prev) => ({
+                                ...prev,
+                                [date]: { ...prev[date], particularQuantities: {} },
+                              }));
+                            }}
+                          >
+                            <RotateCcw className="size-3 mr-1" />
+                            Restore to Default
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {particulars.map((p) => {
+                          const qty = cust.particularQuantities?.[p.particularId] || 0;
+                          const cost = p.unitCost ? Number(p.unitCost) : 0;
+                          const maxQty = p.totalQuantity || 999;
+                          return (
+                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                  disabled={qty <= 0}>
+                                  <Minus className="size-3" />
+                                </Button>
+                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                  disabled={qty >= maxQty}>
+                                  <Plus className="size-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

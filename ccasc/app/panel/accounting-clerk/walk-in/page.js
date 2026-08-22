@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Minus } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Minus, RotateCcw } from "lucide-react";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
@@ -153,15 +153,19 @@ export default function WalkInReservationPage() {
   };
 
   const handlePackageSelect = (value) => {
-    if (value && value !== "0") {
+    if (value && value !== "0" && value !== "custom") {
       const selectedPkg = packages.find(p => String(p.packageId) === value);
       if (selectedPkg) {
         setPackageId(value);
         setTimeSlotId(String(selectedPkg.timeSlotId));
+        setParticularQuantities({});
         return;
       }
     }
     setPackageId(value);
+    if (value === "custom" || value === "0") {
+      setParticularQuantities({});
+    }
   };
 
   const updateParticularQty = (particularId, delta) => {
@@ -291,7 +295,7 @@ export default function WalkInReservationPage() {
       if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
         const aggregatedParticulars = {};
         for (const [date, cust] of Object.entries(dateCustomizations)) {
-          if (cust.particularQuantities) {
+          if ((cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities) {
             for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
               if (qty > 0) {
                 aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
@@ -304,13 +308,21 @@ export default function WalkInReservationPage() {
           .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
         const sortedDates = [...selectedDates].sort();
         const firstCust = dateCustomizations[sortedDates[0]];
-        if (firstCust && firstCust.packageId && firstCust.packageId !== "0") {
+        if (firstCust && firstCust.packageId && firstCust.packageId !== "0" && firstCust.packageId !== "custom") {
           selectedPackageId = parseInt(firstCust.packageId, 10);
+        } else {
+          selectedPackageId = null;
         }
       } else {
-        selectedParticulars = Object.entries(particularQuantities)
-          .filter(([, qty]) => qty > 0)
-          .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+        // Only include particulars if custom or no package
+        if (packageId === "custom" || packageId === "0" || !packageId) {
+          selectedParticulars = Object.entries(particularQuantities)
+            .filter(([, qty]) => qty > 0)
+            .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+        } else {
+          selectedPackageId = parseInt(packageId, 10) || null;
+          selectedParticulars = []; // Inclusions are free, don't send as paid particulars
+        }
       }
 
       const sortedDates = [...selectedDates].sort();
@@ -626,6 +638,7 @@ export default function WalkInReservationPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="0">None</SelectItem>
+                  <SelectItem value="custom">Custom — Pick Items</SelectItem>
                   {packages
                     .filter(p => p.statusId === 1)
                     .map((pkg) => (
@@ -635,6 +648,33 @@ export default function WalkInReservationPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+{/* Conditional: Package Inclusions or Particulars Selector */}
+            <div className="space-y-2">
+              {packageId && packageId !== "0" && packageId !== "custom" ? (
+                <>
+                  <Label>Package Inclusions</Label>
+                  <p className="text-xs text-muted-foreground">This package includes the following items at no additional cost.</p>
+                  <div className="border rounded-lg p-4">
+                    {(() => {
+                      const pkg = packages.find(p => String(p.packageId) === packageId);
+                      if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
+                        return <p className="text-sm text-muted-foreground">No inclusions for this package.</p>;
+                      }
+                      return (
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {pkg.inclusions.map((inc, idx) => (
+                            <div key={idx} className="flex items-center justify-between rounded-md border p-2 bg-muted/30">
+                              <p className="text-xs font-medium truncate">{inc.itemName}</p>
+                              <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Additional Dates</Label>
@@ -883,6 +923,7 @@ export default function WalkInReservationPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="0">None</SelectItem>
+                        <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         {packages.filter(p => p.statusId === 1).map((pkg) => (
                           <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
                             {pkg.packageName} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
@@ -891,37 +932,77 @@ export default function WalkInReservationPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Particulars for {date}</Label>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {particulars.map((p) => {
-                        const qty = cust.particularQuantities?.[p.particularId] || 0;
-                        const cost = p.unitCost ? Number(p.unitCost) : 0;
-                        const maxQty = p.totalQuantity || 999;
-                        return (
-                          <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate">{p.particularName}</p>
-                              {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+
+                  {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" ? (
+                    <div className="space-y-2">
+                      <Label className="text-xs">Package Inclusions for {date}</Label>
+                      <div className="border rounded-lg p-3 bg-muted/20">
+                        {(() => {
+                          const pkg = packages.find(p => String(p.packageId) === cust.packageId);
+                          if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
+                            return <p className="text-xs text-muted-foreground">No inclusions for this package.</p>;
+                          }
+                          return (
+                            <div className="grid gap-1 md:grid-cols-2">
+                              {pkg.inclusions.map((inc, idx) => (
+                                <div key={idx} className="flex items-center justify-between rounded-md border p-2">
+                                  <p className="text-xs font-medium truncate">{inc.itemName}</p>
+                                  <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Button type="button" variant="outline" size="icon" className="size-6"
-                                onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                disabled={qty <= 0}>
-                                <Minus className="size-3" />
-                              </Button>
-                              <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                              <Button type="button" variant="outline" size="icon" className="size-6"
-                                onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                disabled={qty >= maxQty}>
-                                <Plus className="size-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })()}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Particulars for {date}</Label>
+                        {Object.keys(cust.particularQuantities || {}).length > 0 && (
+                          <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground"
+                            onClick={() => {
+                              setDateCustomizations((prev) => ({
+                                ...prev,
+                                [date]: { ...prev[date], particularQuantities: {} },
+                              }));
+                            }}
+                          >
+                            <RotateCcw className="size-3 mr-1" />
+                            Restore to Default
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {particulars.map((p) => {
+                          const qty = cust.particularQuantities?.[p.particularId] || 0;
+                          const cost = p.unitCost ? Number(p.unitCost) : 0;
+                          const maxQty = p.totalQuantity || 999;
+                          return (
+                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                  disabled={qty <= 0}>
+                                  <Minus className="size-3" />
+                                </Button>
+                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                  disabled={qty >= maxQty}>
+                                  <Plus className="size-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
