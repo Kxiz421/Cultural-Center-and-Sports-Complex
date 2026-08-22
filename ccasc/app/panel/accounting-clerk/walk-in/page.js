@@ -159,12 +159,32 @@ export default function WalkInReservationPage() {
         setPackageId(value);
         setTimeSlotId(String(selectedPkg.timeSlotId));
         setParticularQuantities({});
+        // Sync per-date customizations when package changes and customize mode is active
+        if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+          setDateCustomizations((prev) => {
+            const updated = { ...prev };
+            for (const date of Object.keys(updated)) {
+              updated[date] = { ...updated[date], packageId: value, particularQuantities: {} };
+            }
+            return updated;
+          });
+        }
         return;
       }
     }
     setPackageId(value);
     if (value === "custom" || value === "0") {
       setParticularQuantities({});
+      // Sync per-date customizations when package changes and customize mode is active
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        setDateCustomizations((prev) => {
+          const updated = { ...prev };
+          for (const date of Object.keys(updated)) {
+            updated[date] = { ...updated[date], packageId: value, particularQuantities: {} };
+          }
+          return updated;
+        });
+      }
     }
   };
 
@@ -180,7 +200,11 @@ export default function WalkInReservationPage() {
   const handleDatePackageSelect = (date, pkgId) => {
     setDateCustomizations((prev) => ({
       ...prev,
-      [date]: { ...prev[date], packageId: pkgId },
+      [date]: {
+        ...prev[date],
+        packageId: pkgId,
+        particularQuantities: (pkgId && pkgId !== "0" && pkgId !== "custom") ? {} : (prev[date]?.particularQuantities || {}),
+      },
     }));
   };
 

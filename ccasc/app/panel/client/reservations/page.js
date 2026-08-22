@@ -114,12 +114,32 @@ export default function ClientReservationsPage() {
       if (selectedPkg) {
         setForm(prev => ({ ...prev, packageId, timeSlotId: String(selectedPkg.timeSlotId) }));
         setParticularQuantities({});
+        // Sync per-date customizations when package changes and customize mode is active
+        if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+          setDateCustomizations((prev) => {
+            const updated = { ...prev };
+            for (const date of Object.keys(updated)) {
+              updated[date] = { ...updated[date], packageId, particularQuantities: {} };
+            }
+            return updated;
+          });
+        }
         return;
       }
     }
     setForm(prev => ({ ...prev, packageId }));
     if (packageId === "custom" || packageId === "0") {
       setParticularQuantities({});
+      // Sync per-date customizations when package changes and customize mode is active
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        setDateCustomizations((prev) => {
+          const updated = { ...prev };
+          for (const date of Object.keys(updated)) {
+            updated[date] = { ...updated[date], packageId, particularQuantities: {} };
+          }
+          return updated;
+        });
+      }
     }
   };
 
@@ -153,7 +173,11 @@ export default function ClientReservationsPage() {
   const handleDatePackageSelect = (date, pkgId) => {
     setDateCustomizations((prev) => ({
       ...prev,
-      [date]: { ...prev[date], packageId: pkgId },
+      [date]: {
+        ...prev[date],
+        packageId: pkgId,
+        particularQuantities: (pkgId && pkgId !== "0" && pkgId !== "custom") ? {} : (prev[date]?.particularQuantities || {}),
+      },
     }));
   };
 
