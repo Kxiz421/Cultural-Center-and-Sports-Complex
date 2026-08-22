@@ -229,7 +229,7 @@ export default function ClientReservationsPage() {
         if (cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom") {
           const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
           if (pkg) {
-            const rate = form.timeSlotId === "1"
+            const rate = String(pkg.timeSlotId) === "1"
               ? Number(pkg.dayRate || 0)
               : Number(pkg.nightRate || 0);
             total += rate;
@@ -670,7 +670,7 @@ export default function ClientReservationsPage() {
                   // Per-date breakdown
                   Object.entries(dateCustomizations).map(([date, cust]) => {
                     const pkg = packages.find(p => String(p.packageId) === cust.packageId);
-                    const pkgRate = pkg ? (form.timeSlotId === "1" ? Number(pkg.dayRate || 0) : Number(pkg.nightRate || 0)) : 0;
+                    const pkgRate = pkg ? (String(pkg.timeSlotId) === "1" ? Number(pkg.dayRate || 0) : Number(pkg.nightRate || 0)) : 0;
                     return (
                       <div key={date} className="border-t pt-1 mt-1">
                         <p className="text-xs font-medium text-muted-foreground">{date}</p>
