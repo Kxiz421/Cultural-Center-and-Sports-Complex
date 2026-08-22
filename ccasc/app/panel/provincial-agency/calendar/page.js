@@ -3,8 +3,18 @@
 import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { CalendarDays, Trophy, ChevronLeft, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -22,12 +32,16 @@ function getEventColor(status, type) {
     return { bg: "bg-green-100 dark:bg-green-900/40", text: "text-green-800 dark:text-green-300" };
   if (status === "Pending")
     return { bg: "bg-yellow-100 dark:bg-yellow-900/40", text: "text-yellow-800 dark:text-yellow-300" };
+  if (status === "Ongoing")
+    return { bg: "bg-indigo-100 dark:bg-indigo-900/40", text: "text-indigo-800 dark:text-indigo-300" };
+  if (status === "Completed")
+    return { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-800 dark:text-blue-300" };
   if (status === "Declined" || status === "Cancelled")
     return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
   return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
 }
 
-function MonthGrid({ events, title, icon: Icon, color }) {
+function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
   const [currentDate, setCurrentDate] = React.useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -172,8 +186,9 @@ function MonthGrid({ events, title, icon: Icon, color }) {
                         return (
                           <div
                             key={ev.id}
-                            className={`truncate rounded-sm px-1 py-0.5 text-[10px] font-medium leading-tight ${colors.bg} ${colors.text}`}
+                            className={`truncate rounded-sm px-1 py-0.5 text-[10px] font-medium leading-tight cursor-pointer hover:opacity-80 ${colors.bg} ${colors.text}`}
                             title={`${ev.title}${ev.clientName ? ` - ${ev.clientName}` : ""}${ev.blockType ? ` (${ev.blockType})` : ""}`}
+                            onClick={() => onEventClick && onEventClick(ev)}
                           >
                             {ev.title}
                           </div>
@@ -189,6 +204,15 @@ function MonthGrid({ events, title, icon: Icon, color }) {
                 );
               })}
             </div>
+{/* Color Legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-indigo-100 dark:bg-indigo-900/40" /> Ongoing</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-blue-100 dark:bg-blue-900/40" /> Completed</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-100 dark:bg-red-900/40" /> Holiday / Declined / Cancelled</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-100 dark:bg-orange-900/40" /> Maintenance</div>
+          </div>
           ))}
         </div>
       </CardContent>
@@ -200,6 +224,7 @@ export default function FacilityCalendarPage() {
   const [cultural, setCultural] = React.useState([]);
   const [sports, setSports] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [selectedEvent, setSelectedEvent] = React.useState(null);
 
   React.useEffect(() => {
     async function fetchCalendar() {
@@ -254,15 +279,98 @@ export default function FacilityCalendarPage() {
             title="Cultural Center"
             icon={CalendarDays}
             color="border-l-4 border-l-blue-500"
+            onEventClick={setSelectedEvent}
           />
           <MonthGrid
             events={sports}
             title="Sports Complex"
             icon={Trophy}
             color="border-l-4 border-l-orange-500"
+            onEventClick={setSelectedEvent}
           />
         </div>
       )}
+{/* Event Detail Dialog */}
+      <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedEvent?.type === "event" ? "Reservation Details" : "Calendar Block Details"}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedEvent?.type === "event" ? (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-xs">Client</Label>
+                  <p className="text-sm font-medium">{selectedEvent.clientName}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Date</Label>
+                  <p className="text-sm font-medium">
+                    {new Date(selectedEvent.date).toLocaleDateString("en-US", {
+                      weekday: "long", month: "long", day: "numeric", year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Time</Label>
+                  <p className="text-sm font-medium">{selectedEvent.start} &mdash; {selectedEvent.end}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Venue</Label>
+                  <p className="text-sm font-medium">{selectedEvent.venue}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Package</Label>
+                  <p className="text-sm font-medium">{selectedEvent.packageName || "N/A"}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Status</Label>
+                  <Badge variant="outline" className={`${getEventColor(selectedEvent.status).bg} ${getEventColor(selectedEvent.status).text}`}>
+                    {selectedEvent.status}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label className="text-muted-foreground text-xs">Title</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.title}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Date</Label>
+                  <p className="text-sm font-medium">
+                    {selectedEvent?.date && new Date(selectedEvent.date).toLocaleDateString("en-US", {
+                      weekday: "long", month: "long", day: "numeric", year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Type</Label>
+                  <Badge variant="outline" className={`${getEventColor(selectedEvent?.status).bg} ${getEventColor(selectedEvent?.status).text}`}>
+                    {selectedEvent?.blockType || selectedEvent?.status}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-xs">Venue</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.venue}</p>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-muted-foreground text-xs">Notes</Label>
+                  <p className="text-sm font-medium">{selectedEvent?.notes || "No notes"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -30,7 +30,11 @@ const MONTHS = [
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getEventColor(status) {
+function getEventColor(status, type) {
+  if (status === "Holiday")
+    return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
+  if (status === "Maintenance")
+    return { bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-800 dark:text-orange-300" };
   if (status === "Approved" || status === "Confirmed")
     return { bg: "bg-green-100 dark:bg-green-900/40", text: "text-green-800 dark:text-green-300" };
   if (status === "Pending")
@@ -38,9 +42,9 @@ function getEventColor(status) {
   if (status === "Declined" || status === "Cancelled")
     return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
   if (status === "Ongoing")
-    return { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-800 dark:text-blue-300" };
+    return { bg: "bg-indigo-100 dark:bg-indigo-900/40", text: "text-indigo-800 dark:text-indigo-300" };
   if (status === "Completed")
-    return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
+    return { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-800 dark:text-blue-300" };
   return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
 }
 
@@ -200,6 +204,15 @@ function MonthGrid({ events, onEventClick }) {
                     </div>
                   </div>
                 );
+{/* Color Legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-indigo-100 dark:bg-indigo-900/40" /> Ongoing</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-blue-100 dark:bg-blue-900/40" /> Completed</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-100 dark:bg-red-900/40" /> Holiday / Declined / Cancelled</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-100 dark:bg-orange-900/40" /> Maintenance</div>
+          </div>
               })}
             </div>
           ))}
