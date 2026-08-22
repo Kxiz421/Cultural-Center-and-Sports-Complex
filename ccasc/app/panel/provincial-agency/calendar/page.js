@@ -204,7 +204,9 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
                 );
               })}
             </div>
-{/* Color Legend */}
+          </div>
+
+          {/* Color Legend */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-[11px] text-muted-foreground">
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
@@ -213,12 +215,10 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-100 dark:bg-red-900/40" /> Holiday / Declined / Cancelled</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-100 dark:bg-orange-900/40" /> Maintenance</div>
           </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+        </CardContent>
+      </Card>
+    );
+  }
 
 export default function FacilityCalendarPage() {
   const [cultural, setCultural] = React.useState([]);

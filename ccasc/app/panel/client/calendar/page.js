@@ -283,8 +283,8 @@ export default function ClientCalendarPage() {
           />
         </div>
       )}
-    </div>
-{/* Event Detail Dialog */}
+
+      {/* Event Detail Dialog */}
       <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -365,5 +365,6 @@ export default function ClientCalendarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
   );
 }
