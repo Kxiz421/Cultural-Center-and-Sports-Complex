@@ -204,7 +204,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
                 );
               })}
             </div>
-          ))}
+           ))}
         </div>
 
           {/* Color Legend */}
