@@ -62,6 +62,28 @@ function generateORNumber() {
   return `OR-${year}-${random}`;
 }
 
+// Returns a normalized status token derived from the total amount paid so far.
+function getStatusText(totalPaid, totalAmount) {
+  if (!totalAmount || totalPaid <= 0) return "No Payment";
+  if (totalPaid >= totalAmount) return "Fully Paid";
+  const pct = totalPaid / totalAmount;
+  if (pct >= 0.6) return "DepositPaid"; // 50% down payment + 10% deposit = 60%
+  if (pct >= 0.5) return "DownPaymentPaid";
+  return "IncompletePayment";
+}
+
+// Human-friendly label for a status token (used where a colored badge isn't wanted).
+function getStatusLabel(status) {
+  const map = {
+    "No Payment": "No Payment",
+    "Fully Paid": "Fully Paid",
+    DepositPaid: "Deposit Paid",
+    DownPaymentPaid: "Down Payment Paid",
+    IncompletePayment: "Incomplete Payment",
+  };
+  return map[status] || status;
+}
+
 export default function LTOOPaymentsPage() {
   const [reservations, setReservations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -72,7 +94,7 @@ export default function LTOOPaymentsPage() {
   const [saving, setSaving] = React.useState(false);
   const [selectedReservation, setSelectedReservation] = React.useState(null);
   const [paymentAmount, setPaymentAmount] = React.useState("");
-  const [paymentStatus, setPaymentStatus] = React.useState("Partially Paid");
+  const [paymentType, setPaymentType] = React.useState("deposit");
   const [orNumber, setOrNumber] = React.useState(generateORNumber());
 
   React.useEffect(() => {
@@ -167,14 +189,56 @@ export default function LTOOPaymentsPage() {
 
   const openRecordPayment = (reservation) => {
     setSelectedReservation(reservation);
-    setPaymentAmount("");
-    setPaymentStatus(reservation.clientType === "provincial" ? "Fully Paid" : "Partially Paid");
+    setPaymentType("deposit");
+    setPaymentAmount(String(reservation.requiredDeposit || 0));
     setOrNumber(generateORNumber());
     setRecordOpen(true);
   };
 
+  const handlePaymentTypeChange = (value) => {
+    if (!selectedReservation) return;
+    setPaymentType(value);
+    if (value === "deposit") {
+      setPaymentAmount(String(selectedReservation.requiredDeposit || 0));
+    } else if (value === "downpayment") {
+      setPaymentAmount(String(selectedReservation.requiredDownPayment || 0));
+    } else {
+      setPaymentAmount("");
+    }
+  };
+
   const handleRecordPayment = async () => {
     if (!selectedReservation || !paymentAmount || !orNumber) return;
+
+    const amount = Number(paymentAmount);
+    const {
+      totalAmount = 0,
+      totalPaid = 0,
+      requiredDeposit = 0,
+      requiredDownPayment = 0,
+      remainingBalance = 0,
+    } = selectedReservation;
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid positive payment amount.");
+      return;
+    }
+
+    // Never allow an amount above the total balance the client still has to pay.
+    if (amount > remainingBalance) {
+      toast.error(`Amount cannot exceed the remaining balance of ${formatPHP(remainingBalance)}.`);
+      return;
+    }
+
+    // The 10% deposit and 50% down payment must be paid in exact amounts.
+    if (paymentType === "deposit" && Math.abs(amount - requiredDeposit) > 0.001) {
+      toast.error(`The 10% deposit must be exactly ${formatPHP(requiredDeposit)}.`);
+      return;
+    }
+    if (paymentType === "downpayment" && Math.abs(amount - requiredDownPayment) > 0.001) {
+      toast.error(`The 50% down payment must be exactly ${formatPHP(requiredDownPayment)}.`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -186,12 +250,12 @@ export default function LTOOPaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedBookingId: String(selectedReservation.reservationId),
-          totalAmount: paymentAmount,
+          paymentType,
+          amountPaid: amount,
           orNumber,
           clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
           clientName: selectedReservation.clientName,
           activityName: selectedReservation.eventType || "",
-          paymentStatus,
           performedBy,
           performedByName,
         }),
@@ -202,7 +266,6 @@ export default function LTOOPaymentsPage() {
         throw new Error(errData.error || "Failed to record payment");
       }
 
-      // Also update booking status to Confirmed if fully paid
       toast.success("Payment recorded successfully");
       setRecordOpen(false);
       setSelectedReservation(null);
@@ -397,8 +460,43 @@ export default function LTOOPaymentsPage() {
             )}
 
             <div className="space-y-2">
+              <Label htmlFor="pay-type">Record What?</Label>
+              <Select value={paymentType} onValueChange={handlePaymentTypeChange}>
+                <SelectTrigger id="pay-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="deposit">10% Deposit</SelectItem>
+                  <SelectItem value="downpayment">50% Down Payment</SelectItem>
+                  <SelectItem value="balance">Remaining Balance</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {paymentType === "deposit"
+                  ? `Fixed amount: ${formatPHP(selectedReservation?.requiredDeposit || 0)} (10% of total)`
+                  : paymentType === "downpayment"
+                    ? `Fixed amount: ${formatPHP(selectedReservation?.requiredDownPayment || 0)} (50% of total)`
+                    : `Any amount up to the remaining balance of ${formatPHP(selectedReservation?.remainingBalance || 0)}`}
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
-              <Input id="pay-amount" type="number" step="0.01" placeholder="e.g. 5000.00" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+              <Input
+                id="pay-amount"
+                type="number"
+                step="0.01"
+                min={0}
+                max={
+                  paymentType === "balance"
+                    ? selectedReservation?.remainingBalance || 0
+                    : paymentType === "deposit"
+                      ? selectedReservation?.requiredDeposit || 0
+                      : selectedReservation?.requiredDownPayment || 0
+                }
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                disabled={paymentType !== "balance"}
+                className={paymentType !== "balance" ? "bg-muted" : ""}
+              />
             </div>
 
             <div className="space-y-2">
@@ -406,18 +504,20 @@ export default function LTOOPaymentsPage() {
               <Input id="pay-or" value={orNumber} readOnly className="bg-muted" />
             </div>
 
-            {selectedReservation?.clientType !== "provincial" && (
-              <div className="space-y-2">
-                <Label htmlFor="pay-status">Payment Status</Label>
-                <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-                  <SelectTrigger id="pay-status"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Partially Paid">Partially Paid</SelectItem>
-                    <SelectItem value="Fully Paid">Fully Paid</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-2">
+              <Label>Payment Status (auto)</Label>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                {getStatusBadge(
+                  getStatusText(
+                    (selectedReservation?.totalPaid || 0) + Number(paymentAmount || 0),
+                    selectedReservation?.totalAmount || 0
+                  )
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Updates automatically based on the total amount paid.
+                </p>
               </div>
-            )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
@@ -441,7 +541,7 @@ export default function LTOOPaymentsPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">Date:</span><span className="font-medium">{selectedReservation?.eventDate}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span><span className="font-medium">{formatPHP(paymentAmount)}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">OR:</span><span className="font-medium">{orNumber}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><span className="font-medium">{paymentStatus}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><span className="font-medium">{getStatusLabel(getStatusText((selectedReservation?.totalPaid || 0) + Number(paymentAmount || 0), selectedReservation?.totalAmount || 0))}</span></div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
