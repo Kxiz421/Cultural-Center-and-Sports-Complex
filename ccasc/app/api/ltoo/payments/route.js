@@ -191,37 +191,125 @@ export async function POST(request) {
       contactNumber,
       activityName,
       activityDate,
-      totalAmount,
+      amountPaid,
       orNumber,
       selectedBookingId,
-      paymentStatus,
+      paymentType,
       performedBy,
       performedByName,
     } = body;
 
-    if (!clientName || !totalAmount || !orNumber) {
+    if (!clientName || !amountPaid || !orNumber) {
       return NextResponse.json(
-        { error: "Client name, total amount, and OR number are required" },
+        { error: "Client, payment amount, and OR number are required" },
         { status: 400 }
       );
     }
 
-    const amount = parseFloat(totalAmount);
-    const statusToUse =
-      clientType === "provincial" ? "Fully Paid" : paymentStatus || "Partially Paid";
-
-    // Find or create payment status
-    let paymentStatusRecord = await prisma.paymentStatus.findFirst({
-      where: { status: statusToUse },
-    });
-    if (!paymentStatusRecord) {
-      paymentStatusRecord = await prisma.paymentStatus.create({
-        data: { status: statusToUse },
-      });
+    const amount = Number(amountPaid);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        { error: "Payment amount must be a positive number" },
+        { status: 400 }
+      );
     }
 
     let reservationId = selectedBookingId ? parseInt(selectedBookingId) : null;
     let bookingId = null;
+    let statusToUse = clientType === "provincial" ? "Fully Paid" : "Partially Paid";
+
+    // If recording against an existing reservation, validate the amount server-side.
+    if (reservationId) {
+      const reservation = await prisma.reservation.findFirst({
+        where: { reservationId },
+        include: {
+          package: { select: { packageName: true, dayRate: true, nightRate: true } },
+          timeSlot: { select: { startTime: true, endTime: true } },
+          additionalDates: { select: { eventDate: true } },
+          reservedParticulars: {
+            include: {
+              particular: {
+                select: { particularName: true, inventory: { select: { unitCost: true } } },
+              },
+            },
+          },
+          bookings: {
+            include: {
+              payments: { select: { amountPaid: true } },
+            },
+          },
+        },
+      });
+
+      if (!reservation) {
+        return NextResponse.json(
+          { error: "Reservation not found" },
+          { status: 404 }
+        );
+      }
+
+      // Recompute the total amount owed for this reservation.
+      const numDays = 1 + reservation.additionalDates.length;
+      const pkgRate = reservation.package?.dayRate
+        ? Number(reservation.package.dayRate)
+        : reservation.package?.nightRate
+          ? Number(reservation.package.nightRate)
+          : null;
+      const pkgTotal = pkgRate ? pkgRate * numDays : 0;
+      const particularsTotal = reservation.reservedParticulars.reduce((sum, rp) => {
+        let unitCost = rp.particular?.inventory?.unitCost
+          ? Number(rp.particular.inventory.unitCost)
+          : 0;
+        if (rp.particular?.particularName === "Basketball Game") {
+          const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
+          return sum + (basketballPrices[rp.quantity] || unitCost);
+        }
+        return sum + unitCost * rp.quantity;
+      }, 0);
+      const totalAmt = reservation.totalAmount
+        ? Number(reservation.totalAmount)
+        : pkgTotal + particularsTotal;
+
+      const totalPaid =
+        reservation.bookings?.reduce(
+          (sum, b) =>
+            sum + (b.payments || []).reduce((s, p) => s + Number(p.amountPaid), 0),
+          0
+        ) || 0;
+
+      const remainingBalance = Math.max(0, totalAmt - totalPaid);
+
+      // The payment can never exceed the total remaining balance.
+      if (amount > remainingBalance + 0.001) {
+        return NextResponse.json(
+          { error: `Amount cannot exceed the remaining balance of ${remainingBalance.toFixed(2)}` },
+          { status: 400 }
+        );
+      }
+
+      // The 10% deposit and 50% down payment must be paid in exact amounts.
+      const requiredDeposit = totalAmt * 0.1;
+      const requiredDownPayment = totalAmt * 0.5;
+      if (paymentType === "deposit" && Math.abs(amount - requiredDeposit) > 0.01) {
+        return NextResponse.json(
+          { error: `The 10% deposit must be exactly ${requiredDeposit.toFixed(2)}` },
+          { status: 400 }
+        );
+      }
+      if (paymentType === "downpayment" && Math.abs(amount - requiredDownPayment) > 0.01) {
+        return NextResponse.json(
+          { error: `The 50% down payment must be exactly ${requiredDownPayment.toFixed(2)}` },
+          { status: 400 }
+        );
+      }
+
+      // Derive the stored status from the cumulative amount paid after this payment.
+      if (clientType !== "provincial") {
+        const newTotalPaid = totalPaid + amount;
+        statusToUse =
+          newTotalPaid >= totalAmt - 0.001 ? "Fully Paid" : "Partially Paid";
+      }
+    }
 
     // If no reservation selected, create one
     if (!reservationId) {
@@ -273,6 +361,16 @@ export async function POST(request) {
       await prisma.booking.update({
         where: { bookingId: bookingId },
         data: { bookingStatusId: 2 },
+      });
+    }
+
+    // Find or create payment status based on the derived cumulative status.
+    let paymentStatusRecord = await prisma.paymentStatus.findFirst({
+      where: { status: statusToUse },
+    });
+    if (!paymentStatusRecord) {
+      paymentStatusRecord = await prisma.paymentStatus.create({
+        data: { status: statusToUse },
       });
     }
 
