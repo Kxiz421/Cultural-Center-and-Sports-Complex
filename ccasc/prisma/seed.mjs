@@ -203,18 +203,11 @@ async function main() {
     prisma.particular.create({ data: { particularName: 'Wireless Microphone', description: 'Wireless handheld microphone for program presentations 4 units available' } }),
     prisma.particular.create({ data: { particularName: 'Wired Microphone', description: 'Wired microphone for program presentations 10 units available' } }),
     prisma.particular.create({ data: { particularName: 'LED Wall', description: 'LED wall composed of 117 panels available for visual display during events' } }),
-    prisma.particular.create({ data: { particularName: 'Compressor', description: 'Air conditioning system suitable for events with a capacity of 250 per pax.' } }),
+    prisma.particular.create({ data: { particularName: 'Aircon Compressor', description: 'Air conditioning compressor - each unit = 1 compressor. Select 4 (P3,200/100-1K pax), 6 (P4,800/1K-3K pax), 8 (P6,400/4K-6K pax), or 10 (P8,000/7K-10K pax).' } }),
     // New particulars added 2026-08-24
     prisma.particular.create({ data: { particularName: 'Venue Rental – Day Rate (8 AM–5 PM)', description: 'Venue rental from 8 AM to 5 PM inclusive of basic light and sound system' } }),
     prisma.particular.create({ data: { particularName: 'Venue Rental – Night Rate (5 PM–12 MN)', description: 'Venue rental from 5 PM to 12 MN inclusive of basic light and sound system' } }),
-    prisma.particular.create({ data: { particularName: 'Aircon – 100–1K pax, 4 compressors', description: 'Air conditioning system for 100 to 1,000 pax using 4 compressors' } }),
-    prisma.particular.create({ data: { particularName: 'Aircon – 1K–3K pax, 6 compressors', description: 'Air conditioning system for 1,000 to 3,000 pax using 6 compressors' } }),
-    prisma.particular.create({ data: { particularName: 'Aircon – 4K–6K pax, 8 compressors', description: 'Air conditioning system for 4,000 to 6,000 pax using 8 compressors' } }),
-    prisma.particular.create({ data: { particularName: 'Aircon – 7K–10K pax, 10 compressors', description: 'Air conditioning system for 7,000 to 10,000 pax using 10 compressors' } }),
-    prisma.particular.create({ data: { particularName: 'Basketball Game w/ Shot Clock – Day', description: 'Basketball game with shot clock during day time' } }),
-    prisma.particular.create({ data: { particularName: 'Basketball Game w/ Shot Clock – Night', description: 'Basketball game with shot clock during night time' } }),
-    prisma.particular.create({ data: { particularName: 'Basketball Game w/o Shot Clock – Day', description: 'Basketball game without shot clock during day time' } }),
-    prisma.particular.create({ data: { particularName: 'Basketball Game w/o Shot Clock – Night', description: 'Basketball game without shot clock during night time' } }),
+    prisma.particular.create({ data: { particularName: 'Basketball Game', description: 'Select game type: Day w/o SC (qty 2 = P1,000), Day w/ SC (qty 3 = P1,500), Night w/o SC (qty 3 = P1,500), Night w/ SC (qty 4 = P2,000). Unit cost is P500.' } }),
     prisma.particular.create({ data: { particularName: 'Electricity Charge for LED Wall (per hour)', description: 'Electricity consumption charge for LED Wall per hour of usage' } }),
   ]);
   console.log(`✓ Created ${particulars.length} particulars`);
@@ -291,19 +284,12 @@ async function main() {
     prisma.inventory.create({ data: { itemName: 'Wireless Microphone', description: 'Wireless handheld microphone for program presentations 4 units available', unitCost: 1200, quantityAvailable: 4, venueId: 1, statusId: 1, particularId: 3 } }),
     prisma.inventory.create({ data: { itemName: 'Wired Microphone', description: 'Wired microphone for program presentations 10 units available', unitCost: 1200, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 4 } }),
     prisma.inventory.create({ data: { itemName: 'LED Wall', description: 'LED wall composed of 117 panels available for visual display during events', unitCost: 20000, quantityAvailable: 1, venueId: 1, statusId: 2, particularId: 5 } }),
-    prisma.inventory.create({ data: { itemName: 'Compressor', description: 'Air conditioning system suitable for events with a capacity of 250 per pax.', unitCost: 800, quantityAvailable: 10, venueId: 1, statusId: 3, particularId: 6 } }),
+    prisma.inventory.create({ data: { itemName: 'Aircon Compressor', description: 'Air conditioning compressor - each unit = 1 compressor. Select 4 (P3,200/100-1K pax), 6 (P4,800/1K-3K pax), 8 (P6,400/4K-6K pax), or 10 (P8,000/7K-10K pax).', unitCost: 800, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 6 } }),
     // New inventory items added 2026-08-24
     prisma.inventory.create({ data: { itemName: 'Venue Rental – Day Rate (8 AM–5 PM)', description: 'Venue rental from 8 AM to 5 PM inclusive of basic light and sound system', unitCost: 20000, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 7 } }),
     prisma.inventory.create({ data: { itemName: 'Venue Rental – Night Rate (5 PM–12 MN)', description: 'Venue rental from 5 PM to 12 MN inclusive of basic light and sound system', unitCost: 25000, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 8 } }),
-    prisma.inventory.create({ data: { itemName: 'Aircon – 100–1K pax, 4 compressors', description: 'Air conditioning system for 100 to 1,000 pax using 4 compressors', unitCost: 3200, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 9 } }),
-    prisma.inventory.create({ data: { itemName: 'Aircon – 1K–3K pax, 6 compressors', description: 'Air conditioning system for 1,000 to 3,000 pax using 6 compressors', unitCost: 4800, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 10 } }),
-    prisma.inventory.create({ data: { itemName: 'Aircon – 4K–6K pax, 8 compressors', description: 'Air conditioning system for 4,000 to 6,000 pax using 8 compressors', unitCost: 6400, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 11 } }),
-    prisma.inventory.create({ data: { itemName: 'Aircon – 7K–10K pax, 10 compressors', description: 'Air conditioning system for 7,000 to 10,000 pax using 10 compressors', unitCost: 8000, quantityAvailable: 10, venueId: 1, statusId: 1, particularId: 12 } }),
-    prisma.inventory.create({ data: { itemName: 'Basketball Game w/ Shot Clock – Day', description: 'Basketball game with shot clock during day time', unitCost: 1500, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 13 } }),
-    prisma.inventory.create({ data: { itemName: 'Basketball Game w/ Shot Clock – Night', description: 'Basketball game with shot clock during night time', unitCost: 2000, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 14 } }),
-    prisma.inventory.create({ data: { itemName: 'Basketball Game w/o Shot Clock – Day', description: 'Basketball game without shot clock during day time', unitCost: 1000, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 15 } }),
-    prisma.inventory.create({ data: { itemName: 'Basketball Game w/o Shot Clock – Night', description: 'Basketball game without shot clock during night time', unitCost: 1500, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 16 } }),
-    prisma.inventory.create({ data: { itemName: 'Electricity Charge for LED Wall (per hour)', description: 'Electricity consumption charge for LED Wall per hour of usage', unitCost: 975, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 17 } }),
+    prisma.inventory.create({ data: { itemName: 'Basketball Game', description: 'Select game type: Day w/o SC (qty 2 = P1,000), Day w/ SC (qty 3 = P1,500), Night w/o SC (qty 3 = P1,500), Night w/ SC (qty 4 = P2,000).', unitCost: 500, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 9 } }),
+    prisma.inventory.create({ data: { itemName: 'Electricity Charge for LED Wall (per hour)', description: 'Electricity consumption charge for LED Wall per hour of usage', unitCost: 975, quantityAvailable: 1, venueId: 1, statusId: 1, particularId: 10 } }),
     prisma.inventory.create({ data: { itemName: 'Hurdles', description: 'A physical barrier jumped over in athletic races', unitCost: 5, quantityAvailable: 75, venueId: 2, statusId: 1, particularId: 1 } }),
   ]);
   console.log(`✓ Created ${inventoryItems.length} inventory items`);

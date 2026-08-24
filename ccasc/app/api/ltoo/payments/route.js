@@ -65,9 +65,14 @@ export async function GET(request) {
               : null;
           const pkgTotal = pkgRate ? pkgRate * numDays : 0;
           const particularsTotal = r.reservedParticulars.reduce((sum, rp) => {
-            const unitCost = rp.particular?.inventory?.unitCost
+            let unitCost = rp.particular?.inventory?.unitCost
               ? Number(rp.particular.inventory.unitCost)
               : 0;
+            // Special pricing for Basketball Game (encoded quantity = option selector)
+            if (rp.particular?.particularName === "Basketball Game") {
+              const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
+              return sum + (basketballPrices[rp.quantity] || unitCost);
+            }
             return sum + unitCost * rp.quantity;
           }, 0);
           const totalAmount = r.totalAmount

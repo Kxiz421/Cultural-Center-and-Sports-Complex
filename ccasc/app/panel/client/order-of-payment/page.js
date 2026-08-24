@@ -143,14 +143,21 @@ function OrderOfPaymentContent() {
               </thead>
               <tbody>
                 {data.particulars && data.particulars.length > 0 ? (
-                  data.particulars.map((p, i) => (
-                    <tr key={i} className="border-b">
-                      <td className="py-2">{p.name} × {p.quantity}</td>
-                      <td className="text-right py-2 tabular-nums">
-                        ₱{(p.unitCost * p.quantity).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))
+                  data.particulars.map((p, i) => {
+                    const isBasketball = p.name === "Basketball Game";
+                    const basketballLabels = { 2: "Day w/o SC", 3: "Day w/ SC", 4: "Night w/o SC", 5: "Night w/ SC" };
+                    const basketballPrice = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 }[p.quantity];
+                    const displayName = isBasketball ? `Basketball Game (${basketballLabels[p.quantity] || p.quantity})` : `${p.name} × ${p.quantity}`;
+                    const displayPrice = isBasketball ? (basketballPrice || 0) : (Number(p.unitCost || 0) * p.quantity);
+                    return (
+                      <tr key={i} className="border-b">
+                        <td className="py-2">{displayName}</td>
+                        <td className="text-right py-2 tabular-nums">
+                          ₱{displayPrice.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr className="border-b">
                     <td className="py-2">Venue / Package Rate</td>

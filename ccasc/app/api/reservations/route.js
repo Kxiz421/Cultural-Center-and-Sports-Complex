@@ -236,8 +236,13 @@ export async function POST(request) {
             include: { inventory: { select: { unitCost: true } } },
           });
           if (particular) {
-            const unitCost = particular.inventory?.unitCost ? Number(particular.inventory.unitCost) : 0;
-            totalAmount += unitCost * p.quantity;
+            let unitCost = particular.inventory?.unitCost ? Number(particular.inventory.unitCost) : 0;
+            // Special pricing for Basketball Game (encoded quantity = option selector)
+            if (particular.particularName === "Basketball Game") {
+              const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
+              unitCost = basketballPrices[p.quantity] || (unitCost * p.quantity);
+            }
+            totalAmount += unitCost;
             particularsData.push({ particularId: parseInt(p.particularId, 10), quantity: p.quantity });
           }
         }

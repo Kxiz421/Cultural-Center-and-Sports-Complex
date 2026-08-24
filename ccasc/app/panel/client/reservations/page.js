@@ -615,28 +615,71 @@ export default function ClientReservationsPage() {
                           const qty = particularQuantities[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
+                          const isBasketball = p.particularName === "Basketball Game";
+                          const isAircon = p.particularName === "Aircon Compressor";
+                          const basketballOptions = [
+                            { value: 2, label: "Day w/o Shot Clock", price: 1000 },
+                            { value: 3, label: "Day w/ Shot Clock", price: 1500 },
+                            { value: 4, label: "Night w/o Shot Clock", price: 1500 },
+                            { value: 5, label: "Night w/ Shot Clock", price: 2000 },
+                          ];
+                          const airconTiers = [
+                            { qty: 4, label: "100–1K pax", price: 3200 },
+                            { qty: 6, label: "1K–3K pax", price: 4800 },
+                            { qty: 8, label: "4K–6K pax", price: 6400 },
+                            { qty: 10, label: "7K–10K pax", price: 8000 },
+                          ];
                           return (
                             <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
                               <div className="flex-1">
                                 <p className="text-sm font-medium">{p.particularName}</p>
-                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
-                                <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                {cost > 0 && !isBasketball && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
+                                {isAircon && (
+                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                    {airconTiers.map((t) => (
+                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
+                                    ))}
+                                  </div>
+                                )}
+                                {!isBasketball && !isAircon && <p className="text-xs text-muted-foreground">Available: {maxQty}</p>}
                               </div>
                               <div className="flex items-center gap-2">
-                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, -1)} disabled={qty <= 0}>
-                                  <Minus className="size-3" />
-                                </Button>
-                                <input type="number" min={0} max={maxQty} value={qty}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10);
-                                    if (isNaN(val) || val < 0) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
-                                    else if (val > maxQty) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
-                                    else setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
-                                  }}
-                                  className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, 1)} disabled={qty >= maxQty}>
-                                  <Plus className="size-3" />
-                                </Button>
+                                {isBasketball ? (
+                                  <Select
+                                    value={qty > 0 ? String(qty) : ""}
+                                    onValueChange={(val) => {
+                                      setParticularQuantities((prev) => ({ ...prev, [p.particularId]: parseInt(val, 10) }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-48 text-xs">
+                                      <SelectValue placeholder="Select game type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {basketballOptions.map((opt) => (
+                                        <SelectItem key={opt.value} value={String(opt.value)}>
+                                          {opt.label} — ₱{opt.price.toLocaleString()}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <>
+                                    <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, -1)} disabled={qty <= 0}>
+                                      <Minus className="size-3" />
+                                    </Button>
+                                    <input type="number" min={0} max={maxQty} value={qty}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value, 10);
+                                        if (isNaN(val) || val < 0) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
+                                        else if (val > maxQty) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
+                                        else setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
+                                      }}
+                                      className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                    <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, 1)} disabled={qty >= maxQty}>
+                                      <Plus className="size-3" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
@@ -683,10 +726,15 @@ export default function ClientReservationsPage() {
                         {(cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities && Object.entries(cust.particularQuantities).filter(([, q]) => q > 0).map(([partId, qty]) => {
                           const part = particulars.find(pp => String(pp.particularId) === partId);
                           if (!part) return null;
+                          const isBasketball = part.particularName === "Basketball Game";
+                          const basketballLabels = { 2: "Day w/o SC", 3: "Day w/ SC", 4: "Night w/o SC", 5: "Night w/ SC" };
+                          const basketballPrice = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 }[qty];
+                          const displayName = isBasketball ? `Basketball Game (${basketballLabels[qty] || qty})` : `${part.particularName} × ${qty}`;
+                          const displayPrice = isBasketball ? (basketballPrice || 0) : (Number(part.unitCost || 0) * qty);
                           return (
                             <div key={partId} className="flex justify-between pl-2 text-xs">
-                              <span>{part.particularName} × {qty}</span>
-                              <span>₱{(Number(part.unitCost || 0) * qty).toLocaleString()}</span>
+                              <span>{displayName}</span>
+                              <span>₱{displayPrice.toLocaleString()}</span>
                             </div>
                           );
                         })}
@@ -711,11 +759,16 @@ export default function ClientReservationsPage() {
                     {(form.packageId === "custom" || form.packageId === "0" || !form.packageId) && Object.entries(particularQuantities).filter(([, q]) => q > 0).map(([id, qty]) => {
                       const p = particulars.find(pp => String(pp.particularId) === id);
                       if (!p) return null;
+                      const isBasketball = p.particularName === "Basketball Game";
+                      const basketballLabels = { 2: "Day w/o SC", 3: "Day w/ SC", 4: "Night w/o SC", 5: "Night w/ SC" };
+                      const basketballPrice = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 }[qty];
+                      const displayName = isBasketball ? `Basketball Game (${basketballLabels[qty] || qty})` : `${p.particularName} × ${qty}`;
+                      const displayPrice = isBasketball ? (basketballPrice || 0) : (Number(p.unitCost || 0) * qty);
                       return (
                         <div key={id} className="flex justify-between">
-                          <span>{p.particularName} × {qty}</span>
+                          <span>{displayName}</span>
                           <span className="font-medium tabular-nums">
-                            ₱{(Number(p.unitCost || 0) * qty).toLocaleString()}
+                            ₱{displayPrice.toLocaleString()}
                           </span>
                         </div>
                       );
@@ -829,24 +882,61 @@ export default function ClientReservationsPage() {
                           const qty = cust.particularQuantities?.[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
+                          const isBasketball = p.particularName === "Basketball Game";
+                          const isAircon = p.particularName === "Aircon Compressor";
+                          const basketballOptions = [
+                            { value: 2, label: "Day w/o SC", price: 1000 },
+                            { value: 3, label: "Day w/ SC", price: 1500 },
+                            { value: 4, label: "Night w/o SC", price: 1500 },
+                            { value: 5, label: "Night w/ SC", price: 2000 },
+                          ];
                           return (
                             <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                                {isAircon && <p className="text-[10px] text-muted-foreground">₱800 / unit</p>}
+                                {!isBasketball && !isAircon && cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                  disabled={qty <= 0}>
-                                  <Minus className="size-3" />
-                                </Button>
-                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                  disabled={qty >= maxQty}>
-                                  <Plus className="size-3" />
-                                </Button>
+                                {isBasketball ? (
+                                  <Select
+                                    value={qty > 0 ? String(qty) : ""}
+                                    onValueChange={(val) => {
+                                      setDateCustomizations((prev) => ({
+                                        ...prev,
+                                        [date]: {
+                                          ...prev[date],
+                                          particularQuantities: { ...(prev[date]?.particularQuantities || {}), [p.particularId]: parseInt(val, 10) },
+                                        },
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-40 text-xs h-8">
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {basketballOptions.map((opt) => (
+                                        <SelectItem key={opt.value} value={String(opt.value)}>
+                                          {opt.label} — ₱{opt.price.toLocaleString()}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <>
+                                    <Button type="button" variant="outline" size="icon" className="size-6"
+                                      onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                      disabled={qty <= 0}>
+                                      <Minus className="size-3" />
+                                    </Button>
+                                    <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                                    <Button type="button" variant="outline" size="icon" className="size-6"
+                                      onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                      disabled={qty >= maxQty}>
+                                      <Plus className="size-3" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
