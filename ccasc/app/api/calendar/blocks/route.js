@@ -14,10 +14,15 @@ export async function GET() {
       orderBy: { blockDate: "asc" },
     });
 
+    // Helper to format a Date object as YYYY-MM-DD in local timezone
+    // (avoiding toISOString() which shifts dates by the UTC offset)
+    const formatLocalDate = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
     const formatted = blocks.map((b) => ({
       id: `BLK-${b.blockId}`,
       title: b.title,
-      date: b.blockDate.toISOString().split("T")[0],
+      date: formatLocalDate(b.blockDate),
       blockType: b.blockType,
       venueId: b.venueId,
       venue: b.venue.venue,
@@ -91,7 +96,7 @@ export async function POST(request) {
       created.map((b) => ({
         id: `BLK-${b.blockId}`,
         title: b.title,
-        date: b.blockDate.toISOString().split("T")[0],
+        date: formatLocalDate(b.blockDate),
         blockType: b.blockType,
         venueId: b.venueId,
         venue: b.venue.venue,

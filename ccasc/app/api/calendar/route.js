@@ -49,6 +49,11 @@ export async function GET() {
       orderBy: { blockDate: "asc" },
     });
 
+    // Helper to format a Date object as YYYY-MM-DD in local timezone
+    // (avoiding toISOString() which shifts dates by the UTC offset)
+    const formatLocalDate = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
     // Transform reservations into calendar events, skip orphaned
     const events = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
@@ -61,7 +66,7 @@ export async function GET() {
         return {
           id: `RES-${r.reservationId}`,
           title: r.eventType,
-          date: r.eventDate.toISOString().split("T")[0],
+          date: formatLocalDate(r.eventDate),
           start: r.timeSlot.startTime,
           end: r.timeSlot.endTime,
           venue: r.venue.venue,
@@ -78,7 +83,7 @@ export async function GET() {
     const blockEvents = blocks.map((b) => ({
       id: `BLK-${b.blockId}`,
       title: b.title,
-      date: b.blockDate.toISOString().split("T")[0],
+      date: formatLocalDate(b.blockDate),
       start: null,
       end: null,
       venue: b.venue.venue,
