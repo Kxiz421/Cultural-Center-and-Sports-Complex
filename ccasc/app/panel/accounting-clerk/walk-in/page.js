@@ -1002,24 +1002,61 @@ export default function WalkInReservationPage() {
                           const qty = cust.particularQuantities?.[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
+                          const isBasketball = p.particularName === "Basketball Game";
+                          const isAircon = p.particularName === "Aircon Compressor";
+                          const basketballOptions = [
+                            { value: 2, label: "Day w/o SC", price: 1000 },
+                            { value: 3, label: "Day w/ SC", price: 1500 },
+                            { value: 4, label: "Night w/o SC", price: 1500 },
+                            { value: 5, label: "Night w/ SC", price: 2000 },
+                          ];
                           return (
                             <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                                {isAircon && <p className="text-[10px] text-muted-foreground">₱800 / unit</p>}
+                                {!isBasketball && !isAircon && cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                  disabled={qty <= 0}>
-                                  <Minus className="size-3" />
-                                </Button>
-                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                  disabled={qty >= maxQty}>
-                                  <Plus className="size-3" />
-                                </Button>
+                                {isBasketball ? (
+                                  <Select
+                                    value={qty > 0 ? String(qty) : ""}
+                                    onValueChange={(val) => {
+                                      setDateCustomizations((prev) => ({
+                                        ...prev,
+                                        [date]: {
+                                          ...prev[date],
+                                          particularQuantities: { ...(prev[date]?.particularQuantities || {}), [p.particularId]: parseInt(val, 10) },
+                                        },
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-40 text-xs h-8">
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {basketballOptions.map((opt) => (
+                                        <SelectItem key={opt.value} value={String(opt.value)}>
+                                          {opt.label} — ₱{opt.price.toLocaleString()}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <>
+                                    <Button type="button" variant="outline" size="icon" className="size-6"
+                                      onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                      disabled={qty <= 0}>
+                                      <Minus className="size-3" />
+                                    </Button>
+                                    <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                                    <Button type="button" variant="outline" size="icon" className="size-6"
+                                      onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                      disabled={qty >= maxQty}>
+                                      <Plus className="size-3" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
