@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { formatDbDate } from "@/lib/utils";
 
-const prisma = new PrismaClient();
 
 export async function GET() {
   try {
@@ -49,10 +49,8 @@ export async function GET() {
       orderBy: { blockDate: "asc" },
     });
 
-    // Helper to format a Date object as YYYY-MM-DD in local timezone
-    // (avoiding toISOString() which shifts dates by the UTC offset)
-    const formatLocalDate = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // Format DATE columns as YYYY-MM-DD (UTC calendar day)
+    const formatLocalDate = formatDbDate;
 
     // Transform reservations into calendar events, skip orphaned
     const events = reservations

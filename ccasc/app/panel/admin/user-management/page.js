@@ -120,11 +120,18 @@ export default function UserManagementPage() {
   const router = useRouter();
 
   React.useEffect(() => {
-    async function fetchUsers() {
+    async function fetchUsersWithRetry() {
       try {
-        const res = await fetch('/api/users');
-        const data = await res.json();
-        setUsers(Array.isArray(data) ? data : []);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const res = await fetch("/api/users");
+          if (res.ok) {
+            const data = await res.json();
+            setUsers(Array.isArray(data) ? data : []);
+            return;
+          }
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 1000));
+        }
+        toast.error("Failed to load users");
       } catch (err) {
         console.error("Failed to load users:", err);
         toast.error("Failed to load users");
@@ -132,7 +139,7 @@ export default function UserManagementPage() {
         setLoading(false);
       }
     }
-    fetchUsers();
+    fetchUsersWithRetry();
   }, []);
   const [showPassword, setShowPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);

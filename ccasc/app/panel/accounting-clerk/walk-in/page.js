@@ -30,6 +30,24 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Minus, RotateCcw } from "lucide-react";
+import {
+  isVirtualPackageId,
+  isRegularPackageId,
+  VIRTUAL_PACKAGE_IDS,
+  filterCustomParticulars,
+  getVirtualPackageParticulars,
+  getVirtualPackageDisplayInfo,
+  syncVirtualPackageStateForTimeSlot,
+  deriveTimeSlotFromVirtualPackage,
+  parseReservationPackageId,
+  isConsolidatedBasketballEntry,
+  buildReservationSummaryLines,
+  sumReservationSummaryLines,
+} from "@/lib/reservation-package-select";
+import {
+  ReservationVirtualPackagePanel,
+  ReservationPackageSelectItems,
+} from "@/components/reservation-virtual-package-panel";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
@@ -63,6 +81,7 @@ export default function WalkInReservationPage() {
   const [eventDate, setEventDate] = React.useState("");
   const [timeSlotId, setTimeSlotId] = React.useState("");
   const [packageId, setPackageId] = React.useState("");
+  const [venueRentalSlot, setVenueRentalSlot] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
   // Packages
@@ -87,6 +106,7 @@ export default function WalkInReservationPage() {
 
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
+  const submitLockRef = React.useRef(false);
 
   // Load packages and particulars on mount
   React.useEffect(() => {
@@ -152,7 +172,127 @@ export default function WalkInReservationPage() {
     setSearchResults([]);
   };
 
+  const handleTimeSlotChange = (value) => {
+    setTimeSlotId(value);
+
+    if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+      setVenueRentalSlot(String(value) === "1" ? "1" : "2");
+    }
+
+    if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+      const synced = syncVirtualPackageStateForTimeSlot(
+        VIRTUAL_PACKAGE_IDS.BASKETBALL,
+        particulars,
+        particularQuantities,
+        "",
+        value
+      );
+      setParticularQuantities(synced.particularQuantities);
+    }
+
+    if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+      setDateCustomizations((prev) => {
+        const updated = { ...prev };
+        for (const date of Object.keys(updated)) {
+          const cust = updated[date];
+          const synced = syncVirtualPackageStateForTimeSlot(
+            cust.packageId,
+            particulars,
+            cust.particularQuantities,
+            cust.venueRentalSlot,
+            value
+          );
+          updated[date] = {
+            ...cust,
+            timeSlotId: value,
+            particularQuantities: synced.particularQuantities,
+            venueRentalSlot:
+              cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                ? synced.venueRentalSlot
+                : cust.venueRentalSlot,
+          };
+        }
+        return updated;
+      });
+    }
+  };
+
+  const handleVirtualParticularQuantitiesChange = (pq) => {
+    setParticularQuantities(pq);
+    if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+      const slot = deriveTimeSlotFromVirtualPackage(
+        packageId,
+        particulars,
+        pq,
+        venueRentalSlot,
+        timeSlotId
+      );
+      if (slot && slot !== timeSlotId) {
+        setTimeSlotId(slot);
+      }
+    }
+  };
+
+  const handleVenueRentalSlotChange = (val) => {
+    setVenueRentalSlot(val);
+    setTimeSlotId(val);
+  };
+
+  const handleDateVirtualParticularQuantitiesChange = (date, pq) => {
+    const cust = dateCustomizations[date] || {};
+    const slot = deriveTimeSlotFromVirtualPackage(
+      cust.packageId,
+      particulars,
+      pq,
+      cust.venueRentalSlot,
+      cust.timeSlotId || timeSlotId
+    );
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        particularQuantities: pq,
+        timeSlotId: slot || prev[date]?.timeSlotId || timeSlotId,
+      },
+    }));
+  };
+
+  const handleDateVenueRentalSlotChange = (date, val) => {
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: { ...prev[date], venueRentalSlot: val, timeSlotId: val },
+    }));
+  };
+
   const handlePackageSelect = (value) => {
+    if (isVirtualPackageId(value)) {
+      setPackageId(value);
+      if (value === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+        setVenueRentalSlot((prev) => prev || timeSlotId || "1");
+      } else {
+        setVenueRentalSlot("");
+      }
+      setParticularQuantities({});
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        setDateCustomizations((prev) => {
+          const updated = { ...prev };
+          for (const date of Object.keys(updated)) {
+            updated[date] = {
+              ...updated[date],
+              packageId: value,
+              particularQuantities: {},
+              timeSlotId: updated[date]?.timeSlotId || timeSlotId,
+              venueRentalSlot:
+                value === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                  ? venueRentalSlot || timeSlotId || "1"
+                  : "",
+            };
+          }
+          return updated;
+        });
+      }
+      return;
+    }
     if (value && value !== "0" && value !== "custom") {
       const selectedPkg = packages.find(p => String(p.packageId) === value);
       if (selectedPkg) {
@@ -203,7 +343,15 @@ export default function WalkInReservationPage() {
       [date]: {
         ...prev[date],
         packageId: pkgId,
-        particularQuantities: (pkgId && pkgId !== "0" && pkgId !== "custom") ? {} : (prev[date]?.particularQuantities || {}),
+        timeSlotId: prev[date]?.timeSlotId || timeSlotId,
+        venueRentalSlot:
+          pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+            ? prev[date]?.venueRentalSlot || venueRentalSlot || timeSlotId || "1"
+            : "",
+        particularQuantities:
+          isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
+            ? {}
+            : (prev[date]?.particularQuantities || {}),
       },
     }));
   };
@@ -232,6 +380,8 @@ export default function WalkInReservationPage() {
         initial[date] = {
           packageId: packageId || "0",
           particularQuantities: { ...particularQuantities },
+          timeSlotId,
+          venueRentalSlot,
         };
       }
       setDateCustomizations(initial);
@@ -276,10 +426,26 @@ export default function WalkInReservationPage() {
       return;
     }
 
+    if (isVirtualPackageId(packageId)) {
+      const entries = getVirtualPackageParticulars(
+        packageId,
+        particulars,
+        particularQuantities,
+        timeSlotId,
+        venueRentalSlot
+      );
+      if (!entries.length) {
+        toast.error("Please complete your Basketball Game or Venue Rental selection.");
+        return;
+      }
+    }
+
     setShowOrder(true);
   };
 
   const handleSubmitReservation = async () => {
+    if (submitting || submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     try {
       let actualClientId;
@@ -313,13 +479,39 @@ export default function WalkInReservationPage() {
       }
 
       // Build particulars and package for submit
+      const sortedDates = [...selectedDates].sort();
+      const primaryDate = eventDate || sortedDates[0];
+
       let selectedParticulars = [];
-      let selectedPackageId = packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null;
+      let selectedPackageId = parseReservationPackageId(packageId);
 
       if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
         const aggregatedParticulars = {};
-        for (const [date, cust] of Object.entries(dateCustomizations)) {
-          if ((cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities) {
+        const basketballDayCounts = {};
+        for (const [, cust] of Object.entries(dateCustomizations)) {
+          if (isVirtualPackageId(cust.packageId)) {
+            const entries = getVirtualPackageParticulars(
+              cust.packageId,
+              particulars,
+              cust.particularQuantities,
+              cust.timeSlotId || timeSlotId,
+              cust.venueRentalSlot
+            );
+            for (const entry of entries) {
+              if (isConsolidatedBasketballEntry(particulars, entry)) {
+                basketballDayCounts[entry.particularId] =
+                  (basketballDayCounts[entry.particularId] || 0) + 1;
+                aggregatedParticulars[entry.particularId] = entry.quantity;
+              } else {
+                aggregatedParticulars[entry.particularId] =
+                  (aggregatedParticulars[entry.particularId] || 0) + entry.quantity;
+              }
+            }
+          } else if (
+            cust.packageId === "0" ||
+            cust.packageId === "custom" ||
+            !cust.packageId
+          ) {
             for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
               if (qty > 0) {
                 aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
@@ -329,14 +521,38 @@ export default function WalkInReservationPage() {
         }
         selectedParticulars = Object.entries(aggregatedParticulars)
           .filter(([, qty]) => qty > 0)
-          .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
-        const sortedDates = [...selectedDates].sort();
+          .map(([id, qty]) => ({
+            particularId: parseInt(id, 10),
+            quantity: qty,
+            ...(basketballDayCounts[id] ? { days: basketballDayCounts[id] } : {}),
+          }));
         const firstCust = dateCustomizations[sortedDates[0]];
-        if (firstCust && firstCust.packageId && firstCust.packageId !== "0" && firstCust.packageId !== "custom") {
-          selectedPackageId = parseInt(firstCust.packageId, 10);
+        if (firstCust && isRegularPackageId(firstCust.packageId)) {
+          selectedPackageId = parseReservationPackageId(firstCust.packageId);
         } else {
           selectedPackageId = null;
         }
+      } else if (isVirtualPackageId(packageId)) {
+        const numDays = sortedDates.length > 0 ? sortedDates.length : 1;
+        selectedParticulars = getVirtualPackageParticulars(
+          packageId,
+          particulars,
+          particularQuantities,
+          timeSlotId,
+          venueRentalSlot
+        ).map((p) => {
+          if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+            return { ...p, quantity: p.quantity * numDays };
+          }
+          if (isConsolidatedBasketballEntry(particulars, p)) {
+            return { ...p, days: numDays };
+          }
+          if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+            return { ...p, quantity: p.quantity * numDays };
+          }
+          return p;
+        });
+        selectedPackageId = null;
       } else {
         // Only include particulars if custom or no package
         if (packageId === "custom" || packageId === "0" || !packageId) {
@@ -344,13 +560,10 @@ export default function WalkInReservationPage() {
             .filter(([, qty]) => qty > 0)
             .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
         } else {
-          selectedPackageId = parseInt(packageId, 10) || null;
+          selectedPackageId = parseReservationPackageId(packageId);
           selectedParticulars = []; // Inclusions are free, don't send as paid particulars
         }
       }
-
-      const sortedDates = [...selectedDates].sort();
-      const primaryDate = eventDate || sortedDates[0];
 
       const res = await fetch('/api/reservations', {
         method: 'POST',
@@ -368,6 +581,7 @@ export default function WalkInReservationPage() {
           clientContact: isExistingUser && selectedClient ? selectedClient.contact : clientContact,
           clientEmail: isExistingUser && selectedClient ? selectedClient.email : clientEmail,
           particulars: selectedParticulars.length > 0 ? selectedParticulars : undefined,
+          chargeLines: summaryLines,
         }),
       });
 
@@ -386,6 +600,7 @@ export default function WalkInReservationPage() {
       setEventDate("");
       setTimeSlotId("");
       setPackageId("");
+      setVenueRentalSlot("");
       setNotes("");
       setClientName("");
       setClientContact("");
@@ -401,6 +616,7 @@ export default function WalkInReservationPage() {
     } catch (err) {
       toast.error(err.message);
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   };
@@ -422,6 +638,36 @@ export default function WalkInReservationPage() {
   };
 
   const displayClient = getDisplayClientInfo();
+
+  const getPackageDisplayLabel = () => {
+    if (isVirtualPackageId(packageId)) {
+      const info = getVirtualPackageDisplayInfo(
+        packageId,
+        particulars,
+        particularQuantities,
+        timeSlotId,
+        venueRentalSlot
+      );
+      return info?.label || (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL ? "Basketball Game" : "Venue Rental");
+    }
+    if (isRegularPackageId(packageId)) {
+      return packages.find((p) => String(p.packageId) === packageId)?.packageName || "—";
+    }
+    return "—";
+  };
+
+  const summaryLines = buildReservationSummaryLines({
+    particulars,
+    packages,
+    packageId,
+    particularQuantities,
+    timeSlotId,
+    venueRentalSlot,
+    selectedDatesCount: selectedDates.size,
+    customizePerDate,
+    dateCustomizations,
+  });
+  const total = sumReservationSummaryLines(summaryLines);
 
   return (
     <div className="flex flex-col gap-6">
@@ -641,7 +887,7 @@ export default function WalkInReservationPage() {
             </div>
             <div className="space-y-2">
               <Label>Time Slot *</Label>
-              <Select value={timeSlotId} onValueChange={setTimeSlotId}>
+              <Select value={timeSlotId} onValueChange={handleTimeSlotChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select time slot" />
                 </SelectTrigger>
@@ -663,19 +909,23 @@ export default function WalkInReservationPage() {
                 <SelectContent>
                   <SelectItem value="0">None</SelectItem>
                   <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                  {packages
-                    .filter(p => p.statusId === 1)
-                    .map((pkg) => (
-                    <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
-                      {pkg.packageName} &mdash; {pkg.timeSlot} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
-                    </SelectItem>
-                  ))}
+                  <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                 </SelectContent>
               </Select>
             </div>
-{/* Conditional: Package Inclusions or Particulars Selector */}
+{/* Conditional: Package Inclusions, virtual packages, or particulars */}
             <div className="space-y-2">
-              {packageId && packageId !== "0" && packageId !== "custom" ? (
+              {isVirtualPackageId(packageId) ? (
+                <ReservationVirtualPackagePanel
+                  packageId={packageId}
+                  particulars={particulars}
+                  particularQuantities={particularQuantities}
+                  onParticularQuantitiesChange={handleVirtualParticularQuantitiesChange}
+                  timeSlotId={timeSlotId}
+                  venueRentalSlot={venueRentalSlot}
+                  onVenueRentalSlotChange={handleVenueRentalSlotChange}
+                />
+              ) : isRegularPackageId(packageId) ? (
                 <>
                   <Label>Package Inclusions</Label>
                   <p className="text-xs text-muted-foreground">This package includes the following items at no additional cost.</p>
@@ -696,6 +946,64 @@ export default function WalkInReservationPage() {
                         </div>
                       );
                     })()}
+                  </div>
+                </>
+              ) : (packageId === "custom" || packageId === "0" || !packageId) ? (
+                <>
+                  <Label>Additional Services / Particulars</Label>
+                  <div className="space-y-2 border rounded-lg p-4">
+                    {particularsLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading particulars...</p>
+                    ) : filterCustomParticulars(particulars).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No particulars available.</p>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {filterCustomParticulars(particulars).map((p) => {
+                          const qty = particularQuantities[p.particularId] || 0;
+                          const cost = p.unitCost ? Number(p.unitCost) : 0;
+                          const maxQty = p.totalQuantity || 999;
+                          const isAircon = p.particularName === "Aircon Compressor";
+                          const airconTiers = [
+                            { qty: 4, label: "100–1K pax", price: 3200 },
+                            { qty: 6, label: "1K–3K pax", price: 4800 },
+                            { qty: 8, label: "4K–6K pax", price: 6400 },
+                            { qty: 10, label: "7K–10K pax", price: 8000 },
+                          ];
+                          return (
+                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{p.particularName}</p>
+                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
+                                {isAircon && (
+                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                    {airconTiers.map((t) => (
+                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
+                                    ))}
+                                  </div>
+                                )}
+                                {!isAircon && <p className="text-xs text-muted-foreground">Available: {maxQty}</p>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, -1)} disabled={qty <= 0}>
+                                  <Minus className="size-3" />
+                                </Button>
+                                <input type="number" min={0} max={maxQty} value={qty}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (isNaN(val) || val < 0) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
+                                    else if (val > maxQty) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
+                                    else setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
+                                  }}
+                                  className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, 1)} disabled={qty >= maxQty}>
+                                  <Plus className="size-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </>
               ) : null}
@@ -816,14 +1124,43 @@ export default function WalkInReservationPage() {
                 {timeSlotId ? TIME_SLOTS.find(t => String(t.id) === timeSlotId)?.name : "&mdash;"}
               </span>
             </div>
-            {packageId && packageId !== "0" && (
+            {packageId && packageId !== "0" && packageId !== "custom" && (
               <div className="flex items-center justify-between text-sm">
-                <span>Package</span>
-                <span className="font-medium">
-                  {packages.find(p => String(p.packageId) === packageId)?.packageName || "&mdash;"}
-                </span>
+                <span>{isVirtualPackageId(packageId) ? "Selection" : "Package"}</span>
+                <span className="font-medium">{getPackageDisplayLabel()}</span>
               </div>
             )}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Selected Dates</span>
+                <span className="font-medium">{selectedDates.size > 0 ? selectedDates.size : 1} day(s)</span>
+              </div>
+              {summaryLines.length > 0 ? (
+                summaryLines.map((line, i) => (
+                  <div
+                    key={`${line.date || "line"}-${i}`}
+                    className={line.date ? "border-t pt-1 mt-1" : undefined}
+                  >
+                    {line.date && (
+                      <p className="text-xs font-medium text-muted-foreground">{line.date}</p>
+                    )}
+                    <div className="flex justify-between pl-2">
+                      <span>{line.label}</span>
+                      <span className="tabular-nums font-medium">
+                        ₱{line.amount.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No charges selected yet.</p>
+              )}
+              <Separator />
+              <div className="flex justify-between font-bold">
+                <span>Total</span>
+                <span className="tabular-nums">₱{total.toLocaleString()}</span>
+              </div>
+            </div>
             {isExistingUser && selectedClient && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-primary">Account Linked</span>
@@ -886,9 +1223,9 @@ export default function WalkInReservationPage() {
                   <p className="font-medium">{eventType || "TBD"}</p>
                 </div>
               </div>
-              {packageId && packageId !== "0" && (
+              {packageId && packageId !== "0" && packageId !== "custom" && (
                 <div className="mt-2 text-xs text-muted-foreground">
-                  Package: {packages.find(p => String(p.packageId) === packageId)?.packageName || "&mdash;"}
+                  {isVirtualPackageId(packageId) ? "Selection" : "Package"}: {getPackageDisplayLabel()}
                 </div>
               )}
             </div>
@@ -948,16 +1285,27 @@ export default function WalkInReservationPage() {
                       <SelectContent>
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                        {packages.filter(p => p.statusId === 1).map((pkg) => (
-                          <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
-                            {pkg.packageName} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
-                          </SelectItem>
-                        ))}
+                        <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" ? (
+                  {isVirtualPackageId(cust.packageId) ? (
+                    <ReservationVirtualPackagePanel
+                      packageId={cust.packageId}
+                      particulars={particulars}
+                      particularQuantities={cust.particularQuantities || {}}
+                      onParticularQuantitiesChange={(pq) =>
+                        handleDateVirtualParticularQuantitiesChange(date, pq)
+                      }
+                      timeSlotId={cust.timeSlotId || timeSlotId}
+                      venueRentalSlot={cust.venueRentalSlot}
+                      onVenueRentalSlotChange={(val) =>
+                        handleDateVenueRentalSlotChange(date, val)
+                      }
+                      compact
+                    />
+                  ) : isRegularPackageId(cust.packageId) ? (
                     <div className="space-y-2">
                       <Label className="text-xs">Package Inclusions for {date}</Label>
                       <div className="border rounded-lg p-3 bg-muted/20">
@@ -998,65 +1346,30 @@ export default function WalkInReservationPage() {
                         )}
                       </div>
                       <div className="grid gap-2 md:grid-cols-2">
-                        {particulars.map((p) => {
+                        {filterCustomParticulars(particulars).map((p) => {
                           const qty = cust.particularQuantities?.[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
-                          const isBasketball = p.particularName === "Basketball Game";
                           const isAircon = p.particularName === "Aircon Compressor";
-                          const basketballOptions = [
-                            { value: 2, label: "Day w/o SC", price: 1000 },
-                            { value: 3, label: "Day w/ SC", price: 1500 },
-                            { value: 4, label: "Night w/o SC", price: 1500 },
-                            { value: 5, label: "Night w/ SC", price: 2000 },
-                          ];
                           return (
                             <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate">{p.particularName}</p>
                                 {isAircon && <p className="text-[10px] text-muted-foreground">₱800 / unit</p>}
-                                {!isBasketball && !isAircon && cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                                {!isAircon && cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
-                                {isBasketball ? (
-                                  <Select
-                                    value={qty > 0 ? String(qty) : ""}
-                                    onValueChange={(val) => {
-                                      setDateCustomizations((prev) => ({
-                                        ...prev,
-                                        [date]: {
-                                          ...prev[date],
-                                          particularQuantities: { ...(prev[date]?.particularQuantities || {}), [p.particularId]: parseInt(val, 10) },
-                                        },
-                                      }));
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-40 text-xs h-8">
-                                      <SelectValue placeholder="Select type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {basketballOptions.map((opt) => (
-                                        <SelectItem key={opt.value} value={String(opt.value)}>
-                                          {opt.label} — ₱{opt.price.toLocaleString()}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <>
-                                    <Button type="button" variant="outline" size="icon" className="size-6"
-                                      onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                      disabled={qty <= 0}>
-                                      <Minus className="size-3" />
-                                    </Button>
-                                    <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                                    <Button type="button" variant="outline" size="icon" className="size-6"
-                                      onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                      disabled={qty >= maxQty}>
-                                      <Plus className="size-3" />
-                                    </Button>
-                                  </>
-                                )}
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
+                                  disabled={qty <= 0}>
+                                  <Minus className="size-3" />
+                                </Button>
+                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
+                                <Button type="button" variant="outline" size="icon" className="size-6"
+                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
+                                  disabled={qty >= maxQty}>
+                                  <Plus className="size-3" />
+                                </Button>
                               </div>
                             </div>
                           );

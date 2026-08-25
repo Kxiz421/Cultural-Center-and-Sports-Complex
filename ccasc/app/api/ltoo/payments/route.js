@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+
+import prisma from "@/lib/prisma";
+import { formatDbDate, roundMoney } from "@/lib/utils";
+import { computePaymentBreakdown, getPaymentTypeMax, isPaymentTypeAllowed, isFixedPaymentAmount } from "@/lib/payment-utils";
 
 export const dynamic = "force-dynamic";
 
-const prisma = new PrismaClient();
 
 export async function GET(request) {
   try {
@@ -75,25 +77,13 @@ export async function GET(request) {
             }
             return sum + unitCost * rp.quantity;
           }, 0);
-          const totalAmount = r.totalAmount
-            ? Number(r.totalAmount)
-            : (pkgTotal + particularsTotal);
-          // 10% deposit is on TOP of the base price, making total payable = base * 1.1
-          const totalPayable = totalAmount * 1.1;
-          const balance = totalPayable - totalPaid;
-
-          // Compute payment compliance at runtime
-          const requiredDownPayment = totalAmount * 0.5;
-          const requiredDeposit = totalAmount * 0.1;
-          const downPaymentMet = totalPaid >= requiredDownPayment;
-          const depositMet = totalPaid >= (requiredDownPayment + requiredDeposit);
-          const balanceSettled = totalPaid >= totalPayable - 0.001;
-          let paymentStatus = "Pending";
-          if (totalPaid <= 0) paymentStatus = "Pending";
-          else if (balanceSettled) paymentStatus = "BalanceSettled";
-          else if (depositMet) paymentStatus = "DepositPaid";
-          else if (downPaymentMet) paymentStatus = "DownPaymentPaid";
-          else paymentStatus = "IncompletePayment";
+          const calculatedBase = roundMoney(pkgTotal + particularsTotal);
+          const storedBase = r.totalAmount ? Number(r.totalAmount) : 0;
+          const totalAmount =
+            calculatedBase > 0
+              ? roundMoney(Math.max(storedBase, calculatedBase))
+              : storedBase;
+          const breakdown = computePaymentBreakdown(totalAmount, totalPaid);
 
           return {
             id: r.reservationId,
@@ -112,16 +102,26 @@ export async function GET(request) {
             packageName: r.package?.packageName,
             packageDayRate: r.package?.dayRate ? Number(r.package.dayRate) : null,
             packageNightRate: r.package?.nightRate ? Number(r.package.nightRate) : null,
-            totalAmount: totalAmount,
-            totalPaid: totalPaid,
-            balance: Math.max(0, balance),
-            balanceRemaining: Math.max(0, balance),
+            totalAmount: breakdown.base,
+            totalPaid: breakdown.paid,
+            balance: breakdown.remainingBalance,
+            balanceRemaining: breakdown.remainingBalance,
+            totalPayable: breakdown.totalPayable,
             hasBooking: r.bookings.length > 0,
-            paymentStatus,
-            requiredDownPayment,
-            requiredDeposit,
-            downPaymentMet,
-            depositMet,
+            paymentStatus: breakdown.balanceSettled
+              ? "BalanceSettled"
+              : breakdown.status === "DepositPaid"
+                ? "DepositPaid"
+                : breakdown.status === "DownPaymentPaid"
+                  ? "DownPaymentPaid"
+                  : breakdown.status === "IncompletePayment"
+                    ? "IncompletePayment"
+                    : "Pending",
+            requiredDownPayment: breakdown.requiredDownPayment,
+            requiredDeposit: breakdown.requiredDeposit,
+            downPaymentMet: breakdown.downPaymentMet,
+            depositMet: breakdown.depositMet,
+            balanceSettled: breakdown.balanceSettled,
             particulars: r.reservedParticulars.map((rp) => ({
               name: rp.particular.particularName,
               quantity: rp.quantity,
@@ -135,7 +135,128 @@ export async function GET(request) {
       return NextResponse.json(mapped);
     }
 
-    // Return all payments
+    if (searchParams.get("history") === "true") {
+      const monthParam = searchParams.get("month");
+      const yearParam = searchParams.get("year");
+      const reservationIdParam = searchParams.get("reservationId");
+      const reservationId = reservationIdParam
+        ? parseInt(reservationIdParam, 10)
+        : null;
+
+      const where = {};
+      if (
+        monthParam !== null &&
+        yearParam !== null &&
+        monthParam !== "" &&
+        yearParam !== ""
+      ) {
+        where.paymentDate = {
+          gte: new Date(parseInt(yearParam, 10), parseInt(monthParam, 10), 1),
+          lte: new Date(
+            parseInt(yearParam, 10),
+            parseInt(monthParam, 10) + 1,
+            0,
+            23,
+            59,
+            59
+          ),
+        };
+      }
+      if (reservationId && Number.isFinite(reservationId)) {
+        where.booking = { reservationId };
+      }
+
+      const transactions = await prisma.transaction.findMany({
+        where: Object.keys(where).length > 0 ? where : undefined,
+        include: {
+          payment: {
+            include: {
+              status: { select: { status: true } },
+            },
+          },
+          booking: {
+            include: {
+              reservation: {
+                include: {
+                  venue: { select: { venue: true } },
+                  timeSlot: { select: { startTime: true, endTime: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { paymentDate: "desc" },
+      });
+
+      const clientIds = [
+        ...new Set(
+          transactions
+            .map((t) => t.booking?.reservation?.clientId)
+            .filter((id) => id != null)
+        ),
+      ];
+      const clients =
+        clientIds.length > 0
+          ? await prisma.client.findMany({
+              where: { clientId: { in: clientIds } },
+              select: {
+                clientId: true,
+                firstName: true,
+                lastName: true,
+                clientRoleId: true,
+              },
+            })
+          : [];
+      const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
+      const mapped = transactions.map((t) => {
+        const reservation = t.booking?.reservation;
+        const client = reservation ? clientMap[reservation.clientId] : null;
+        const notes = reservation?.notes || "";
+        const walkInMatch = notes.match(/Client:\s*([^,]+)/);
+
+        const clientName = client
+          ? `${client.firstName} ${client.lastName}`.trim()
+          : walkInMatch?.[1]?.trim() || (notes.includes("Walk-in") ? notes : "Unknown");
+
+        const clientType =
+          client?.clientRoleId === "PROV" ? "provincial" : "client";
+
+        return {
+          transactionId: t.transactionId,
+          paymentId: t.paymentId,
+          bookingId: t.bookingId,
+          reservationId: reservation?.reservationId ?? null,
+          orNumber: t.receiptNumber,
+          amountPaid: roundMoney(t.payment?.amountPaid ?? 0),
+          paymentStatus: t.payment?.status?.status || "Partially Paid",
+          clientName,
+          clientType,
+          activityName: reservation?.eventType || "",
+          eventDate: reservation?.eventDate ? formatDbDate(reservation.eventDate) : "",
+          venue: reservation?.venue?.venue || "",
+          timeSlot: reservation?.timeSlot
+            ? `${reservation.timeSlot.startTime} - ${reservation.timeSlot.endTime}`
+            : "",
+          paymentDate: t.paymentDate,
+          recordedBy: t.recordedBy || "LTOO",
+        };
+      });
+
+      const totalCollected = roundMoney(
+        mapped.reduce((sum, row) => sum + row.amountPaid, 0)
+      );
+
+      return NextResponse.json({
+        transactions: mapped,
+        summary: {
+          count: mapped.length,
+          totalCollected,
+        },
+      });
+    }
+
+    // Return all payments (legacy list)
     const payments = await prisma.payment.findMany({
       include: {
         booking: {
@@ -268,9 +389,12 @@ export async function POST(request) {
         }
         return sum + unitCost * rp.quantity;
       }, 0);
-      const totalAmt = reservation.totalAmount
-        ? Number(reservation.totalAmount)
-        : pkgTotal + particularsTotal;
+      const calculatedBase = roundMoney(pkgTotal + particularsTotal);
+      const storedBase = reservation.totalAmount ? Number(reservation.totalAmount) : 0;
+      const totalAmt =
+        calculatedBase > 0
+          ? roundMoney(Math.max(storedBase, calculatedBase))
+          : storedBase;
 
       const totalPaid =
         reservation.bookings?.reduce(
@@ -279,12 +403,27 @@ export async function POST(request) {
           0
         ) || 0;
 
-      // 10% deposit is on TOP, so total payable = base * 1.1
-      const totalPayable = totalAmt * 1.1;
-      const remainingBalance = Math.max(0, totalPayable - totalPaid);
+      const breakdown = computePaymentBreakdown(totalAmt, totalPaid);
+      const remainingBalance = breakdown.remainingBalance;
+
+      const normalizedPaymentType =
+        paymentType === "deposit" || paymentType === "downpayment" || paymentType === "balance"
+          ? paymentType
+          : "balance";
+
+      if (!isPaymentTypeAllowed(breakdown, normalizedPaymentType)) {
+        const label =
+          normalizedPaymentType === "deposit" ? "10% deposit"
+          : normalizedPaymentType === "downpayment" ? "50% down payment"
+          : "remaining balance";
+        return NextResponse.json(
+          { error: `The ${label} has already been recorded or is not available yet.` },
+          { status: 400 }
+        );
+      }
 
       // The payment can never exceed the total remaining balance.
-      if (amount > remainingBalance + 0.001) {
+      if (roundMoney(amount) > remainingBalance) {
         return NextResponse.json(
           { error: `Amount cannot exceed the remaining balance of ${remainingBalance.toFixed(2)}` },
           { status: 400 }
@@ -292,16 +431,11 @@ export async function POST(request) {
       }
 
       // The amount can never exceed the cap for the selected payment type.
-      const requiredDeposit = totalAmt * 0.1;
-      const requiredDownPayment = totalAmt * 0.5;
-      const typeMax =
-        paymentType === "deposit" ? requiredDeposit
-        : paymentType === "downpayment" ? requiredDownPayment
-        : remainingBalance;
-      if (amount > typeMax + 0.001) {
+      const typeMax = getPaymentTypeMax(breakdown, normalizedPaymentType);
+      if (roundMoney(amount) > typeMax) {
         const label =
-          paymentType === "deposit" ? "the 10% deposit"
-          : paymentType === "downpayment" ? "the 50% down payment"
+          normalizedPaymentType === "deposit" ? "the 10% deposit"
+          : normalizedPaymentType === "downpayment" ? "the 50% down payment"
           : "the remaining balance";
         return NextResponse.json(
           { error: `Amount cannot exceed ${typeMax.toFixed(2)} for ${label}` },
@@ -309,11 +443,21 @@ export async function POST(request) {
         );
       }
 
+      if (isFixedPaymentAmount(normalizedPaymentType) && roundMoney(amount) !== roundMoney(typeMax)) {
+        const label =
+          normalizedPaymentType === "deposit" ? "10% deposit"
+          : normalizedPaymentType === "downpayment" ? "50% down payment"
+          : "remaining balance";
+        return NextResponse.json(
+          { error: `You must pay the full ${label} amount of ${typeMax.toFixed(2)}` },
+          { status: 400 }
+        );
+      }
+
       // Derive the stored status from the cumulative amount paid after this payment.
       if (clientType !== "provincial") {
-        const newTotalPaid = totalPaid + amount;
-        statusToUse =
-          newTotalPaid >= totalPayable - 0.001 ? "Fully Paid" : "Partially Paid";
+        const afterPayment = computePaymentBreakdown(totalAmt, totalPaid + amount);
+        statusToUse = afterPayment.balanceSettled ? "Fully Paid" : "Partially Paid";
       }
     }
 

@@ -34,10 +34,100 @@ export function getBasketballPrice(qty) {
   return opt ? opt.price : null;
 }
 
-/**
- * Check if a particular name is the Basketball Game.
- */
 export const BASKETBALL_NAME = "Basketball Game";
+
+export function isBasketballEncodedQuantity(qty) {
+  const n = Number(qty);
+  return n >= 2 && n <= 5;
+}
+
+export function isBasketballParticularName(name) {
+  const n = name || "";
+  return n === BASKETBALL_NAME || n.startsWith("Basketball Game");
+}
+
+export function isVenueRentalParticularName(name) {
+  return /venue rental/i.test(name || "");
+}
+
+export function formatVenueRentalLabel(particularName, quantity = 1) {
+  const name = particularName || "";
+  const slotLabel = /night/i.test(name)
+    ? "Night (5:00 PM – 12 MN)"
+    : "Day (8:00 AM – 5:00 PM)";
+  const base = `Venue Rental — ${slotLabel}`;
+  const qty = Number(quantity) || 1;
+  return qty > 1 ? `${base} × ${qty} day(s)` : base;
+}
+
+/** Display line for form preview (particular picker / summary). */
+export function formatFormParticularLine(particularName, quantity, unitCost) {
+  const qty = Number(quantity) || 0;
+  const cost = Number(unitCost) || 0;
+
+  if (particularName === BASKETBALL_NAME && isBasketballEncodedQuantity(qty)) {
+    const optionLabel = getBasketballLabel(qty);
+    const amount = getBasketballPrice(qty) || cost;
+    return {
+      label: optionLabel
+        ? `Basketball Game — ${optionLabel}`
+        : "Basketball Game",
+      amount,
+    };
+  }
+
+  if (isVenueRentalParticularName(particularName)) {
+    return {
+      label: formatVenueRentalLabel(particularName, qty),
+      amount: cost * qty,
+    };
+  }
+
+  if (isBasketballParticularName(particularName)) {
+    return {
+      label: qty > 1 ? `${particularName} × ${qty}` : particularName,
+      amount: cost * qty,
+    };
+  }
+
+  return {
+    label: qty > 1 ? `${particularName} × ${qty}` : particularName,
+    amount: cost * qty,
+  };
+}
+
+/**
+ * Display line for saved reservations (order of payment, API particulars).
+ * Consolidated basketball encodes game type in quantity; multi-day uses eventDayCount.
+ */
+export function formatReservedParticularCharge(
+  { name, quantity, unitCost },
+  { eventDayCount = 1, allParticulars = [] } = {}
+) {
+  const qty = Number(quantity) || 0;
+  const cost = Number(unitCost) || 0;
+
+  if (name === BASKETBALL_NAME && isBasketballEncodedQuantity(qty)) {
+    const perDay = getBasketballPrice(qty) || cost;
+    const optionLabel = getBasketballLabel(qty);
+    const baseLabel = optionLabel
+      ? `Basketball Game — ${optionLabel}`
+      : "Basketball Game";
+    const basketballLines = (allParticulars || []).filter((p) =>
+      isBasketballParticularName(p.name)
+    );
+    const applyEventDays =
+      basketballLines.length === 1 &&
+      basketballLines[0].name === BASKETBALL_NAME;
+    const days = applyEventDays ? Math.max(1, eventDayCount) : 1;
+    return {
+      label: days > 1 ? `${baseLabel} × ${days} day(s)` : baseLabel,
+      amount: perDay * days,
+    };
+  }
+
+  return formatFormParticularLine(name, qty, cost);
+}
 
 /**
  * Aircon compressor tier info (for display hints).

@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { formatDbDate, parseSqlDate } from "@/lib/utils";
+import { BASKETBALL_NAME } from "@/lib/particular-options";
+import {
+  embedChargeBreakdownInNotes,
+  extractChargeBreakdownFromNotes,
+  stripChargeBreakdownFromNotes,
+  normalizeChargeLines,
+  sumChargeLineAmounts,
+} from "@/lib/reservation-charge-breakdown";
 
-const prisma = new PrismaClient();
+function parsePackageId(value) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 
 function addDays(date, days) {
   const result = new Date(date);
@@ -87,8 +100,8 @@ export async function GET(request) {
       .map((r) => {
         const client = clientMap[r.clientId];
         const allDates = [
-          r.eventDate.toISOString().split("T")[0],
-          ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
+          formatDbDate(r.eventDate),
+          ...r.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
         ];
 
         const allPayments = r.bookings.flatMap(b => b.payments);
@@ -112,7 +125,7 @@ export async function GET(request) {
           venueId: r.venueId,
           venue: r.venue.venue,
           eventType: r.eventType,
-          eventDate: r.eventDate.toISOString().split("T")[0],
+          eventDate: formatDbDate(r.eventDate),
           eventDates: allDates,
           timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
           status: r.reservationStatus,
@@ -129,7 +142,8 @@ export async function GET(request) {
           isFinal,
           requiredDownPayment: totalAmount ? totalAmount * 0.5 : null,
           requiredDeposit: totalAmount ? totalAmount * 0.1 : null,
-          remarks: r.notes || null,
+          remarks: stripChargeBreakdownFromNotes(r.notes) || null,
+          chargeLines: extractChargeBreakdownFromNotes(r.notes) || null,
           particulars: r.reservedParticulars.map((rp) => ({
             name: rp.particular.particularName,
             quantity: rp.quantity,
@@ -152,7 +166,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars } = body;
+    const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars, chargeLines: rawChargeLines } = body;
 
     if (!venueId || !eventType || !eventDate || !timeSlotId || !clientId) {
       return NextResponse.json(
@@ -169,11 +183,16 @@ export async function POST(request) {
       );
     }
 
-    const primaryDate = new Date(eventDate);
-    const additionalDates = (eventDates || [])
+    const primaryDateStr = parseSqlDate(eventDate);
+    if (!primaryDateStr) {
+      return NextResponse.json({ error: "Invalid event date" }, { status: 400 });
+    }
+    const additionalDateStrs = (eventDates || [])
       .filter((d) => d !== eventDate)
-      .map((d) => new Date(d));
-    const allDates = [primaryDate, ...additionalDates];
+      .map((d) => parseSqlDate(d))
+      .filter(Boolean);
+    const allDateStrs = [primaryDateStr, ...additionalDateStrs];
+    const allDates = allDateStrs.map((d) => new Date(`${d}T00:00:00.000Z`));
 
     // Conflict check
     const conflictingReservations = await prisma.reservation.findMany({
@@ -198,10 +217,10 @@ export async function POST(request) {
 
     const conflictDates = new Set();
     for (const r of conflictingReservations) {
-      conflictDates.add(r.eventDate.toISOString().split("T")[0]);
-      for (const ad of r.additionalDates) conflictDates.add(ad.eventDate.toISOString().split("T")[0]);
+      conflictDates.add(formatDbDate(r.eventDate));
+      for (const ad of r.additionalDates) conflictDates.add(formatDbDate(ad.eventDate));
     }
-    for (const b of calendarBlocks) conflictDates.add(b.blockDate.toISOString().split("T")[0]);
+    for (const b of calendarBlocks) conflictDates.add(formatDbDate(b.blockDate));
 
     if (conflictDates.size > 0) {
       return NextResponse.json({
@@ -217,8 +236,8 @@ export async function POST(request) {
 
     // Calculate total
     let totalAmount = 0;
-    const selectedPackage = packageId && parseInt(packageId, 10) > 0
-      ? await prisma.package.findUnique({ where: { packageId: parseInt(packageId, 10) } })
+    const selectedPackage = parsePackageId(packageId)
+      ? await prisma.package.findUnique({ where: { packageId: parsePackageId(packageId) } })
       : null;
 
     if (selectedPackage) {
@@ -237,21 +256,43 @@ export async function POST(request) {
             include: { inventory: { select: { unitCost: true } } },
           });
           if (particular) {
-            let unitCost = particular.inventory?.unitCost ? Number(particular.inventory.unitCost) : 0;
-            // Special pricing for Basketball Game (encoded quantity = option selector)
-            if (particular.particularName === "Basketball Game") {
+            let lineCost = 0;
+            const unitCost = particular.inventory?.unitCost
+              ? Number(particular.inventory.unitCost)
+              : 0;
+            const name = particular.particularName || "";
+
+            if (name === BASKETBALL_NAME) {
               const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
-              unitCost = basketballPrices[p.quantity] || (unitCost * p.quantity);
+              const days = Math.max(1, parseInt(p.days, 10) || 1);
+              lineCost = (basketballPrices[p.quantity] || unitCost) * days;
+            } else if (name.startsWith("Basketball Game")) {
+              lineCost = unitCost;
+            } else if (/venue rental/i.test(name)) {
+              lineCost = unitCost * p.quantity;
+            } else {
+              lineCost = unitCost * p.quantity;
             }
-            totalAmount += unitCost;
-            particularsData.push({ particularId: parseInt(p.particularId, 10), quantity: p.quantity });
+
+            totalAmount += lineCost;
+            particularsData.push({
+              particularId: parseInt(p.particularId, 10),
+              quantity: p.quantity,
+            });
           }
         }
       }
     }
 
+    const chargeLines = normalizeChargeLines(rawChargeLines);
+    if (chargeLines.length > 0) {
+      totalAmount = sumChargeLineAmounts(chargeLines);
+    }
+
+    const storedNotes = embedChargeBreakdownInNotes(notes, chargeLines);
+
     const today = new Date(); today.setHours(0,0,0,0);
-    const event = new Date(eventDate);
+    const event = new Date(`${primaryDateStr}T00:00:00.000Z`);
     const downPaymentDeadline = addDays(event, -7).toISOString().split("T")[0];
     const balanceDeadline = addDays(event, -2).toISOString().split("T")[0];
     const cancellationDeadline = addDays(event, -30).toISOString().split("T")[0];
@@ -261,17 +302,17 @@ export async function POST(request) {
       data: {
         venueId: parseInt(venueId, 10),
         eventType,
-        eventDate: primaryDate,
+        eventDate: event,
         timeSlotId: parseInt(timeSlotId, 10),
-        packageId: packageId && parseInt(packageId, 10) > 0 ? parseInt(packageId, 10) : null,
+        packageId: parsePackageId(packageId),
         clientId: parsedClientId,
         reservationStatus: "Pending",
         eventStatus: "Upcoming",
         totalAmount: totalAmount > 0 ? totalAmount : null,
         submittedAt: new Date(),
-        notes: notes || null,
-        additionalDates: additionalDates.length > 0
-          ? { create: additionalDates.map((d) => ({ eventDate: d })) }
+        notes: storedNotes,
+        additionalDates: additionalDateStrs.length > 0
+          ? { create: additionalDateStrs.map((d) => ({ eventDate: new Date(`${d}T00:00:00.000Z`) })) }
           : undefined,
         reservedParticulars: particularsData.length > 0
           ? { create: particularsData }
@@ -342,7 +383,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Failed to create reservation:", error);
     return NextResponse.json(
-      { error: "Failed to create reservation" },
+      { error: error.message || "Failed to create reservation" },
       { status: 500 }
     );
   }

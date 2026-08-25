@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+
+import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const prisma = new PrismaClient();
 
 // LTOO sees only Billing Statement (1) and Official Receipt (5)
 const LTOO_DOCUMENT_TYPES = [1, 5];
