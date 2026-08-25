@@ -78,19 +78,21 @@ export async function GET(request) {
           const totalAmount = r.totalAmount
             ? Number(r.totalAmount)
             : (pkgTotal + particularsTotal);
-          const balance = totalAmount - totalPaid;
+          // 10% deposit is on TOP of the base price, making total payable = base * 1.1
+          const totalPayable = totalAmount * 1.1;
+          const balance = totalPayable - totalPaid;
 
           // Compute payment compliance at runtime
           const requiredDownPayment = totalAmount * 0.5;
           const requiredDeposit = totalAmount * 0.1;
           const downPaymentMet = totalPaid >= requiredDownPayment;
           const depositMet = totalPaid >= (requiredDownPayment + requiredDeposit);
-          const percentPaid = totalAmount > 0 ? totalPaid / totalAmount : 0;
+          const balanceSettled = totalPaid >= totalPayable - 0.001;
           let paymentStatus = "Pending";
           if (totalPaid <= 0) paymentStatus = "Pending";
-          else if (percentPaid >= 1) paymentStatus = "BalanceSettled";
-          else if (percentPaid >= 0.6) paymentStatus = "DepositPaid";
-          else if (percentPaid >= 0.5) paymentStatus = "DownPaymentPaid";
+          else if (balanceSettled) paymentStatus = "BalanceSettled";
+          else if (depositMet) paymentStatus = "DepositPaid";
+          else if (downPaymentMet) paymentStatus = "DownPaymentPaid";
           else paymentStatus = "IncompletePayment";
 
           return {
@@ -277,7 +279,9 @@ export async function POST(request) {
           0
         ) || 0;
 
-      const remainingBalance = Math.max(0, totalAmt - totalPaid);
+      // 10% deposit is on TOP, so total payable = base * 1.1
+      const totalPayable = totalAmt * 1.1;
+      const remainingBalance = Math.max(0, totalPayable - totalPaid);
 
       // The payment can never exceed the total remaining balance.
       if (amount > remainingBalance + 0.001) {
@@ -287,18 +291,20 @@ export async function POST(request) {
         );
       }
 
-      // The 10% deposit and 50% down payment must be paid in exact amounts.
+      // The amount can never exceed the cap for the selected payment type.
       const requiredDeposit = totalAmt * 0.1;
       const requiredDownPayment = totalAmt * 0.5;
-      if (paymentType === "deposit" && Math.abs(amount - requiredDeposit) > 0.01) {
+      const typeMax =
+        paymentType === "deposit" ? requiredDeposit
+        : paymentType === "downpayment" ? requiredDownPayment
+        : remainingBalance;
+      if (amount > typeMax + 0.001) {
+        const label =
+          paymentType === "deposit" ? "the 10% deposit"
+          : paymentType === "downpayment" ? "the 50% down payment"
+          : "the remaining balance";
         return NextResponse.json(
-          { error: `The 10% deposit must be exactly ${requiredDeposit.toFixed(2)}` },
-          { status: 400 }
-        );
-      }
-      if (paymentType === "downpayment" && Math.abs(amount - requiredDownPayment) > 0.01) {
-        return NextResponse.json(
-          { error: `The 50% down payment must be exactly ${requiredDownPayment.toFixed(2)}` },
+          { error: `Amount cannot exceed ${typeMax.toFixed(2)} for ${label}` },
           { status: 400 }
         );
       }
@@ -307,7 +313,7 @@ export async function POST(request) {
       if (clientType !== "provincial") {
         const newTotalPaid = totalPaid + amount;
         statusToUse =
-          newTotalPaid >= totalAmt - 0.001 ? "Fully Paid" : "Partially Paid";
+          newTotalPaid >= totalPayable - 0.001 ? "Fully Paid" : "Partially Paid";
       }
     }
 

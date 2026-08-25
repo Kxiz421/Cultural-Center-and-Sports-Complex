@@ -63,12 +63,14 @@ function generateORNumber() {
 }
 
 // Returns a normalized status token derived from the total amount paid so far.
+// The 10% deposit is ON TOP of the base price, so total payable = totalAmount * 1.1.
 function getStatusText(totalPaid, totalAmount) {
   if (!totalAmount || totalPaid <= 0) return "No Payment";
-  if (totalPaid >= totalAmount) return "Fully Paid";
-  const pct = totalPaid / totalAmount;
-  if (pct >= 0.6) return "DepositPaid"; // 50% down payment + 10% deposit = 60%
-  if (pct >= 0.5) return "DownPaymentPaid";
+  const totalPayable = totalAmount * 1.1;
+  if (totalPaid >= totalPayable) return "Fully Paid";
+  const requiredTotal = totalAmount * 0.6; // 50% down + 10% deposit (both % of base)
+  if (totalPaid >= requiredTotal) return "DepositPaid";
+  if (totalPaid >= totalAmount * 0.5) return "DownPaymentPaid";
   return "IncompletePayment";
 }
 
@@ -121,19 +123,21 @@ export default function LTOOPaymentsPage() {
     return reservations.map((r) => {
       const totalAmt = r.totalAmount || 0;
       const totalPaid = r.totalPaid || 0;
+      // 10% deposit is on TOP => total payable = base * 1.1
+      const totalPayable = totalAmt * 1.1;
       const requiredDownPayment = totalAmt * 0.5;
       const requiredDeposit = totalAmt * 0.1;
-      const requiredTotal = requiredDownPayment + requiredDeposit; // 60%
+      const requiredTotal = requiredDownPayment + requiredDeposit; // 60% of base
 
       const downPaymentMet = totalPaid >= requiredDownPayment;
       const depositMet = totalPaid >= requiredTotal; // 50% + 10%
-      const balanceSettled = totalPaid >= totalAmt;
+      const balanceSettled = totalPaid >= totalPayable;
 
       let status = "Pending";
       if (totalPaid <= 0) status = "No Payment";
-      else if (totalPaid >= totalAmt) status = "Fully Paid";
-      else if (totalPaid >= requiredTotal) status = "DepositPaid";
-      else if (totalPaid >= requiredDownPayment) status = "DownPaymentPaid";
+      else if (balanceSettled) status = "Fully Paid";
+      else if (depositMet) status = "DepositPaid";
+      else if (downPaymentMet) status = "DownPaymentPaid";
       else status = "IncompletePayment";
 
       return {
@@ -144,7 +148,8 @@ export default function LTOOPaymentsPage() {
         depositMet,
         balanceSettled,
         computedStatus: status,
-        remainingBalance: Math.max(0, totalAmt - totalPaid),
+        totalPayable,
+        remainingBalance: Math.max(0, totalPayable - totalPaid),
       };
     });
   }, [reservations]);
@@ -207,6 +212,27 @@ export default function LTOOPaymentsPage() {
     }
   };
 
+  // Clamps the typed amount to the max allowed for the selected payment type.
+  const handlePaymentAmountChange = (e) => {
+    const raw = e.target.value;
+    if (raw === "") {
+      setPaymentAmount("");
+      return;
+    }
+    const max =
+      paymentType === "balance"
+        ? selectedReservation?.remainingBalance || 0
+        : paymentType === "deposit"
+          ? selectedReservation?.requiredDeposit || 0
+          : selectedReservation?.requiredDownPayment || 0;
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric)) {
+      setPaymentAmount("");
+      return;
+    }
+    setPaymentAmount(numeric > max ? String(max) : raw);
+  };
+
   const handleRecordPayment = async () => {
     if (!selectedReservation || !paymentAmount || !orNumber) return;
 
@@ -214,6 +240,7 @@ export default function LTOOPaymentsPage() {
     const {
       totalAmount = 0,
       totalPaid = 0,
+      totalPayable = 0,
       requiredDeposit = 0,
       requiredDownPayment = 0,
       remainingBalance = 0,
@@ -230,13 +257,15 @@ export default function LTOOPaymentsPage() {
       return;
     }
 
-    // The 10% deposit and 50% down payment must be paid in exact amounts.
-    if (paymentType === "deposit" && Math.abs(amount - requiredDeposit) > 0.001) {
-      toast.error(`The 10% deposit must be exactly ${formatPHP(requiredDeposit)}.`);
-      return;
-    }
-    if (paymentType === "downpayment" && Math.abs(amount - requiredDownPayment) > 0.001) {
-      toast.error(`The 50% down payment must be exactly ${formatPHP(requiredDownPayment)}.`);
+    // The amount can never exceed the cap for the selected payment type.
+    const typeMax =
+      paymentType === "balance"
+        ? remainingBalance
+        : paymentType === "deposit"
+          ? requiredDeposit
+          : requiredDownPayment;
+    if (amount > typeMax) {
+      toast.error(`Amount cannot exceed ${formatPHP(typeMax)} for this payment.`);
       return;
     }
 
@@ -438,6 +467,7 @@ export default function LTOOPaymentsPage() {
                   <CalendarDays className="size-3" /> Event Date: {selectedReservation.eventDate || "—"}
                 </p>
                 <p className="text-blue-600 text-xs">Total Amount: {formatPHP(selectedReservation.totalAmount)}</p>
+                <p className="text-blue-600 text-xs">Total Payable (incl. 10% deposit): {formatPHP(selectedReservation.totalPayable)}</p>
                 <p className="text-blue-600 text-xs">Already Paid: {formatPHP(selectedReservation.totalPaid)}</p>
                 <p className="text-blue-600 text-xs">Remaining: {formatPHP(selectedReservation.remainingBalance)}</p>
 
@@ -453,7 +483,7 @@ export default function LTOOPaymentsPage() {
                   </div>
                   <div className="flex items-center gap-1 text-xs text-blue-600">
                     {getPaymentCheckIcon(selectedReservation.balanceSettled)}
-                    <span>Balance: {formatPHP(selectedReservation.remainingBalance)}</span>
+                    <span>Total Payable (balance + 10% deposit): {formatPHP(selectedReservation.totalPayable)} — Paid: {formatPHP(selectedReservation.totalPaid)}</span>
                   </div>
                 </div>
               </div>
@@ -471,10 +501,10 @@ export default function LTOOPaymentsPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {paymentType === "deposit"
-                  ? `Fixed amount: ${formatPHP(selectedReservation?.requiredDeposit || 0)} (10% of total)`
+                  ? `Max: ${formatPHP(selectedReservation?.requiredDeposit || 0)} (10% of base price, added on top)`
                   : paymentType === "downpayment"
-                    ? `Fixed amount: ${formatPHP(selectedReservation?.requiredDownPayment || 0)} (50% of total)`
-                    : `Any amount up to the remaining balance of ${formatPHP(selectedReservation?.remainingBalance || 0)}`}
+                    ? `Max: ${formatPHP(selectedReservation?.requiredDownPayment || 0)} (50% of base price)`
+                    : `Max: remaining balance of ${formatPHP(selectedReservation?.remainingBalance || 0)} (base balance + deposit)`}
               </p>
             </div>
 
@@ -493,9 +523,7 @@ export default function LTOOPaymentsPage() {
                       : selectedReservation?.requiredDownPayment || 0
                 }
                 value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                disabled={paymentType !== "balance"}
-                className={paymentType !== "balance" ? "bg-muted" : ""}
+                onChange={handlePaymentAmountChange}
               />
             </div>
 
