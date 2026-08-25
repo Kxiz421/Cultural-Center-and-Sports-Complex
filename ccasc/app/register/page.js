@@ -5,8 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Building2, Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
-import { LOGIN_PAGE_BACKGROUND } from "@/lib/constants";
+import { Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
+import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -215,19 +215,29 @@ export default function RegisterPage() {
           Back to home
         </Link>
 
+        <div className="mb-6 flex flex-col items-center px-2 text-center">
+          <Image
+            src={PAGE_LOGO}
+            alt="South Cotabato Official Seal"
+            width={120}
+            height={120}
+            priority
+            className="mb-4 size-24 drop-shadow-lg md:size-28"
+          />
+          <p className="text-xl font-extrabold uppercase tracking-wider text-white drop-shadow-sm md:text-2xl">
+            Provincial Government of South Cotabato
+          </p>
+          <h1 className="mt-2 text-base font-bold tracking-tight text-white/90 md:text-lg">
+            Gymnasium & Cultural Center / Sports Complex
+          </h1>
+        </div>
+
         <Card className="w-full shadow-lg">
           <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg">
-                <Building2 className="size-5" />
-              </div>
-              <div>
-                <CardTitle>Client Registration</CardTitle>
-                <p className="text-muted-foreground text-sm">
-                  Create an account to book facilities
-                </p>
-              </div>
-            </div>
+            <CardTitle>Client Registration</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Create an account to book facilities
+            </p>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">

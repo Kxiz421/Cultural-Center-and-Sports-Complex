@@ -60,11 +60,11 @@ function LTOOAuthShell({ children }) {
       <AppSidebarLTOO />
       <SidebarInset>
         <SiteHeaderCCASC title={title} />
-        <div className="border-b bg-muted/40 px-4 py-2 text-sm lg:px-6">
+        <div className="border-b bg-muted/50 px-4 py-2.5 text-sm text-foreground lg:px-6">
           Signed in as{" "}
           <span className="font-medium text-foreground">{displayName}</span>
           {" · "}
-          <span className="text-muted-foreground">Local Treasury Operations Officer</span>
+          <span className="text-foreground/75">Local Treasury Operations Officer</span>
         </div>
         <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6">{children}</main>
       </SidebarInset>

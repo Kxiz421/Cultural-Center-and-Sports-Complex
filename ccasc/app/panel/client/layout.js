@@ -20,6 +20,7 @@ const NAV_ITEMS = [
 export default function ClientLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isOrderOfPayment = pathname?.includes("/order-of-payment");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [unreadCount, setUnreadCount] = React.useState(0);
 
@@ -48,7 +49,7 @@ export default function ClientLayout({ children }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className={cn("flex min-h-screen bg-gray-50", isOrderOfPayment && "print:bg-white")}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -60,7 +61,7 @@ export default function ClientLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-white transition-transform duration-200 lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-white transition-transform duration-200 lg:static lg:translate-x-0 print:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -119,7 +120,7 @@ export default function ClientLayout({ children }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b bg-white px-4 lg:px-6">
+        <header className="flex h-16 items-center gap-4 border-b bg-white px-4 lg:px-6 print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -130,7 +131,7 @@ export default function ClientLayout({ children }) {
           </Button>
           <div className="flex-1" />
         </header>
-        <main className="flex-1 p-4 lg:p-6">
+        <main className={cn("flex-1", isOrderOfPayment ? "p-4 lg:p-6 print:p-0" : "p-4 lg:p-6")}>
           {children}
         </main>
       </div>

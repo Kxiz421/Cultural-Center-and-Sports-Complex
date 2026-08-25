@@ -13,6 +13,23 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Plus, Minus, Trash2, Printer, Layers, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import {
+  isVirtualPackageId,
+  isRegularPackageId,
+  VIRTUAL_PACKAGE_IDS,
+  filterCustomParticulars,
+  getVirtualPackageParticulars,
+  parseReservationPackageId,
+  isConsolidatedBasketballEntry,
+  buildReservationSummaryLines,
+  sumReservationSummaryLines,
+  syncVirtualPackageStateForTimeSlot,
+  deriveTimeSlotFromVirtualPackage,
+} from "@/lib/reservation-package-select";
+import {
+  ReservationVirtualPackagePanel,
+  ReservationPackageSelectItems,
+} from "@/components/reservation-virtual-package-panel";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -23,6 +40,7 @@ export default function ClientReservationsPage() {
     eventType: "",
     timeSlotId: "",
     packageId: "",
+    venueRentalSlot: "",
     notes: "",
   });
   const [packages, setPackages] = React.useState([]);
@@ -35,6 +53,8 @@ export default function ClientReservationsPage() {
   const [particularQuantities, setParticularQuantities] = React.useState({});
   const [lastReservationId, setLastReservationId] = React.useState(null);
   const [lastTotalAmount, setLastTotalAmount] = React.useState(0);
+  const [submitting, setSubmitting] = React.useState(false);
+  const submitLockRef = React.useRef(false);
 
   // Per-date customization state
   const [customizePerDate, setCustomizePerDate] = React.useState(false);
@@ -90,6 +110,8 @@ export default function ClientReservationsPage() {
             updated[date] = {
               packageId: form.packageId || "0",
               particularQuantities: { ...particularQuantities },
+              timeSlotId: form.timeSlotId,
+              venueRentalSlot: form.venueRentalSlot,
             };
           }
         }
@@ -108,7 +130,130 @@ export default function ClientReservationsPage() {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleTimeSlotChange = (value) => {
+    setForm((prev) => {
+      const updates = { timeSlotId: value };
+      if (prev.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+        updates.venueRentalSlot = String(value) === "1" ? "1" : "2";
+      }
+      return { ...prev, ...updates };
+    });
+
+    if (form.packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+      const synced = syncVirtualPackageStateForTimeSlot(
+        VIRTUAL_PACKAGE_IDS.BASKETBALL,
+        particulars,
+        particularQuantities,
+        "",
+        value
+      );
+      setParticularQuantities(synced.particularQuantities);
+    }
+
+    if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+      setDateCustomizations((prev) => {
+        const updated = { ...prev };
+        for (const date of Object.keys(updated)) {
+          const cust = updated[date];
+          const synced = syncVirtualPackageStateForTimeSlot(
+            cust.packageId,
+            particulars,
+            cust.particularQuantities,
+            cust.venueRentalSlot,
+            value
+          );
+          updated[date] = {
+            ...cust,
+            timeSlotId: value,
+            particularQuantities: synced.particularQuantities,
+            venueRentalSlot:
+              cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                ? synced.venueRentalSlot
+                : cust.venueRentalSlot,
+          };
+        }
+        return updated;
+      });
+    }
+  };
+
+  const handleVirtualParticularQuantitiesChange = (pq) => {
+    setParticularQuantities(pq);
+    if (form.packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+      const slot = deriveTimeSlotFromVirtualPackage(
+        form.packageId,
+        particulars,
+        pq,
+        form.venueRentalSlot,
+        form.timeSlotId
+      );
+      if (slot && slot !== form.timeSlotId) {
+        setForm((prev) => ({ ...prev, timeSlotId: slot }));
+      }
+    }
+  };
+
+  const handleVenueRentalSlotChange = (val) => {
+    setForm((prev) => ({ ...prev, venueRentalSlot: val, timeSlotId: val }));
+  };
+
+  const handleDateVirtualParticularQuantitiesChange = (date, pq) => {
+    const cust = dateCustomizations[date] || {};
+    const slot = deriveTimeSlotFromVirtualPackage(
+      cust.packageId,
+      particulars,
+      pq,
+      cust.venueRentalSlot,
+      cust.timeSlotId || form.timeSlotId
+    );
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        particularQuantities: pq,
+        timeSlotId: slot || prev[date]?.timeSlotId || form.timeSlotId,
+      },
+    }));
+  };
+
+  const handleDateVenueRentalSlotChange = (date, val) => {
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: { ...prev[date], venueRentalSlot: val, timeSlotId: val },
+    }));
+  };
+
   const handlePackageSelect = (packageId) => {
+    if (isVirtualPackageId(packageId)) {
+      setForm((prev) => ({
+        ...prev,
+        packageId,
+        venueRentalSlot:
+          packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+            ? prev.venueRentalSlot || prev.timeSlotId || "1"
+            : "",
+      }));
+      setParticularQuantities({});
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        setDateCustomizations((prev) => {
+          const updated = { ...prev };
+          for (const date of Object.keys(updated)) {
+            updated[date] = {
+              ...updated[date],
+              packageId,
+              particularQuantities: {},
+              timeSlotId: updated[date]?.timeSlotId || form.timeSlotId,
+              venueRentalSlot:
+                packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                  ? form.venueRentalSlot || form.timeSlotId || "1"
+                  : "",
+            };
+          }
+          return updated;
+        });
+      }
+      return;
+    }
     if (packageId && packageId !== "0" && packageId !== "custom") {
       const selectedPkg = packages.find(p => String(p.packageId) === packageId);
       if (selectedPkg) {
@@ -176,7 +321,15 @@ export default function ClientReservationsPage() {
       [date]: {
         ...prev[date],
         packageId: pkgId,
-        particularQuantities: (pkgId && pkgId !== "0" && pkgId !== "custom") ? {} : (prev[date]?.particularQuantities || {}),
+        timeSlotId: prev[date]?.timeSlotId || form.timeSlotId,
+        venueRentalSlot:
+          pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+            ? prev[date]?.venueRentalSlot || form.venueRentalSlot || form.timeSlotId || "1"
+            : "",
+        particularQuantities:
+          isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
+            ? {}
+            : (prev[date]?.particularQuantities || {}),
       },
     }));
   };
@@ -206,6 +359,8 @@ export default function ClientReservationsPage() {
         initial[date] = {
           packageId: form.packageId || "0",
           particularQuantities: { ...particularQuantities },
+          timeSlotId: form.timeSlotId,
+          venueRentalSlot: form.venueRentalSlot,
         };
       }
       setDateCustomizations(initial);
@@ -218,79 +373,56 @@ export default function ClientReservationsPage() {
     setCustomizePerDate(!customizePerDate);
   };
 
-  // Calculate total
-  const calculateTotal = () => {
-    let total = 0;
-    const numDays = selectedDates.size || 1;
-
-    if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
-      // Calculate per-date totals
-      for (const [date, cust] of Object.entries(dateCustomizations)) {
-        if (cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom") {
-          const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
-          if (pkg) {
-            const rate = String(pkg.timeSlotId) === "1"
-              ? Number(pkg.dayRate || 0)
-              : Number(pkg.nightRate || 0);
-            total += rate;
-          }
-        } else if (cust.packageId === "custom" || cust.packageId === "0") {
-          // Only add particular costs for custom/no package
-          if (cust.particularQuantities) {
-            for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
-              if (qty > 0) {
-                const part = particulars.find((p) => String(p.particularId) === partId);
-                if (part && part.unitCost) {
-                  total += Number(part.unitCost) * qty;
-                }
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // Global calculation
-      if (form.packageId && form.packageId !== "0" && form.packageId !== "custom") {
-        const pkg = packages.find((p) => String(p.packageId) === form.packageId);
-        if (pkg) {
-          const rate = form.timeSlotId === "1"
-            ? Number(pkg.dayRate || 0)
-            : Number(pkg.nightRate || 0);
-          total += rate * numDays;
-        }
-      } else if (form.packageId === "custom" || form.packageId === "0" || !form.packageId) {
-        // Only add particular costs for custom/no package
-        for (const [partId, qty] of Object.entries(particularQuantities)) {
-          if (qty > 0) {
-            const part = particulars.find((p) => String(p.particularId) === partId);
-            if (part && part.unitCost) {
-              total += Number(part.unitCost) * qty;
-            }
-          }
-        }
-      }
-    }
-
-    return total;
-  };
+  const summaryLines = buildReservationSummaryLines({
+    particulars,
+    packages,
+    packageId: form.packageId,
+    particularQuantities,
+    timeSlotId: form.timeSlotId,
+    venueRentalSlot: form.venueRentalSlot,
+    selectedDatesCount: selectedDates.size,
+    customizePerDate,
+    dateCustomizations,
+  });
+  const total = sumReservationSummaryLines(summaryLines);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting || submitLockRef.current) return;
+    submitLockRef.current = true;
 
     const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
     if (!clientId) {
       toast.error("Please log in first");
+      submitLockRef.current = false;
       return;
     }
 
     if (!form.venueId || !form.eventType || !form.timeSlotId) {
       toast.error("Please fill in all required fields");
+      submitLockRef.current = false;
       return;
     }
 
     if (selectedDates.size === 0) {
       toast.error("Please select at least one date");
+      submitLockRef.current = false;
       return;
+    }
+
+    if (isVirtualPackageId(form.packageId)) {
+      const entries = getVirtualPackageParticulars(
+        form.packageId,
+        particulars,
+        particularQuantities,
+        form.timeSlotId,
+        form.venueRentalSlot
+      );
+      if (!entries.length) {
+        toast.error("Please complete your Basketball Game or Venue Rental selection.");
+        submitLockRef.current = false;
+        return;
+      }
     }
 
     const sortedDates = [...selectedDates].sort();
@@ -300,10 +432,32 @@ export default function ClientReservationsPage() {
     let selectedPackageId = form.packageId || null;
 
     if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
-      // Build per-date data: aggregate only particulars from custom/no-package dates
       const aggregatedParticulars = {};
-      for (const [date, cust] of Object.entries(dateCustomizations)) {
-        if ((cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities) {
+      const basketballDayCounts = {};
+      for (const [, cust] of Object.entries(dateCustomizations)) {
+        if (isVirtualPackageId(cust.packageId)) {
+          const entries = getVirtualPackageParticulars(
+            cust.packageId,
+            particulars,
+            cust.particularQuantities,
+            cust.timeSlotId || form.timeSlotId,
+            cust.venueRentalSlot
+          );
+          for (const entry of entries) {
+            if (isConsolidatedBasketballEntry(particulars, entry)) {
+              basketballDayCounts[entry.particularId] =
+                (basketballDayCounts[entry.particularId] || 0) + 1;
+              aggregatedParticulars[entry.particularId] = entry.quantity;
+            } else {
+              aggregatedParticulars[entry.particularId] =
+                (aggregatedParticulars[entry.particularId] || 0) + entry.quantity;
+            }
+          }
+        } else if (
+          cust.packageId === "0" ||
+          cust.packageId === "custom" ||
+          !cust.packageId
+        ) {
           for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
             if (qty > 0) {
               aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
@@ -313,15 +467,40 @@ export default function ClientReservationsPage() {
       }
       selectedParticulars = Object.entries(aggregatedParticulars)
         .filter(([, qty]) => qty > 0)
-        .map(([id, qty]) => ({ particularId: parseInt(id, 10), quantity: qty }));
+        .map(([id, qty]) => ({
+          particularId: parseInt(id, 10),
+          quantity: qty,
+          ...(basketballDayCounts[id] ? { days: basketballDayCounts[id] } : {}),
+        }));
       
       // Use the first date's package as the primary package
       const firstCust = dateCustomizations[primaryDate];
-      if (firstCust && firstCust.packageId && firstCust.packageId !== "0" && firstCust.packageId !== "custom") {
+      if (firstCust && isRegularPackageId(firstCust.packageId)) {
         selectedPackageId = firstCust.packageId;
       } else {
         selectedPackageId = null;
       }
+    } else if (isVirtualPackageId(form.packageId)) {
+      const numDays = sortedDates.length || 1;
+      selectedParticulars = getVirtualPackageParticulars(
+        form.packageId,
+        particulars,
+        particularQuantities,
+        form.timeSlotId,
+        form.venueRentalSlot
+      ).map((p) => {
+        if (form.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+          return { ...p, quantity: p.quantity * numDays };
+        }
+        if (isConsolidatedBasketballEntry(particulars, p)) {
+          return { ...p, days: numDays };
+        }
+        if (form.packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
+          return { ...p, quantity: p.quantity * numDays };
+        }
+        return p;
+      });
+      selectedPackageId = null;
     } else {
       // Only include particulars if custom or no package
       if (form.packageId === "custom" || form.packageId === "0" || !form.packageId) {
@@ -335,6 +514,7 @@ export default function ClientReservationsPage() {
     }
 
     try {
+      setSubmitting(true);
       const res = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -344,10 +524,11 @@ export default function ClientReservationsPage() {
           eventDate: primaryDate,
           eventDates: sortedDates,
           timeSlotId: form.timeSlotId,
-          packageId: selectedPackageId,
+          packageId: parseReservationPackageId(selectedPackageId),
           clientId: parseInt(clientId, 10),
           notes: form.notes || null,
           particulars: selectedParticulars,
+          chargeLines: summaryLines,
         }),
       });
 
@@ -369,6 +550,7 @@ export default function ClientReservationsPage() {
         eventType: "",
         timeSlotId: "",
         packageId: "",
+        venueRentalSlot: "",
         notes: "",
       });
       setSelectedDates(new Set());
@@ -377,6 +559,9 @@ export default function ClientReservationsPage() {
       setDateCustomizations({});
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      submitLockRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -457,8 +642,6 @@ export default function ClientReservationsPage() {
     );
   };
 
-  const total = calculateTotal();
-
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -503,7 +686,7 @@ export default function ClientReservationsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="timeslot">Time Slot <span className="text-red-500">*</span></Label>
-                <Select value={form.timeSlotId} onValueChange={(v) => handleChange("timeSlotId", v)}>
+                <Select value={form.timeSlotId} onValueChange={handleTimeSlotChange}>
                   <SelectTrigger id="timeslot">
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
@@ -523,13 +706,7 @@ export default function ClientReservationsPage() {
                   <SelectContent>
                     <SelectItem value="0">None</SelectItem>
                     <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                    {packages
-                      .filter(p => p.statusId === 1)
-                      .map((pkg) => (
-                      <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
-                        {pkg.packageName} — {pkg.timeSlot} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
-                      </SelectItem>
-                    ))}
+                    <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                   </SelectContent>
                 </Select>
               </div>
@@ -571,7 +748,17 @@ export default function ClientReservationsPage() {
 
             {/* Conditional: Package Inclusions or Particulars Selector */}
             <div className="space-y-2">
-              {form.packageId && form.packageId !== "0" && form.packageId !== "custom" ? (
+              {isVirtualPackageId(form.packageId) ? (
+                <ReservationVirtualPackagePanel
+                  packageId={form.packageId}
+                  particulars={particulars}
+                  particularQuantities={particularQuantities}
+                  onParticularQuantitiesChange={handleVirtualParticularQuantitiesChange}
+                  timeSlotId={form.timeSlotId}
+                  venueRentalSlot={form.venueRentalSlot}
+                  onVenueRentalSlotChange={handleVenueRentalSlotChange}
+                />
+              ) : isRegularPackageId(form.packageId) ? (
                 <>
                   <Label>Package Inclusions</Label>
                   <p className="text-xs text-muted-foreground">This package includes the following items at no additional cost.</p>
@@ -611,7 +798,7 @@ export default function ClientReservationsPage() {
                       <p className="text-sm text-muted-foreground">No particulars available.</p>
                     ) : (
                       <div className="grid gap-3 md:grid-cols-2">
-                        {particulars.map((p) => {
+                        {filterCustomParticulars(particulars).map((p) => {
                           const qty = particularQuantities[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
@@ -709,71 +896,25 @@ export default function ClientReservationsPage() {
                   <span>Selected Dates</span>
                   <span className="font-medium">{selectedDates.size || 1} day(s)</span>
                 </div>
-                {customizePerDate && Object.keys(dateCustomizations).length > 0 ? (
-                  // Per-date breakdown
-                  Object.entries(dateCustomizations).map(([date, cust]) => {
-                    const pkg = packages.find(p => String(p.packageId) === cust.packageId);
-                    const pkgRate = pkg ? (String(pkg.timeSlotId) === "1" ? Number(pkg.dayRate || 0) : Number(pkg.nightRate || 0)) : 0;
-                    return (
-                      <div key={date} className="border-t pt-1 mt-1">
-                        <p className="text-xs font-medium text-muted-foreground">{date}</p>
-                        {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" && (
-                          <div className="flex justify-between pl-2">
-                            <span>{pkg?.packageName || "Package"}</span>
-                            <span className="tabular-nums">₱{pkgRate.toLocaleString()}</span>
-                          </div>
-                        )}
-                        {(cust.packageId === "0" || cust.packageId === "custom" || !cust.packageId) && cust.particularQuantities && Object.entries(cust.particularQuantities).filter(([, q]) => q > 0).map(([partId, qty]) => {
-                          const part = particulars.find(pp => String(pp.particularId) === partId);
-                          if (!part) return null;
-                          const isBasketball = part.particularName === "Basketball Game";
-                          const basketballLabels = { 2: "Day w/o SC", 3: "Day w/ SC", 4: "Night w/o SC", 5: "Night w/ SC" };
-                          const basketballPrice = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 }[qty];
-                          const displayName = isBasketball ? `Basketball Game (${basketballLabels[qty] || qty})` : `${part.particularName} × ${qty}`;
-                          const displayPrice = isBasketball ? (basketballPrice || 0) : (Number(part.unitCost || 0) * qty);
-                          return (
-                            <div key={partId} className="flex justify-between pl-2 text-xs">
-                              <span>{displayName}</span>
-                              <span>₱{displayPrice.toLocaleString()}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <>
-                    {form.packageId && form.packageId !== "0" && form.packageId !== "custom" && (
-                      <div className="flex justify-between">
-                        <span>Package Rate × {selectedDates.size || 1} day(s)</span>
-                        <span className="font-medium tabular-nums">
-                          ₱{(
-                            (form.timeSlotId === "1"
-                              ? Number(packages.find(p => String(p.packageId) === form.packageId)?.dayRate || 0)
-                              : Number(packages.find(p => String(p.packageId) === form.packageId)?.nightRate || 0))
-                            * (selectedDates.size || 1)
-                          ).toLocaleString()}
+                {summaryLines.length > 0 ? (
+                  summaryLines.map((line, i) => (
+                    <div
+                      key={`${line.date || "line"}-${i}`}
+                      className={line.date ? "border-t pt-1 mt-1" : undefined}
+                    >
+                      {line.date && (
+                        <p className="text-xs font-medium text-muted-foreground">{line.date}</p>
+                      )}
+                      <div className="flex justify-between pl-2">
+                        <span>{line.label}</span>
+                        <span className="tabular-nums font-medium">
+                          ₱{line.amount.toLocaleString()}
                         </span>
                       </div>
-                    )}
-                    {(form.packageId === "custom" || form.packageId === "0" || !form.packageId) && Object.entries(particularQuantities).filter(([, q]) => q > 0).map(([id, qty]) => {
-                      const p = particulars.find(pp => String(pp.particularId) === id);
-                      if (!p) return null;
-                      const isBasketball = p.particularName === "Basketball Game";
-                      const basketballLabels = { 2: "Day w/o SC", 3: "Day w/ SC", 4: "Night w/o SC", 5: "Night w/ SC" };
-                      const basketballPrice = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 }[qty];
-                      const displayName = isBasketball ? `Basketball Game (${basketballLabels[qty] || qty})` : `${p.particularName} × ${qty}`;
-                      const displayPrice = isBasketball ? (basketballPrice || 0) : (Number(p.unitCost || 0) * qty);
-                      return (
-                        <div key={id} className="flex justify-between">
-                          <span>{displayName}</span>
-                          <span className="font-medium tabular-nums">
-                            ₱{displayPrice.toLocaleString()}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">No charges selected yet.</p>
                 )}
                 <Separator />
                 <div className="flex justify-between text-base font-bold">
@@ -783,8 +924,13 @@ export default function ClientReservationsPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full md:w-auto" size="lg">
-              Submit Reservation
+            <Button
+              type="submit"
+              className="w-full md:w-auto"
+              size="lg"
+              disabled={submitting}
+            >
+              {submitting ? "Submitting..." : "Submit Reservation"}
             </Button>
           </form>
         </CardContent>
@@ -825,19 +971,28 @@ export default function ClientReservationsPage() {
                       <SelectContent>
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                        {packages
-                          .filter(p => p.statusId === 1)
-                          .map((pkg) => (
-                          <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
-                            {pkg.packageName} {pkg.dayRate ? `(Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}{pkg.nightRate ? `(Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
-                          </SelectItem>
-                        ))}
+                        <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                       </SelectContent>
                     </Select>
                   </div>
 
                   {/* Conditional: Package Inclusions or Particulars for this date */}
-                  {cust.packageId && cust.packageId !== "0" && cust.packageId !== "custom" ? (
+                  {isVirtualPackageId(cust.packageId) ? (
+                    <ReservationVirtualPackagePanel
+                      packageId={cust.packageId}
+                      particulars={particulars}
+                      particularQuantities={cust.particularQuantities || {}}
+                      onParticularQuantitiesChange={(pq) =>
+                        handleDateVirtualParticularQuantitiesChange(date, pq)
+                      }
+                      timeSlotId={cust.timeSlotId || form.timeSlotId}
+                      venueRentalSlot={cust.venueRentalSlot}
+                      onVenueRentalSlotChange={(val) =>
+                        handleDateVenueRentalSlotChange(date, val)
+                      }
+                      compact
+                    />
+                  ) : isRegularPackageId(cust.packageId) ? (
                     <div className="space-y-2">
                       <Label className="text-xs">Package Inclusions for {date}</Label>
                       <div className="border rounded-lg p-3 bg-muted/20">
@@ -878,7 +1033,7 @@ export default function ClientReservationsPage() {
                         )}
                       </div>
                       <div className="grid gap-2 md:grid-cols-2">
-                        {particulars.map((p) => {
+                        {filterCustomParticulars(particulars).map((p) => {
                           const qty = cust.particularQuantities?.[p.particularId] || 0;
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;

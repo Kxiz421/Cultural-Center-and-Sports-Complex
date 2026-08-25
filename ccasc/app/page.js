@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Building2, LogIn, UserPlus } from "lucide-react";
-import { LOGIN_PAGE_BACKGROUND } from "@/lib/constants";
+import { LogIn, UserPlus } from "lucide-react";
+import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 
 export default function LandingPage() {
@@ -20,9 +20,14 @@ export default function LandingPage() {
       <div className="absolute inset-0 bg-black/55" aria-hidden />
 
       <div className="relative z-10 flex w-full max-w-2xl flex-col items-center text-center">
-        <div className="bg-primary text-primary-foreground mb-4 flex size-16 items-center justify-center rounded-xl shadow-lg">
-          <Building2 className="size-8" />
-        </div>
+        <Image
+          src={PAGE_LOGO}
+          alt="South Cotabato Official Seal"
+          width={120}
+          height={120}
+          priority
+          className="mb-4 size-24 drop-shadow-lg md:size-28"
+        />
 
         <p className="text-2xl font-extrabold uppercase tracking-wider text-white drop-shadow-sm md:text-3xl">
           Provincial Government of South Cotabato

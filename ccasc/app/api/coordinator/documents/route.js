@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+
+import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const prisma = new PrismaClient();
 
 // Program Coordinator sees only Contract of Lease (2) and Certification (3)
 const COORDINATOR_DOCUMENT_TYPES = [2, 3];
