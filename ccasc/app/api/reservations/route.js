@@ -29,11 +29,12 @@ function validateAdvanceBooking(eventDate) {
 function computePaymentStatus(totalAmount, payments) {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
   if (totalAmount <= 0 || totalPaid <= 0) return "Pending";
-  if (totalPaid >= totalAmount) return "BalanceSettled";
-  // 50% down payment + 10% deposit = 60%
-  const percentPaid = totalPaid / totalAmount;
-  if (percentPaid >= 0.6) return "DepositPaid";
-  if (percentPaid >= 0.5) return "DownPaymentPaid";
+  // 10% deposit is on TOP, so total payable = base * 1.1
+  const totalPayable = totalAmount * 1.1;
+  if (totalPaid >= totalPayable) return "BalanceSettled";
+  // 50% down payment + 10% deposit = 60% of base
+  if (totalPaid >= totalAmount * 0.6) return "DepositPaid";
+  if (totalPaid >= totalAmount * 0.5) return "DownPaymentPaid";
   return "IncompletePayment";
 }
 
