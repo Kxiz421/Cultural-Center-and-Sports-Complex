@@ -41,7 +41,6 @@ import {
   Search,
   User,
   Building2,
-  Info,
   DollarSign,
   CalendarDays,
   CheckCircle2,
@@ -531,134 +530,141 @@ export default function LTOOPaymentsPage() {
 
       {/* Record Payment Dialog */}
       <Dialog open={recordOpen} onOpenChange={(open) => { setRecordOpen(open); if (!open) setSelectedReservation(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg max-h-[min(90vh,680px)] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-2 border-b border-border/60">
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
               Recording payment for <strong>{selectedReservation?.clientName}</strong>
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            {selectedReservation && currentBreakdown && (
-              <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Info className="size-4 text-primary shrink-0" />
-                  <span className="font-semibold text-foreground text-sm">Reservation Details</span>
-                </div>
-                <p className="text-foreground font-medium">{selectedReservation.clientName} — {selectedReservation.eventType}</p>
-                <p className="text-foreground/85 text-sm flex items-center gap-1.5">
-                  <CalendarDays className="size-3.5 shrink-0" /> Event Date: {selectedReservation.eventDate || "—"}
-                </p>
-                <p className="text-foreground/85 text-sm">Base Amount: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.base)}</span></p>
-                <p className="text-foreground/85 text-sm">
-                  10% Deposit Value: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.requiredDeposit)}</span>
-                </p>
-                <p className="text-foreground/85 text-sm">Total Payable (base + 10% deposit): <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.totalPayable)}</span></p>
-                <p className="text-foreground/85 text-sm">Already Paid: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.paid)}</span></p>
-                <p className="text-foreground/85 text-sm">Remaining: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.remainingBalance)}</span></p>
 
-                <div className="border-t border-border pt-2 mt-2 space-y-1.5">
-                  <p className="text-sm font-medium text-foreground">Payment Requirements</p>
-                  <div className="flex items-center gap-1.5 text-sm text-foreground">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+            {selectedReservation && currentBreakdown && (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-3">
+                <div>
+                  <p className="font-medium text-foreground leading-snug">
+                    {selectedReservation.clientName} — {selectedReservation.eventType}
+                  </p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                    <CalendarDays className="size-3 shrink-0" />
+                    {selectedReservation.eventDate || "—"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                  <span className="text-muted-foreground">Base amount</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.base)}</span>
+                  <span className="text-muted-foreground">10% deposit</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.requiredDeposit)}</span>
+                  <span className="text-muted-foreground">Total payable</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.totalPayable)}</span>
+                  <span className="text-muted-foreground">Already paid</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.paid)}</span>
+                  <span className="text-muted-foreground font-medium">Remaining</span>
+                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.remainingBalance)}</span>
+                </div>
+
+                <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
                     {getPaymentCheckIcon(currentBreakdown.downPaymentMet)}
-                    <span>50% Down Payment: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.requiredDownPayment)}</span></span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-foreground">
+                    50% down {formatPhp(currentBreakdown.requiredDownPayment)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
                     {getPaymentCheckIcon(currentBreakdown.depositMet)}
-                    <span>10% Deposit: <span className="font-medium tabular-nums">{formatPhp(currentBreakdown.requiredDeposit)}</span></span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-foreground">
+                    10% deposit {formatPhp(currentBreakdown.requiredDeposit)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
                     {getPaymentCheckIcon(currentBreakdown.balanceSettled)}
-                    <span>Balance settled: <span className="font-medium">{currentBreakdown.balanceSettled ? "Yes" : "No"}</span></span>
-                  </div>
+                    Balance {currentBreakdown.balanceSettled ? "settled" : "pending"}
+                  </span>
                 </div>
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="pay-type">Record What?</Label>
-              <Select
-                value={paymentType}
-                onValueChange={handlePaymentTypeChange}
-                disabled={currentBreakdown?.balanceSettled}
-              >
-                <SelectTrigger id="pay-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    value="downpayment"
-                    disabled={currentBreakdown?.downPaymentMet}
-                  >
-                    50% Down Payment
-                    {currentBreakdown?.downPaymentMet ? " (Paid)" : ""}
-                  </SelectItem>
-                  <SelectItem
-                    value="deposit"
-                    disabled={currentBreakdown?.depositMet}
-                  >
-                    10% Deposit
-                    {currentBreakdown?.depositMet ? " (Paid)" : ""}
-                  </SelectItem>
-                  {currentBreakdown?.requirementsMet && !currentBreakdown?.balanceSettled && (
-                    <SelectItem value="balance">
-                      Remaining Balance
+            <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
+              <div className="space-y-2">
+                <Label htmlFor="pay-type">Record What?</Label>
+                <Select
+                  value={paymentType}
+                  onValueChange={handlePaymentTypeChange}
+                  disabled={currentBreakdown?.balanceSettled}
+                >
+                  <SelectTrigger id="pay-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value="downpayment"
+                      disabled={currentBreakdown?.downPaymentMet}
+                    >
+                      50% Down Payment
+                      {currentBreakdown?.downPaymentMet ? " (Paid)" : ""}
                     </SelectItem>
+                    <SelectItem
+                      value="deposit"
+                      disabled={currentBreakdown?.depositMet}
+                    >
+                      10% Deposit
+                      {currentBreakdown?.depositMet ? " (Paid)" : ""}
+                    </SelectItem>
+                    {currentBreakdown?.requirementsMet && !currentBreakdown?.balanceSettled && (
+                      <SelectItem value="balance">
+                        Remaining Balance
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {currentBreakdown?.balanceSettled
+                    ? "All payment requirements are satisfied."
+                    : paymentTypeBlockReason
+                      ? paymentTypeBlockReason
+                      : paymentType === "deposit"
+                        ? `Required: ${formatPhp(paymentTypeMax)} (10% of base)`
+                        : paymentType === "downpayment"
+                          ? `Required: ${formatPhp(paymentTypeMax)} (50% of base)`
+                          : `Up to ${formatPhp(paymentTypeMax)} remaining`}
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
+                  <Input
+                    id="pay-amount"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={paymentAmount}
+                    onChange={handlePaymentAmountChange}
+                    onBlur={handlePaymentAmountBlur}
+                    readOnly={isFixedPaymentAmount(paymentType)}
+                    className={`tabular-nums ${isFixedPaymentAmount(paymentType) ? "bg-muted" : ""}`}
+                  />
+                  {isFixedPaymentAmount(paymentType) && (
+                    <p className="text-xs text-muted-foreground">
+                      Fixed installment amount.
+                    </p>
                   )}
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-foreground/75">
-                {currentBreakdown?.balanceSettled
-                  ? "All payment requirements are satisfied."
-                  : paymentTypeBlockReason
-                    ? paymentTypeBlockReason
-                    : paymentType === "deposit"
-                      ? `Required full amount: ${formatPhp(paymentTypeMax)} (10% of base price)`
-                      : paymentType === "downpayment"
-                        ? `Required full amount: ${formatPhp(paymentTypeMax)} (50% of base price)`
-                        : `Enter up to ${formatPhp(paymentTypeMax)} (remaining balance)`}
-              </p>
-            </div>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
-              <Input
-                id="pay-amount"
-                type="text"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={paymentAmount}
-                onChange={handlePaymentAmountChange}
-                onBlur={handlePaymentAmountBlur}
-                readOnly={isFixedPaymentAmount(paymentType)}
-                className={`tabular-nums ${isFixedPaymentAmount(paymentType) ? "bg-muted" : ""}`}
-              />
-              {isFixedPaymentAmount(paymentType) && (
-                <p className="text-xs text-foreground/70">
-                  Full installment amount — cannot be changed.
-                </p>
-              )}
-              {paymentType === "balance" && paymentTypeMax > 0 && (
-                <p className="text-xs text-foreground/70">
-                  Amount cannot exceed {formatPhp(paymentTypeMax)}. Values above the limit are adjusted automatically.
-                </p>
-              )}
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pay-or">OR Number</Label>
+                  <Input id="pay-or" value={orNumber} readOnly className="bg-muted font-mono text-sm" />
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="pay-or">Official Receipt (OR) Number</Label>
-              <Input id="pay-or" value={orNumber} readOnly className="bg-muted" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Payment Status</Label>
-              <div className="rounded-lg border bg-muted/40 p-2">
-                {getStatusBadge(currentBreakdown?.status)}
-                <p className="text-xs text-foreground/70 mt-1 tabular-nums">
-                  Remaining balance: {formatPhp(currentBreakdown?.remainingBalance ?? 0)}
-                </p>
+              <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+                <span className="text-xs text-muted-foreground">Status after this entry</span>
+                <div className="text-right">
+                  {getStatusBadge(currentBreakdown?.status)}
+                  <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                    Remaining: {formatPhp(currentBreakdown?.remainingBalance ?? 0)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:justify-between">
+
+          <DialogFooter className="shrink-0 mx-0 mb-0 rounded-none border-t bg-muted/50 px-6 py-4 gap-2 sm:justify-between">
             <div className="flex gap-2">
               {selectedReservation && hasPaymentHistory(
                 computePaymentBreakdown(
@@ -669,16 +675,17 @@ export default function LTOOPaymentsPage() {
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => openPaymentHistory(selectedReservation)}
                 >
                   <History className="size-4 mr-1" />
-                  Payment History
+                  History
                 </Button>
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
-              <Button onClick={() => setConfirmOpen(true)} disabled={saving || !currentBreakdown || currentBreakdown.balanceSettled || !isPaymentTypeAllowed(currentBreakdown, paymentType) || !paymentAmount || roundMoney(paymentAmount || 0) <= 0 || roundMoney(paymentAmount || 0) > paymentTypeMax}>
+              <Button variant="outline" size="sm" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
+              <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={saving || !currentBreakdown || currentBreakdown.balanceSettled || !isPaymentTypeAllowed(currentBreakdown, paymentType) || !paymentAmount || roundMoney(paymentAmount || 0) <= 0 || roundMoney(paymentAmount || 0) > paymentTypeMax}>
                 {saving ? "Saving..." : "Save Payment"}
               </Button>
             </div>

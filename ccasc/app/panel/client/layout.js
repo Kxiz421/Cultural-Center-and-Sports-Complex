@@ -2,9 +2,18 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -23,6 +32,7 @@ export default function ClientLayout({ children }) {
   const isOrderOfPayment = pathname?.includes("/order-of-payment");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const [logoutOpen, setLogoutOpen] = React.useState(false);
 
   React.useEffect(() => {
     async function fetchUnreadCount() {
@@ -43,12 +53,15 @@ export default function ClientLayout({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.clear();
+    setLogoutOpen(false);
+    toast.success("You have been logged out.");
     router.push("/login");
   };
 
   return (
+    <>
     <div className={cn("flex min-h-screen bg-gray-50", isOrderOfPayment && "print:bg-white")}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -110,7 +123,7 @@ export default function ClientLayout({ children }) {
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-red-600 hover:text-red-700"
-            onClick={handleLogout}
+            onClick={() => setLogoutOpen(true)}
           >
             <LogOut className="size-4" />
             Logout
@@ -136,5 +149,29 @@ export default function ClientLayout({ children }) {
         </main>
       </div>
     </div>
+
+    <Dialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+      <DialogContent className="sm:max-w-md" showCloseButton>
+        <DialogHeader>
+          <DialogTitle>Do you want to log out?</DialogTitle>
+          <DialogDescription>
+            You will need to sign in again to access the client portal.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setLogoutOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={confirmLogout}>
+            Log out
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
