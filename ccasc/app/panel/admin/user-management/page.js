@@ -497,7 +497,7 @@ export default function UserManagementPage() {
     setHistoryLoading(true);
     setHistoryLogs([]);
     try {
-      const res = await fetch(`/api/audit-logs`);
+      const res = await fetch(`/api/audit-logs?scope=user`);
       if (!res.ok) throw new Error('Failed to fetch history');
       const data = await res.json();
       setHistoryLogs(data);

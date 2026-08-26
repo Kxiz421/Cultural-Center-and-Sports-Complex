@@ -18,6 +18,7 @@ import {
   hasVenueRentalPackageOption,
   getBasketballEncodedQty,
   applyBasketballEncodedSelection,
+  formatPackageRateHint,
 } from "@/lib/reservation-package-select";
 
 export function ReservationVirtualPackagePanel({
@@ -119,8 +120,7 @@ export function ReservationPackageSelectItems({
         .map((pkg) => (
           <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
             {pkg.packageName}
-            {pkg.dayRate ? ` (Day: ₱${Number(pkg.dayRate).toLocaleString()})` : ""}
-            {pkg.nightRate ? ` (Night: ₱${Number(pkg.nightRate).toLocaleString()})` : ""}
+            {formatPackageRateHint(pkg)}
           </SelectItem>
         ))}
     </>

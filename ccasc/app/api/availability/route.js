@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-
-
+import { formatDbDate, formatLocalDateKey } from "@/lib/utils";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -62,22 +61,22 @@ export async function GET(request) {
     const blockedDates = new Map(); // ISO date -> reason string
 
     for (const r of conflictingReservations) {
-      const key = r.eventDate.toISOString().split("T")[0];
+      const key = formatDbDate(r.eventDate);
       blockedDates.set(key, "Booked");
       for (const ad of r.additionalDates) {
-        const adKey = ad.eventDate.toISOString().split("T")[0];
+        const adKey = formatDbDate(ad.eventDate);
         blockedDates.set(adKey, "Booked");
       }
     }
 
     for (const b of calendarBlocks) {
-      const key = b.blockDate.toISOString().split("T")[0];
+      const key = formatDbDate(b.blockDate);
       blockedDates.set(key, b.title || "Unavailable");
     }
 
     // Build response
     const dates = allDates.map((dt) => {
-      const key = dt.toISOString().split("T")[0];
+      const key = formatLocalDateKey(dt);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const isPast = dt < today;

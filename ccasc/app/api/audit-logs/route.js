@@ -7,10 +7,18 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get("targetUserId");
     const targetUserIdPrefix = searchParams.get("targetUserIdPrefix");
+    const scope = searchParams.get("scope");
 
     let where = {};
 
-    if (targetUserIdPrefix) {
+    if (scope === "user") {
+      where = {
+        OR: [
+          { targetUserId: { startsWith: "STF-" } },
+          { targetUserId: { startsWith: "CLT-" } },
+        ],
+      };
+    } else if (targetUserIdPrefix) {
       where = {
         targetUserId: {
           startsWith: targetUserIdPrefix,

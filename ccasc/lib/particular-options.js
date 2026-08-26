@@ -41,6 +41,15 @@ export function isBasketballEncodedQuantity(qty) {
   return n >= 2 && n <= 5;
 }
 
+/** Read quantity from a particulars map (supports string/number keys). */
+export function readParticularQuantity(quantities, particularId) {
+  if (!quantities) return 0;
+  const key = String(particularId);
+  const raw = quantities[key] ?? quantities[Number(particularId)];
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
 export function isBasketballParticularName(name) {
   const n = name || "";
   return n === BASKETBALL_NAME || n.startsWith("Basketball Game");
@@ -85,13 +94,13 @@ export function formatFormParticularLine(particularName, quantity, unitCost) {
 
   if (isBasketballParticularName(particularName)) {
     return {
-      label: qty > 1 ? `${particularName} × ${qty}` : particularName,
+      label: qty > 0 ? `${particularName} × ${qty}` : particularName,
       amount: cost * qty,
     };
   }
 
   return {
-    label: qty > 1 ? `${particularName} × ${qty}` : particularName,
+    label: qty > 0 ? `${particularName} × ${qty}` : particularName,
     amount: cost * qty,
   };
 }

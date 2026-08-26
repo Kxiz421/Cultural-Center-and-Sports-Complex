@@ -25,6 +25,64 @@ export function isRegularPackageId(packageId) {
   return id && id !== "0" && id !== "custom" && !isVirtualPackageId(id);
 }
 
+/** Whether a package bundle includes the LED Wall inclusion or is an LED Wall package. */
+export function packageIncludesLedWall(pkg) {
+  if (!pkg) return false;
+  if (/led\s*wall/i.test(pkg.packageName || "")) return true;
+  const inclusions = pkg.inclusions || [];
+  return inclusions.some((inc) => /led\s*wall/i.test(inc.itemName || ""));
+}
+
+/**
+ * Resolve the billable rate for a package at a given time slot.
+ * LED Wall packages store rates in ledWallDayRate/ledWallNightRate; fall back to day/night rates.
+ */
+export function getPackageSlotRate(pkg, timeSlotId) {
+  if (!pkg) return 0;
+  const isDay = String(timeSlotId) === "1";
+  const dayStandard = Number(pkg.dayRate ?? 0);
+  const nightStandard = Number(pkg.nightRate ?? 0);
+  const dayLed = Number(pkg.ledWallDayRate ?? 0);
+  const nightLed = Number(pkg.ledWallNightRate ?? 0);
+  const useLed = packageIncludesLedWall(pkg);
+
+  if (isDay) {
+    if (useLed && dayLed > 0) return dayLed;
+    if (dayStandard > 0) return dayStandard;
+    return dayLed > 0 ? dayLed : 0;
+  }
+  if (useLed && nightLed > 0) return nightLed;
+  if (nightStandard > 0) return nightStandard;
+  return nightLed > 0 ? nightLed : 0;
+}
+
+/** Pick the time slot that actually has a rate for this package (day-only / night-only packages). */
+export function resolvePackageBillingSlot(pkg, requestedSlotId) {
+  if (!pkg) return String(requestedSlotId || "1");
+  const requested = String(requestedSlotId || pkg.timeSlotId || "1");
+  if (getPackageSlotRate(pkg, requested) > 0) return requested;
+  const pkgSlot = pkg.timeSlotId ? String(pkg.timeSlotId) : "";
+  if (pkgSlot && getPackageSlotRate(pkg, pkgSlot) > 0) return pkgSlot;
+  if (getPackageSlotRate(pkg, "1") > 0) return "1";
+  if (getPackageSlotRate(pkg, "2") > 0) return "2";
+  return requested;
+}
+
+export function getPackageBillingRate(pkg, requestedSlotId) {
+  const slot = resolvePackageBillingSlot(pkg, requestedSlotId);
+  return getPackageSlotRate(pkg, slot);
+}
+
+export function formatPackageRateHint(pkg) {
+  if (!pkg) return "";
+  const day = getPackageSlotRate(pkg, "1");
+  const night = getPackageSlotRate(pkg, "2");
+  const parts = [];
+  if (day > 0) parts.push(`Day: ₱${day.toLocaleString()}`);
+  if (night > 0) parts.push(`Night: ₱${night.toLocaleString()}`);
+  return parts.length ? ` (${parts.join(", ")})` : "";
+}
+
 export function findBasketballParticular(particulars) {
   return particulars.find((p) => p.particularName === BASKETBALL_NAME);
 }
@@ -206,11 +264,7 @@ export function buildReservationSummaryLines({
       } else if (isRegularPackageId(cust.packageId)) {
         const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
         if (pkg) {
-          const slot = cust.timeSlotId || timeSlotId;
-          const rate =
-            String(slot) === "1"
-              ? Number(pkg.dayRate || 0)
-              : Number(pkg.nightRate || 0);
+          const rate = getPackageBillingRate(pkg, cust.timeSlotId || timeSlotId);
           lines.push({ date, label: pkg.packageName, amount: rate });
         }
       } else if (
@@ -220,7 +274,9 @@ export function buildReservationSummaryLines({
       ) {
         for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
           if (qty > 0) {
-            const part = particulars.find((p) => String(p.particularId) === partId);
+            const part = particulars.find(
+              (p) => String(p.particularId) === String(partId)
+            );
             if (!part) continue;
             const { label, amount } = formatFormParticularLine(
               part.particularName,
@@ -249,12 +305,9 @@ export function buildReservationSummaryLines({
   } else if (isRegularPackageId(packageId)) {
     const pkg = packages.find((p) => String(p.packageId) === packageId);
     if (pkg) {
-      const rate =
-        timeSlotId === "1"
-          ? Number(pkg.dayRate || 0)
-          : Number(pkg.nightRate || 0);
+      const rate = getPackageBillingRate(pkg, timeSlotId);
       lines.push({
-        label: `Package Rate × ${numDays} day(s)`,
+        label: numDays > 1 ? `${pkg.packageName} × ${numDays} day(s)` : pkg.packageName,
         amount: rate * numDays,
       });
     }

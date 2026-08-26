@@ -9,6 +9,7 @@ import {
   normalizeChargeLines,
   sumChargeLineAmounts,
 } from "@/lib/reservation-charge-breakdown";
+import { getPackageBillingRate } from "@/lib/reservation-package-select";
 
 function parsePackageId(value) {
   const parsed = parseInt(value, 10);
@@ -241,9 +242,7 @@ export async function POST(request) {
       : null;
 
     if (selectedPackage) {
-      const rate = parseInt(timeSlotId, 10) === 1
-        ? Number(selectedPackage.dayRate || 0)
-        : Number(selectedPackage.nightRate || 0);
+      const rate = getPackageBillingRate(selectedPackage, timeSlotId);
       totalAmount += rate * allDates.length;
     }
 

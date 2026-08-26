@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Minus, RotateCcw } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -44,10 +44,12 @@ import {
   buildReservationSummaryLines,
   sumReservationSummaryLines,
 } from "@/lib/reservation-package-select";
+import { readParticularQuantity } from "@/lib/particular-options";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
+import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
@@ -328,25 +330,31 @@ export default function WalkInReservationPage() {
     }
   };
 
-  const updateParticularQty = (particularId, delta) => {
-    setParticularQuantities((prev) => {
-      const current = prev[particularId] || 0;
-      const next = Math.max(0, current + delta);
-      return { ...prev, [particularId]: next };
-    });
-  };
-
   // Per-date customization handlers
   const handleDatePackageSelect = (date, pkgId) => {
+    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
+    let nextTimeSlotId =
+      dateCustomizations[date]?.timeSlotId || timeSlotId || "1";
+
+    if (selectedPkg && isRegularPackageId(pkgId)) {
+      nextTimeSlotId = String(selectedPkg.timeSlotId || nextTimeSlotId);
+    } else if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+      nextTimeSlotId =
+        dateCustomizations[date]?.venueRentalSlot ||
+        venueRentalSlot ||
+        timeSlotId ||
+        "1";
+    }
+
     setDateCustomizations((prev) => ({
       ...prev,
       [date]: {
         ...prev[date],
         packageId: pkgId,
-        timeSlotId: prev[date]?.timeSlotId || timeSlotId,
+        timeSlotId: nextTimeSlotId,
         venueRentalSlot:
           pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
-            ? prev[date]?.venueRentalSlot || venueRentalSlot || timeSlotId || "1"
+            ? prev[date]?.venueRentalSlot || venueRentalSlot || nextTimeSlotId
             : "",
         particularQuantities:
           isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
@@ -354,23 +362,6 @@ export default function WalkInReservationPage() {
             : (prev[date]?.particularQuantities || {}),
       },
     }));
-  };
-
-  const handleDateParticularQty = (date, particularId, delta) => {
-    setDateCustomizations((prev) => {
-      const current = prev[date]?.particularQuantities?.[particularId] || 0;
-      const next = Math.max(0, current + delta);
-      return {
-        ...prev,
-        [date]: {
-          ...prev[date],
-          particularQuantities: {
-            ...(prev[date]?.particularQuantities || {}),
-            [particularId]: next,
-          },
-        },
-      };
-    });
   };
 
   const toggleCustomizeMode = () => {
@@ -959,7 +950,10 @@ export default function WalkInReservationPage() {
                     ) : (
                       <div className="grid gap-3 md:grid-cols-2">
                         {filterCustomParticulars(particulars).map((p) => {
-                          const qty = particularQuantities[p.particularId] || 0;
+                          const qty = readParticularQuantity(
+                            particularQuantities,
+                            p.particularId
+                          );
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
                           const isAircon = p.particularName === "Aircon Compressor";
@@ -984,20 +978,16 @@ export default function WalkInReservationPage() {
                                 {!isAircon && <p className="text-xs text-muted-foreground">Available: {maxQty}</p>}
                               </div>
                               <div className="flex items-center gap-2">
-                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, -1)} disabled={qty <= 0}>
-                                  <Minus className="size-3" />
-                                </Button>
-                                <input type="number" min={0} max={maxQty} value={qty}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10);
-                                    if (isNaN(val) || val < 0) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: 0 }));
-                                    else if (val > maxQty) setParticularQuantities((prev) => ({ ...prev, [p.particularId]: maxQty }));
-                                    else setParticularQuantities((prev) => ({ ...prev, [p.particularId]: val }));
-                                  }}
-                                  className="w-14 text-center text-sm border rounded-md py-1 px-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                                <Button type="button" variant="outline" size="icon" className="size-7" onClick={() => updateParticularQty(p.particularId, 1)} disabled={qty >= maxQty}>
-                                  <Plus className="size-3" />
-                                </Button>
+                                <ParticularQuantityStepper
+                                  value={qty}
+                                  max={maxQty}
+                                  onChange={(val) =>
+                                    setParticularQuantities((prev) => ({
+                                      ...prev,
+                                      [p.particularId]: val,
+                                    }))
+                                  }
+                                />
                               </div>
                             </div>
                           );
@@ -1347,30 +1337,55 @@ export default function WalkInReservationPage() {
                       </div>
                       <div className="grid gap-2 md:grid-cols-2">
                         {filterCustomParticulars(particulars).map((p) => {
-                          const qty = cust.particularQuantities?.[p.particularId] || 0;
+                          const qty = readParticularQuantity(
+                            cust.particularQuantities,
+                            p.particularId
+                          );
                           const cost = p.unitCost ? Number(p.unitCost) : 0;
                           const maxQty = p.totalQuantity || 999;
                           const isAircon = p.particularName === "Aircon Compressor";
+                          const airconTiers = [
+                            { qty: 4, label: "100–1K pax", price: 3200 },
+                            { qty: 6, label: "1K–3K pax", price: 4800 },
+                            { qty: 8, label: "4K–6K pax", price: 6400 },
+                            { qty: 10, label: "7K–10K pax", price: 8000 },
+                          ];
                           return (
                             <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                {isAircon && <p className="text-[10px] text-muted-foreground">₱800 / unit</p>}
-                                {!isAircon && cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()}</p>}
+                                {cost > 0 && !isAircon && (
+                                  <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
+                                )}
+                                {isAircon && (
+                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                    {airconTiers.map((t) => (
+                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
+                                    ))}
+                                  </div>
+                                )}
+                                {!isAircon && (
+                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, -1)}
-                                  disabled={qty <= 0}>
-                                  <Minus className="size-3" />
-                                </Button>
-                                <span className="w-8 text-center text-xs tabular-nums">{qty}</span>
-                                <Button type="button" variant="outline" size="icon" className="size-6"
-                                  onClick={() => handleDateParticularQty(date, p.particularId, 1)}
-                                  disabled={qty >= maxQty}>
-                                  <Plus className="size-3" />
-                                </Button>
-                              </div>
+                              <ParticularQuantityStepper
+                                value={qty}
+                                max={maxQty}
+                                buttonClassName="size-6"
+                                inputClassName="w-12 h-7 text-xs"
+                                onChange={(val) =>
+                                  setDateCustomizations((prev) => ({
+                                    ...prev,
+                                    [date]: {
+                                      ...prev[date],
+                                      particularQuantities: {
+                                        ...(prev[date]?.particularQuantities || {}),
+                                        [String(p.particularId)]: val,
+                                      },
+                                    },
+                                  }))
+                                }
+                              />
                             </div>
                           );
                         })}

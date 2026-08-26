@@ -81,6 +81,16 @@ export function formatDbDate(value) {
   return `${y}-${m}-${day}`;
 }
 
+/** Format a JS Date as YYYY-MM-DD using local calendar day (for UI month grids). */
+export function formatLocalDateKey(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Normalize an input date string to YYYY-MM-DD for MySQL DATE columns. */
 export function parseSqlDate(value) {
   if (!value) return null;
