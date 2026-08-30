@@ -49,13 +49,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { formatPhp, formatMoneyInput, roundMoney, sanitizeMoneyInput } from "@/lib/utils";
-import { computePaymentBreakdown, suggestNextPayment, getPaymentTypeMax, isPaymentTypeAllowed, getPaymentTypeBlockReason, isFixedPaymentAmount } from "@/lib/payment-utils";
-
-function generateORNumber() {
-  const year = new Date().getFullYear();
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `OR-${year}-${random}`;
-}
+import { computePaymentBreakdown, suggestNextPayment, getPaymentTypeMax, getPaymentTypeMin, isPaymentTypeAllowed, getPaymentTypeBlockReason, isFixedPaymentAmount, getPaymentTypeLabel, BALANCE_PAYMENT_MINIMUM } from "@/lib/payment-utils";
 
 // Human-friendly label for a status token (used where a colored badge isn't wanted).
 function getStatusLabel(status) {
@@ -98,11 +92,20 @@ export default function LTOOPaymentsPage() {
   const [selectedReservation, setSelectedReservation] = React.useState(null);
   const [paymentAmount, setPaymentAmount] = React.useState("");
   const [paymentType, setPaymentType] = React.useState("deposit");
-  const [orNumber, setOrNumber] = React.useState(generateORNumber());
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyReservation, setHistoryReservation] = React.useState(null);
   const [historyTransactions, setHistoryTransactions] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyViewOnly, setHistoryViewOnly] = React.useState(false);
+  const [selectedTransaction, setSelectedTransaction] = React.useState(null);
+
+  const historyBreakdown = React.useMemo(() => {
+    if (!historyReservation) return null;
+    return computePaymentBreakdown(
+      historyReservation.totalAmount,
+      historyReservation.totalPaid
+    );
+  }, [historyReservation]);
 
   React.useEffect(() => {
     loadReservations();
@@ -114,6 +117,9 @@ export default function LTOOPaymentsPage() {
       // Get all reservations with payment info from the bookings endpoint
       const res = await fetch("/api/ltoo/payments?bookings=true");
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load reservations");
+      }
       setReservations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -191,6 +197,11 @@ export default function LTOOPaymentsPage() {
     return getPaymentTypeMax(currentBreakdown, paymentType);
   }, [currentBreakdown, paymentType]);
 
+  const paymentTypeMin = React.useMemo(() => {
+    if (!currentBreakdown) return 0;
+    return getPaymentTypeMin(currentBreakdown, paymentType);
+  }, [currentBreakdown, paymentType]);
+
   const paymentTypeBlockReason = React.useMemo(() => {
     if (!currentBreakdown) return null;
     return getPaymentTypeBlockReason(currentBreakdown, paymentType);
@@ -214,22 +225,19 @@ export default function LTOOPaymentsPage() {
     );
     const next = suggestNextPayment(breakdown);
     const max = getPaymentTypeMax(breakdown, next.paymentType);
+    const min = getPaymentTypeMin(breakdown, next.paymentType);
     setSelectedReservation(reservation);
     setPaymentType(next.paymentType);
-    setPaymentAmount(
-      next.paymentType === "balance"
-        ? ""
-        : max > 0
-          ? formatMoneyInput(max)
-          : ""
-    );
-    setOrNumber(generateORNumber());
+    const defaultAmount = next.paymentType === "balance" ? min : max;
+    setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
     setRecordOpen(true);
   };
 
-  const openPaymentHistory = async (reservation) => {
+  const openPaymentHistory = async (reservation, viewOnly = false) => {
     setHistoryReservation(reservation);
+    setHistoryViewOnly(viewOnly);
     setHistoryOpen(true);
+    setSelectedTransaction(null);
     setHistoryLoading(true);
     setHistoryTransactions([]);
     try {
@@ -246,6 +254,14 @@ export default function LTOOPaymentsPage() {
     }
   };
 
+  const handleRowClick = (reservation) => {
+    if (reservation.computedStatus === "Fully Paid") {
+      openPaymentHistory(reservation, true);
+      return;
+    }
+    openRecordPayment(reservation);
+  };
+
   const handlePaymentTypeChange = (value) => {
     if (!currentBreakdown) return;
     if (!isPaymentTypeAllowed(currentBreakdown, value)) {
@@ -253,12 +269,10 @@ export default function LTOOPaymentsPage() {
       return;
     }
     const max = getPaymentTypeMax(currentBreakdown, value);
+    const min = getPaymentTypeMin(currentBreakdown, value);
     setPaymentType(value);
-    if (value === "balance") {
-      setPaymentAmount("");
-    } else {
-      setPaymentAmount(max > 0 ? formatMoneyInput(max) : "");
-    }
+    const defaultAmount = value === "balance" ? min : max;
+    setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
   };
 
   React.useEffect(() => {
@@ -267,18 +281,15 @@ export default function LTOOPaymentsPage() {
       const next = suggestNextPayment(currentBreakdown);
       const max = getPaymentTypeMax(currentBreakdown, next.paymentType);
       setPaymentType(next.paymentType);
-      setPaymentAmount(
-        next.paymentType === "balance"
-          ? ""
-          : max > 0
-            ? formatMoneyInput(max)
-            : ""
-      );
+      setPaymentAmount(max > 0 ? formatMoneyInput(max) : "");
       return;
     }
     const max = getPaymentTypeMax(currentBreakdown, paymentType);
+    const min = getPaymentTypeMin(currentBreakdown, paymentType);
     if (isFixedPaymentAmount(paymentType) && max > 0) {
       setPaymentAmount(formatMoneyInput(max));
+    } else if (paymentType === "balance" && min > 0) {
+      setPaymentAmount(formatMoneyInput(min));
     }
   }, [recordOpen, currentBreakdown, paymentType]);
 
@@ -295,12 +306,16 @@ export default function LTOOPaymentsPage() {
       setPaymentAmount("");
       return;
     }
-    const clamped = Math.min(numeric, paymentTypeMax);
+    let clamped = Math.min(numeric, paymentTypeMax);
+    if (paymentType === "balance" && paymentTypeMin > 0 && clamped < paymentTypeMin) {
+      toast.error(`Minimum payment for remaining balance is ${formatPhp(paymentTypeMin)}.`);
+      clamped = paymentTypeMin;
+    }
     setPaymentAmount(formatMoneyInput(clamped));
   };
 
   const handleRecordPayment = async () => {
-    if (!selectedReservation || !paymentAmount || !orNumber) return;
+    if (!selectedReservation || !paymentAmount) return;
 
     const amount = roundMoney(paymentAmount);
     const {
@@ -321,6 +336,7 @@ export default function LTOOPaymentsPage() {
       const label =
         paymentType === "deposit" ? "10% deposit"
         : paymentType === "downpayment" ? "50% down payment"
+        : paymentType === "both" ? "50% down + 10% deposit"
         : "remaining balance";
       toast.error(`The ${label} has already been recorded or is not available yet.`);
       return;
@@ -328,6 +344,12 @@ export default function LTOOPaymentsPage() {
 
     if (amount > remainingBalance || amount > typeMax) {
       toast.error(`Amount cannot exceed ${formatPhp(typeMax)} for this payment.`);
+      return;
+    }
+
+    const typeMin = getPaymentTypeMin(current, paymentType);
+    if (paymentType === "balance" && typeMin > 0 && amount < typeMin) {
+      toast.error(`Minimum payment for remaining balance is ${formatPhp(typeMin)}.`);
       return;
     }
 
@@ -348,7 +370,6 @@ export default function LTOOPaymentsPage() {
           selectedBookingId: String(selectedReservation.reservationId),
           paymentType,
           amountPaid: amount,
-          orNumber,
           clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
           clientName: selectedReservation.clientName,
           activityName: selectedReservation.eventType || "",
@@ -404,7 +425,8 @@ export default function LTOOPaymentsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">Payment Recording</h2>
         <p className="text-foreground/80 text-sm leading-relaxed">
-          Browse reservations and record payments. Each reservation shows once with its aggregated payment status. Click on unpaid/partial reservations to record a payment.
+          Browse reservations and record payments. Click unpaid or partial rows to record a payment.
+          Click fully paid rows to view payment details and history.
         </p>
       </div>
 
@@ -471,8 +493,8 @@ export default function LTOOPaymentsPage() {
                 filteredReservations.map((r) => (
                   <TableRow
                     key={r.reservationId || r.id}
-                    className={r.computedStatus !== "Fully Paid" ? "cursor-pointer hover:bg-muted/50" : ""}
-                    onClick={() => r.computedStatus !== "Fully Paid" && openRecordPayment(r)}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleRowClick(r)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -508,11 +530,21 @@ export default function LTOOPaymentsPage() {
                             <DollarSign className="size-4 mr-1" />Pay
                           </Button>
                         )}
-                        {hasPaymentHistory(r.computedStatus) && (
+                        {r.computedStatus === "Fully Paid" && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={(e) => { e.stopPropagation(); openPaymentHistory(r); }}
+                            onClick={(e) => { e.stopPropagation(); openPaymentHistory(r, true); }}
+                            className="text-green-700"
+                          >
+                            <Receipt className="size-4 mr-1" />View
+                          </Button>
+                        )}
+                        {hasPaymentHistory(r.computedStatus) && r.computedStatus !== "Fully Paid" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); openPaymentHistory(r, false); }}
                             className="text-foreground/80"
                           >
                             <History className="size-4 mr-1" />History
@@ -605,6 +637,19 @@ export default function LTOOPaymentsPage() {
                       10% Deposit
                       {currentBreakdown?.depositMet ? " (Paid)" : ""}
                     </SelectItem>
+                    <SelectItem
+                      value="both"
+                      disabled={
+                        currentBreakdown?.downPaymentMet ||
+                        currentBreakdown?.depositMet
+                      }
+                    >
+                      50% Down + 10% Deposit
+                      {(currentBreakdown?.downPaymentMet ||
+                        currentBreakdown?.depositMet)
+                        ? " (Unavailable)"
+                        : ""}
+                    </SelectItem>
                     {currentBreakdown?.requirementsMet && !currentBreakdown?.balanceSettled && (
                       <SelectItem value="balance">
                         Remaining Balance
@@ -621,35 +666,48 @@ export default function LTOOPaymentsPage() {
                         ? `Required: ${formatPhp(paymentTypeMax)} (10% of base)`
                         : paymentType === "downpayment"
                           ? `Required: ${formatPhp(paymentTypeMax)} (50% of base)`
-                          : `Up to ${formatPhp(paymentTypeMax)} remaining`}
+                          : paymentType === "both"
+                            ? `Required: ${formatPhp(paymentTypeMax)} (50% down + 10% deposit)`
+                          : `Minimum ${formatPhp(paymentTypeMin)} · up to ${formatPhp(paymentTypeMax)} remaining`}
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
-                  <Input
-                    id="pay-amount"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={paymentAmount}
-                    onChange={handlePaymentAmountChange}
-                    onBlur={handlePaymentAmountBlur}
-                    readOnly={isFixedPaymentAmount(paymentType)}
-                    className={`tabular-nums ${isFixedPaymentAmount(paymentType) ? "bg-muted" : ""}`}
-                  />
-                  {isFixedPaymentAmount(paymentType) && (
-                    <p className="text-xs text-muted-foreground">
-                      Fixed installment amount.
+              <div className="space-y-2">
+                <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
+                <Input
+                  id="pay-amount"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={handlePaymentAmountChange}
+                  onBlur={handlePaymentAmountBlur}
+                  readOnly={isFixedPaymentAmount(paymentType)}
+                  className={`tabular-nums ${isFixedPaymentAmount(paymentType) ? "bg-muted" : ""}`}
+                />
+                {isFixedPaymentAmount(paymentType) && (
+                  <p className="text-xs text-muted-foreground">
+                    Fixed installment amount.
+                  </p>
+                )}
+                {paymentType === "balance" && paymentTypeMax > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <p>
+                      <span className="font-medium">Minimum payment: </span>
+                      <span className="tabular-nums font-semibold">{formatPhp(paymentTypeMin)}</span>
+                      {paymentTypeMin < BALANCE_PAYMENT_MINIMUM ? (
+                        <span className="text-amber-800/80"> (full remaining balance)</span>
+                      ) : (
+                        <span className="text-amber-800/80"> (₱{BALANCE_PAYMENT_MINIMUM.toLocaleString()})</span>
+                      )}
                     </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pay-or">OR Number</Label>
-                  <Input id="pay-or" value={orNumber} readOnly className="bg-muted font-mono text-sm" />
-                </div>
+                    <p className="mt-0.5 text-amber-800/80">
+                      Maximum for this entry:{" "}
+                      <span className="tabular-nums font-medium">{formatPhp(paymentTypeMax)}</span>.
+                      Amounts below the minimum will be rejected.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
@@ -676,7 +734,7 @@ export default function LTOOPaymentsPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => openPaymentHistory(selectedReservation)}
+                  onClick={() => openPaymentHistory(selectedReservation, false)}
                 >
                   <History className="size-4 mr-1" />
                   History
@@ -685,7 +743,7 @@ export default function LTOOPaymentsPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
-              <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={saving || !currentBreakdown || currentBreakdown.balanceSettled || !isPaymentTypeAllowed(currentBreakdown, paymentType) || !paymentAmount || roundMoney(paymentAmount || 0) <= 0 || roundMoney(paymentAmount || 0) > paymentTypeMax}>
+              <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={saving || !currentBreakdown || currentBreakdown.balanceSettled || !isPaymentTypeAllowed(currentBreakdown, paymentType) || !paymentAmount || roundMoney(paymentAmount || 0) <= 0 || roundMoney(paymentAmount || 0) > paymentTypeMax || (paymentType === "balance" && roundMoney(paymentAmount || 0) < paymentTypeMin)}>
                 {saving ? "Saving..." : "Save Payment"}
               </Button>
             </div>
@@ -698,31 +756,80 @@ export default function LTOOPaymentsPage() {
         open={historyOpen}
         onOpenChange={(open) => {
           setHistoryOpen(open);
-          if (!open) setHistoryReservation(null);
+          if (!open) {
+            setHistoryReservation(null);
+            setHistoryViewOnly(false);
+            setSelectedTransaction(null);
+          }
         }}
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <History className="size-5" />
-              Payment History
+              {historyViewOnly ? (
+                <Receipt className="size-5" />
+              ) : (
+                <History className="size-5" />
+              )}
+              {historyViewOnly ? "Payment Details" : "Payment History"}
             </DialogTitle>
             <DialogDescription>
               {historyReservation?.clientName} — {historyReservation?.eventType}
               {historyReservation?.eventDate ? ` · ${historyReservation.eventDate}` : ""}
             </DialogDescription>
           </DialogHeader>
+
+          {historyReservation && historyBreakdown && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Status</span>
+                {getStatusBadge(historyBreakdown.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <span className="text-muted-foreground">Base amount</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.base)}
+                </span>
+                <span className="text-muted-foreground">Total paid</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.paid)}
+                </span>
+                <span className="text-muted-foreground">Total payable</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.totalPayable)}
+                </span>
+                <span className="text-muted-foreground">Remaining</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.remainingBalance)}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.downPaymentMet)}
+                  50% down
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.depositMet)}
+                  10% deposit
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.balanceSettled)}
+                  Balance
+                </span>
+              </div>
+            </div>
+          )}
+
           {historyLoading ? (
-            <p className="text-muted-foreground text-sm py-8 text-center">Loading history...</p>
+            <p className="text-muted-foreground text-sm py-8 text-center">Loading payments...</p>
           ) : historyTransactions.length === 0 ? (
             <p className="text-muted-foreground text-sm py-8 text-center">No payments recorded yet.</p>
           ) : (
-            <div className="rounded-md border max-h-[min(60vh,400px)] overflow-auto">
+            <div className="rounded-md border max-h-[min(50vh,360px)] overflow-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>OR Number</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Recorded by</TableHead>
@@ -730,11 +837,14 @@ export default function LTOOPaymentsPage() {
                 </TableHeader>
                 <TableBody>
                   {historyTransactions.map((t) => (
-                    <TableRow key={t.transactionId}>
+                    <TableRow
+                      key={t.transactionId}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setSelectedTransaction(t)}
+                    >
                       <TableCell className="text-sm tabular-nums whitespace-nowrap">
                         {formatDateTime(t.paymentDate)}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{t.orNumber}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatPhp(t.amountPaid)}
                       </TableCell>
@@ -750,7 +860,7 @@ export default function LTOOPaymentsPage() {
             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span className="text-foreground/70 flex items-center gap-1">
                 <Receipt className="size-4" />
-                {historyTransactions.length} transaction(s)
+                {historyTransactions.length} payment(s) — click a row for details
               </span>
               <span className="font-medium tabular-nums">
                 Total: {formatPhp(
@@ -759,6 +869,106 @@ export default function LTOOPaymentsPage() {
               </span>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={selectedTransaction !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTransaction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="size-5" />
+              Payment Entry
+            </DialogTitle>
+            <DialogDescription>
+              Recorded payment for {historyReservation?.clientName || "this reservation"}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-semibold tabular-nums">
+                  {formatPhp(selectedTransaction.amountPaid)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Date & time</span>
+                <span className="font-medium tabular-nums">
+                  {formatDateTime(selectedTransaction.paymentDate)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Recorded by</span>
+                <span className="font-medium">{selectedTransaction.recordedBy || "—"}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Payment status</span>
+                <span>{getStatusBadge(selectedTransaction.paymentStatus)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Payment ID</span>
+                <span className="font-mono text-xs">{selectedTransaction.paymentId}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Transaction ID</span>
+                <span className="font-mono text-xs">{selectedTransaction.transactionId}</span>
+              </div>
+              {selectedTransaction.orNumber && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">OR number</span>
+                  <span className="font-medium">{selectedTransaction.orNumber}</span>
+                </div>
+              )}
+              {selectedTransaction.depositId && (
+                <>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Deposit ID</span>
+                    <span className="font-mono text-xs">{selectedTransaction.depositId}</span>
+                  </div>
+                  {selectedTransaction.depositStatus && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Deposit status</span>
+                      <span className="font-medium">{selectedTransaction.depositStatus}</span>
+                    </div>
+                  )}
+                  {selectedTransaction.depositRequiredAmount != null && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Deposit required</span>
+                      <span className="font-medium tabular-nums">
+                        {formatPhp(selectedTransaction.depositRequiredAmount)}
+                      </span>
+                    </div>
+                  )}
+                  {selectedTransaction.depositAmountPaid != null && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Deposit paid</span>
+                      <span className="font-medium tabular-nums">
+                        {formatPhp(selectedTransaction.depositAmountPaid)}
+                      </span>
+                    </div>
+                  )}
+                  {selectedTransaction.depositNotes && (
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground">Deposit notes</span>
+                      <p className="text-sm bg-background rounded-md border p-2">
+                        {selectedTransaction.depositNotes}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSelectedTransaction(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -773,8 +983,8 @@ export default function LTOOPaymentsPage() {
             <div className="flex justify-between"><span className="text-foreground/70">Client:</span><span className="font-medium text-foreground">{selectedReservation?.clientName}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Event:</span><span className="font-medium text-foreground">{selectedReservation?.eventType}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Date:</span><span className="font-medium text-foreground">{selectedReservation?.eventDate}</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">Payment type:</span><span className="font-medium text-foreground capitalize">{getPaymentTypeLabel(paymentType)}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Amount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(paymentAmount)}</span></div>
-            <div className="flex justify-between"><span className="text-foreground/70">OR:</span><span className="font-medium text-foreground">{orNumber}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Status after payment:</span><span className="font-medium text-foreground">{getStatusLabel(projectedBreakdown?.status ?? currentBreakdown?.status)}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Remaining after:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown?.remainingBalance ?? 0)}</span></div>
           </div>

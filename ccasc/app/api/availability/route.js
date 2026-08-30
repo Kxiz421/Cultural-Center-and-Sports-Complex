@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate, formatLocalDateKey } from "@/lib/utils";
+import {
+  getMinEventDate,
+  ADVANCE_BOOKING_REASON,
+} from "@/lib/reservation-advance-booking";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");
     const month = searchParams.get("month"); // YYYY-MM format
     const timeSlotId = searchParams.get("timeSlotId");
+    const excludeReservationId = searchParams.get("excludeReservationId");
 
     if (!venueId || !month) {
       return NextResponse.json(
@@ -29,10 +34,15 @@ export async function GET(request) {
     }
 
     // Fetch conflicting reservations (Pending or Confirmed) for this venue
+    const excludeId = excludeReservationId
+      ? parseInt(excludeReservationId, 10)
+      : null;
+
     const conflictingReservations = await prisma.reservation.findMany({
       where: {
         venueId: parseInt(venueId, 10),
         reservationStatus: { in: ["Pending", "Confirmed"] },
+        ...(excludeId ? { reservationId: { not: excludeId } } : {}),
         OR: [
           { eventDate: { gte: startDate, lte: endDate } },
           {
@@ -74,18 +84,28 @@ export async function GET(request) {
       blockedDates.set(key, b.title || "Unavailable");
     }
 
+    const minEventDate = getMinEventDate();
+
     // Build response
     const dates = allDates.map((dt) => {
       const key = formatLocalDateKey(dt);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const isPast = dt < today;
+      const isTooSoon = dt < minEventDate;
+      const isBooked = blockedDates.has(key);
+      const blocked = isBooked || isPast || isTooSoon;
       return {
         date: key,
-        available: !blockedDates.has(key) && !isPast,
-        blocked: blockedDates.has(key) || isPast,
-        reason: blockedDates.get(key) || null,
+        available: !blocked,
+        blocked,
+        reason: isBooked
+          ? blockedDates.get(key)
+          : isTooSoon
+            ? ADVANCE_BOOKING_REASON
+            : null,
         isPast,
+        isTooSoon,
       };
     });
 

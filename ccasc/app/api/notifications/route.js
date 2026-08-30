@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { isCoordinatorInboxNotification } from "@/lib/panel-notifications";
 
 
 // Send notification
@@ -40,18 +41,57 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
     const staffId = searchParams.get("staffId");
+    const scope = searchParams.get("scope");
 
     let whereClause = {};
     if (clientId) whereClause.clientId = parseInt(clientId, 10);
     if (staffId) whereClause.staffId = parseInt(staffId, 10);
 
+    if (searchParams.get("unreadCountOnly") === "true") {
+      if (clientId) {
+        const unreadCount = await prisma.notification.count({
+          where: {
+            clientId: parseInt(clientId, 10),
+            isRead: false,
+          },
+        });
+        return NextResponse.json({ unreadCount });
+      }
+      if (staffId) {
+        if (scope === "coordinator") {
+          const unread = await prisma.notification.findMany({
+            where: {
+              staffId: parseInt(staffId, 10),
+              isRead: false,
+            },
+            select: { type: true, message: true },
+          });
+          return NextResponse.json({
+            unreadCount: unread.filter(isCoordinatorInboxNotification).length,
+          });
+        }
+        const unreadCount = await prisma.notification.count({
+          where: {
+            staffId: parseInt(staffId, 10),
+            isRead: false,
+          },
+        });
+        return NextResponse.json({ unreadCount });
+      }
+    }
+
     const notifications = await prisma.notification.findMany({
       where: whereClause,
       orderBy: { sentAt: "desc" },
-      take: 50,
+      take: scope === "coordinator" ? 150 : 50,
     });
 
-    const formatted = notifications.map((n) => ({
+    const visible =
+      scope === "coordinator"
+        ? notifications.filter(isCoordinatorInboxNotification).slice(0, 50)
+        : notifications;
+
+    const formatted = visible.map((n) => ({
       id: n.notificationId,
       message: n.message,
       type: n.type,

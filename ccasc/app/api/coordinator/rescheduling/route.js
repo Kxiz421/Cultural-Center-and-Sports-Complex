@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { formatDbDate } from "@/lib/utils";
+import {
+  applyRescheduleDateChanges,
+  formatRescheduleDateChanges,
+} from "@/lib/reschedule-utils";
+import { createClientNotification } from "@/lib/coordinator-notifications";
 
 const CULTURAL_VENUE_IDS = [1];
 
@@ -12,31 +18,55 @@ export async function GET() {
         },
       },
       include: {
+        dateChanges: {
+          orderBy: [{ isPrimary: "desc" }, { originalDate: "asc" }],
+        },
         reservation: {
           include: {
             venue: { select: { venue: true } },
-            client: { select: { firstName: true, lastName: true, clientId: true, clientRole: { select: { roleName: true } } } },
+            client: {
+              select: {
+                firstName: true,
+                lastName: true,
+                clientId: true,
+                clientRole: { select: { roleName: true } },
+              },
+            },
             timeSlot: { select: { startTime: true, endTime: true } },
+            additionalDates: { select: { eventDate: true } },
           },
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    const formatted = requests.map((req) => ({
-      id: req.rescheduleId,
-      clientName: `${req.reservation.client.firstName} ${req.reservation.client.lastName}`,
-      clientId: req.reservation.client.clientId,
-      clientType: req.reservation.client.clientRole?.roleName || "N/A",
-      venue: req.reservation.venue.venue,
-      eventType: req.reservation.eventType,
-      currentDate: req.reservation.eventDate.toISOString().split("T")[0],
-      requestedDate: req.requestedDate.toISOString().split("T")[0],
-      reason: req.reason,
-      status: req.status,
-      declineReason: req.declineReason || null,
-      timeSlot: `${req.reservation.timeSlot.startTime} - ${req.reservation.timeSlot.endTime}`,
-    }));
+    const formatted = requests.map((req) => {
+      const dateChanges = formatRescheduleDateChanges(
+        req,
+        req.reservation.eventDate
+      );
+      const currentDates = [
+        formatDbDate(req.reservation.eventDate),
+        ...req.reservation.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
+      ];
+
+      return {
+        id: req.rescheduleId,
+        clientName: `${req.reservation.client.firstName} ${req.reservation.client.lastName}`,
+        clientId: req.reservation.client.clientId,
+        clientType: req.reservation.client.clientRole?.roleName || "N/A",
+        venue: req.reservation.venue.venue,
+        eventType: req.reservation.eventType,
+        currentDate: formatDbDate(req.reservation.eventDate),
+        currentDates,
+        requestedDate: formatDbDate(req.requestedDate),
+        dateChanges,
+        reason: req.reason,
+        status: req.status,
+        declineReason: req.declineReason || null,
+        timeSlot: `${req.reservation.timeSlot.startTime} - ${req.reservation.timeSlot.endTime}`,
+      };
+    });
 
     return NextResponse.json(formatted);
   } catch (error) {
@@ -65,51 +95,32 @@ export async function PATCH(request) {
     }
 
     if (action === "approve") {
-      // Get the reschedule request
-      const rescheduleReq = await prisma.rescheduleRequest.findUnique({
-        where: { rescheduleId: id },
-        include: {
-          reservation: {
-            include: {
-              client: { select: { clientId: true, firstName: true, lastName: true } },
-              venue: { select: { venue: true } },
-            },
+      const result = await applyRescheduleDateChanges(id);
+      if (result.error) {
+        return NextResponse.json(
+          {
+            error: result.error,
+            conflictDates: result.conflictDates,
           },
-        },
-      });
-
-      if (!rescheduleReq) {
-        return NextResponse.json({ error: "Request not found" }, { status: 404 });
+          { status: result.status || 400 }
+        );
       }
 
-      // Update the reservation's event date
-      await prisma.reservation.update({
-        where: { reservationId: rescheduleReq.reservationId },
-        data: { eventDate: rescheduleReq.requestedDate },
-      });
+      const rescheduleReq = result.existing;
+      const pairs = (result.dateChanges || [])
+        .map((c) => `${c.originalDate} → ${c.requestedDate}`)
+        .join("; ");
 
-      // Update the request status
-      await prisma.rescheduleRequest.update({
-        where: { rescheduleId: id },
-        data: { status: "Approved" },
-      });
-
-      // Send notification to client
-      const oldDate = rescheduleReq.reservation.eventDate.toISOString().split("T")[0];
-      const newDate = rescheduleReq.requestedDate.toISOString().split("T")[0];
-      await prisma.notification.create({
-        data: {
-          clientId: rescheduleReq.reservation.client.clientId,
-          staffId: 1,
-          message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. Event rescheduled from ${oldDate} to ${newDate}.`,
-          type: "reschedule",
-          sentAt: new Date(),
-        },
+      await createClientNotification({
+        clientId: rescheduleReq.reservation.client.clientId,
+        type: "reschedule",
+        message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. Date change(s): ${pairs}.`,
       });
 
       return NextResponse.json({ success: true, message: "Reschedule approved" });
-    } else if (action === "decline") {
-      // Get the reschedule request
+    }
+
+    if (action === "decline") {
       const rescheduleReq = await prisma.rescheduleRequest.findUnique({
         where: { rescheduleId: id },
         include: {
@@ -126,7 +137,6 @@ export async function PATCH(request) {
         return NextResponse.json({ error: "Request not found" }, { status: 404 });
       }
 
-      // Update the request status with decline reason
       const updateData = { status: "Declined" };
       if (declineReason) {
         updateData.declineReason = declineReason;
@@ -136,18 +146,13 @@ export async function PATCH(request) {
         data: updateData,
       });
 
-      // Send notification to client
       const declineMsg = declineReason
         ? `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.\n\nReason: ${declineReason}`
         : `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.`;
-      await prisma.notification.create({
-        data: {
-          clientId: rescheduleReq.reservation.client.clientId,
-          staffId: 1,
-          message: declineMsg,
-          type: "reschedule",
-          sentAt: new Date(),
-        },
+      await createClientNotification({
+        clientId: rescheduleReq.reservation.client.clientId,
+        type: "reschedule",
+        message: declineMsg,
       });
 
       return NextResponse.json({ success: true, message: "Reschedule declined" });

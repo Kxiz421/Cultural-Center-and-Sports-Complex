@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate, parseSqlDate } from "@/lib/utils";
-import { BASKETBALL_NAME } from "@/lib/particular-options";
+import { BASKETBALL_NAME, getBasketballPrice } from "@/lib/particular-options";
+import { getTimeSlotLabel, isWholeDaySlot, WHOLE_DAY_SLOT } from "@/lib/time-slots";
 import {
   embedChargeBreakdownInNotes,
   extractChargeBreakdownFromNotes,
@@ -10,34 +11,20 @@ import {
   sumChargeLineAmounts,
 } from "@/lib/reservation-charge-breakdown";
 import { getPackageBillingRate } from "@/lib/reservation-package-select";
+import {
+  validateAdvanceBooking,
+  validateAdvanceBookingDates,
+} from "@/lib/reservation-advance-booking";
 
 function parsePackageId(value) {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-
 function addDays(date, days) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
-}
-
-function validateAdvanceBooking(eventDate) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const event = new Date(eventDate);
-  event.setHours(0, 0, 0, 0);
-  const minDate = addDays(today, 7);
-  if (event < minDate) {
-    const minDateStr = minDate.toISOString().split("T")[0];
-    return {
-      valid: false,
-      error: `Reservations must be filed at least 7 days before the event. The earliest available date is ${minDateStr}.`,
-      minDate: minDateStr,
-    };
-  }
-  return { valid: true };
 }
 
 function computePaymentStatus(totalAmount, payments) {
@@ -84,7 +71,7 @@ export async function GET(request) {
             },
           },
         },
-        additionalDates: { select: { eventDate: true } },
+        additionalDates: { select: { reservationDateId: true, eventDate: true } },
       },
       orderBy: { submittedAt: "desc" },
     });
@@ -103,6 +90,18 @@ export async function GET(request) {
         const allDates = [
           formatDbDate(r.eventDate),
           ...r.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
+        ];
+        const eventDateEntries = [
+          {
+            date: formatDbDate(r.eventDate),
+            reservationDateId: null,
+            isPrimary: true,
+          },
+          ...r.additionalDates.map((ad) => ({
+            date: formatDbDate(ad.eventDate),
+            reservationDateId: ad.reservationDateId,
+            isPrimary: false,
+          })),
         ];
 
         const allPayments = r.bookings.flatMap(b => b.payments);
@@ -128,11 +127,12 @@ export async function GET(request) {
           eventType: r.eventType,
           eventDate: formatDbDate(r.eventDate),
           eventDates: allDates,
+          eventDateEntries,
           timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
           status: r.reservationStatus,
           submittedAt: r.submittedAt.toISOString(),
           bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
-          bookingVenueId: r.bookings[0]?.venueId || null,
+          bookingVenueId: r.venueId || null,
           amountPaid: totalPaid,
           totalAmount: totalAmount,
           paymentStatus,
@@ -176,7 +176,9 @@ export async function POST(request) {
       );
     }
 
-    const advanceCheck = validateAdvanceBooking(eventDate);
+    const advanceCheck = validateAdvanceBookingDates(
+      [eventDate, ...(eventDates || [])].filter(Boolean)
+    );
     if (!advanceCheck.valid) {
       return NextResponse.json(
         { error: advanceCheck.error, minDate: advanceCheck.minDate },
@@ -237,12 +239,23 @@ export async function POST(request) {
 
     // Calculate total
     let totalAmount = 0;
+    const packageCatalog = await prisma.package.findMany({
+      select: {
+        packageId: true,
+        packageName: true,
+        dayRate: true,
+        nightRate: true,
+        ledWallDayRate: true,
+        ledWallNightRate: true,
+        timeSlotId: true,
+      },
+    });
     const selectedPackage = parsePackageId(packageId)
-      ? await prisma.package.findUnique({ where: { packageId: parsePackageId(packageId) } })
+      ? packageCatalog.find((p) => p.packageId === parsePackageId(packageId))
       : null;
 
     if (selectedPackage) {
-      const rate = getPackageBillingRate(selectedPackage, timeSlotId);
+      const rate = getPackageBillingRate(selectedPackage, timeSlotId, packageCatalog);
       totalAmount += rate * allDates.length;
     }
 
@@ -262,9 +275,8 @@ export async function POST(request) {
             const name = particular.particularName || "";
 
             if (name === BASKETBALL_NAME) {
-              const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
               const days = Math.max(1, parseInt(p.days, 10) || 1);
-              lineCost = (basketballPrices[p.quantity] || unitCost) * days;
+              lineCost = (getBasketballPrice(p.quantity) || unitCost) * days;
             } else if (name.startsWith("Basketball Game")) {
               lineCost = unitCost;
             } else if (/venue rental/i.test(name)) {
@@ -297,12 +309,24 @@ export async function POST(request) {
     const cancellationDeadline = addDays(event, -30).toISOString().split("T")[0];
     const isFinal = today >= addDays(event, -30);
 
+    const parsedTimeSlotId = parseInt(timeSlotId, 10);
+    if (isWholeDaySlot(parsedTimeSlotId)) {
+      await prisma.timeSlot.upsert({
+        where: { timeSlotId: WHOLE_DAY_SLOT.timeSlotId },
+        update: {
+          startTime: WHOLE_DAY_SLOT.startTime,
+          endTime: WHOLE_DAY_SLOT.endTime,
+        },
+        create: WHOLE_DAY_SLOT,
+      });
+    }
+
     const reservation = await prisma.reservation.create({
       data: {
         venueId: parseInt(venueId, 10),
         eventType,
         eventDate: event,
-        timeSlotId: parseInt(timeSlotId, 10),
+        timeSlotId: parsedTimeSlotId,
         packageId: parsePackageId(packageId),
         clientId: parsedClientId,
         reservationStatus: "Pending",
@@ -329,8 +353,7 @@ export async function POST(request) {
 
     if (isWalkIn) {
       const displayName = clientName || "Walk-in Client";
-      const timeSlotNames = { 1: "Day (8:00 AM - 5:00 PM)", 2: "Night (5:00 PM - 10:00 PM)" };
-      const timeSlotName = timeSlotNames[parseInt(timeSlotId, 10)] || "Unknown Time Slot";
+      const timeSlotName = getTimeSlotLabel(timeSlotId);
 
       const provincialAgencies = await prisma.client.findMany({
         where: { clientRoleId: "PROV" },

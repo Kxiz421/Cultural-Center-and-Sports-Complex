@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Search, CheckCircle2, XCircle, AlertTriangle, FileText, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
+import { notifyPanelNotificationsUpdated } from "@/lib/panel-notifications";
+import { formatEventDateLabel } from "@/lib/document-event-date";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -98,6 +100,7 @@ export default function CoordinatorBookingsPage() {
       if (!res.ok) throw new Error("Failed to confirm");
       toast.success("Booking confirmed successfully");
       refreshBookings();
+      notifyPanelNotificationsUpdated();
       setDetailOpen(false);
     } catch (err) {
       toast.error("Failed to confirm booking");
@@ -114,6 +117,7 @@ export default function CoordinatorBookingsPage() {
       if (!res.ok) throw new Error("Failed to cancel");
       toast.success("Booking cancelled");
       refreshBookings();
+      notifyPanelNotificationsUpdated();
       setDetailOpen(false);
     } catch (err) {
       toast.error("Failed to cancel booking");
@@ -425,6 +429,8 @@ export default function CoordinatorBookingsPage() {
                               <div>
                                 <p className="text-sm font-medium">{doc.type}</p>
                                 <p className="text-xs text-muted-foreground">
+                                  For {formatEventDateLabel(doc.eventDate)}
+                                  {" · "}
                                   Status: {doc.status}
                                   {doc.submittedAt && ` • ${new Date(doc.submittedAt).toLocaleDateString()}`}
                                 </p>

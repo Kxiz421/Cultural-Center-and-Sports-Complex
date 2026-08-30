@@ -20,6 +20,7 @@ import {
   applyBasketballEncodedSelection,
   formatPackageRateHint,
 } from "@/lib/reservation-package-select";
+import { TIME_SLOT, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
 
 export function ReservationVirtualPackagePanel({
   packageId,
@@ -34,6 +35,11 @@ export function ReservationVirtualPackagePanel({
   if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
     if (!hasBasketballPackageOption(particulars)) return null;
     const encodedQty = getBasketballEncodedQty(particulars, particularQuantities);
+    const slotOptions = BASKETBALL_OPTIONS.filter((opt) => {
+      if (isWholeDaySlot(timeSlotId)) return opt.value === 6 || opt.value === 7;
+      if (isNightSlot(timeSlotId)) return opt.value === 4 || opt.value === 5;
+      return opt.value === 2 || opt.value === 3;
+    });
 
     return (
       <div className="space-y-2">
@@ -54,7 +60,7 @@ export function ReservationVirtualPackagePanel({
             <SelectValue placeholder="Select game type" />
           </SelectTrigger>
           <SelectContent>
-            {BASKETBALL_OPTIONS.map((opt) => (
+            {slotOptions.map((opt) => (
               <SelectItem key={opt.value} value={String(opt.value)}>
                 {opt.label} — ₱{opt.price.toLocaleString()}
               </SelectItem>
@@ -69,7 +75,11 @@ export function ReservationVirtualPackagePanel({
     const hints = getVenueRentalPriceHint(particulars);
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
     const vr = getVenueRentalParticular(particulars, slot);
-    const price = vr?.unitCost ? Number(vr.unitCost) : 0;
+    const price = isWholeDaySlot(slot)
+      ? hints.wholeDayPrice
+      : vr?.unitCost
+        ? Number(vr.unitCost)
+        : 0;
 
     return (
       <div className="space-y-3">
@@ -80,20 +90,28 @@ export function ReservationVirtualPackagePanel({
             onValueChange={(val) => onVenueRentalSlotChange?.(val)}
           >
             <SelectTrigger className={compact ? "text-xs" : ""}>
-              <SelectValue placeholder="Select day or night rate" />
+              <SelectValue placeholder="Select rate" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">
+              <SelectItem value={TIME_SLOT.DAY}>
                 Day (8:00 AM – 5:00 PM) — ₱{hints.dayPrice.toLocaleString()}
               </SelectItem>
-              <SelectItem value="2">
-                Night (5:00 PM – 12 MN) — ₱{hints.nightPrice.toLocaleString()}
+              <SelectItem value={TIME_SLOT.NIGHT}>
+                Night (5:00 PM – 10:00 PM) — ₱{hints.nightPrice.toLocaleString()}
+              </SelectItem>
+              <SelectItem value={TIME_SLOT.WHOLE_DAY}>
+                Whole Day (8:00 AM – 10:00 PM) — ₱
+                {hints.wholeDayPrice.toLocaleString()}
               </SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1 text-sm">
-          <p className="font-medium">{vr?.particularName || "Venue Rental"}</p>
+          <p className="font-medium">
+            {isWholeDaySlot(slot)
+              ? "Venue Rental — Whole Day"
+              : vr?.particularName || "Venue Rental"}
+          </p>
           <p className="font-medium tabular-nums">₱{price.toLocaleString()}</p>
         </div>
       </div>
@@ -117,12 +135,22 @@ export function ReservationPackageSelectItems({
       )}
       {packages
         .filter((p) => p.statusId === 1)
-        .map((pkg) => (
-          <SelectItem key={pkg.packageId} value={String(pkg.packageId)}>
-            {pkg.packageName}
-            {formatPackageRateHint(pkg)}
-          </SelectItem>
-        ))}
+        .map((pkg) => {
+          const rateHint = formatPackageRateHint(pkg, packages);
+          return (
+            <SelectItem
+              key={pkg.packageId}
+              value={String(pkg.packageId)}
+              itemText={pkg.packageName}
+            >
+              {rateHint ? (
+                <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+                  {rateHint}
+                </span>
+              ) : null}
+            </SelectItem>
+          );
+        })}
     </>
   );
 }

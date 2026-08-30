@@ -551,7 +551,7 @@ export default function CalendarPage() {
             </DialogTitle>
             <DialogDescription>
               {selectedEvent?.type === "event"
-                ? `Reservation #${selectedEvent?.id?.replace("RES-", "")}`
+                ? `Reservation #${selectedEvent?.reservationId ?? selectedEvent?.id?.replace("RES-", "").split("-")[0]}`
                 : selectedEvent?.title}
             </DialogDescription>
           </DialogHeader>
@@ -573,6 +573,11 @@ export default function CalendarPage() {
                       weekday: "long", month: "long", day: "numeric", year: "numeric",
                     })}
                   </p>
+                  {selectedEvent.eventDates?.length > 1 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      All reserved days: {selectedEvent.eventDates.join(", ")}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">Time</Label>

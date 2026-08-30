@@ -100,7 +100,7 @@ export async function GET(request, { params }) {
         remarks: d.remarks,
         submittedAt: d.submittedAt,
         eventType: d.booking?.reservation?.eventType || "N/A",
-        eventDate: d.booking?.reservation?.eventDate || null,
+        eventDate: d.eventDate || d.booking?.reservation?.eventDate || null,
       }))
     );
   } catch (error) {

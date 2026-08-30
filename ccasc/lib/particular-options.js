@@ -8,6 +8,8 @@ export const BASKETBALL_OPTIONS = [
   { value: 3, label: "Day w/ Shot Clock", price: 1500, shortLabel: "Day (w/ SC)" },
   { value: 4, label: "Night w/o Shot Clock", price: 1500, shortLabel: "Night (no SC)" },
   { value: 5, label: "Night w/ Shot Clock", price: 2000, shortLabel: "Night (w/ SC)" },
+  { value: 6, label: "Whole Day w/o Shot Clock", price: 2500, shortLabel: "Whole Day (no SC)" },
+  { value: 7, label: "Whole Day w/ Shot Clock", price: 3500, shortLabel: "Whole Day (w/ SC)" },
 ];
 
 /**
@@ -38,7 +40,7 @@ export const BASKETBALL_NAME = "Basketball Game";
 
 export function isBasketballEncodedQuantity(qty) {
   const n = Number(qty);
-  return n >= 2 && n <= 5;
+  return n >= 2 && n <= 7;
 }
 
 /** Read quantity from a particulars map (supports string/number keys). */

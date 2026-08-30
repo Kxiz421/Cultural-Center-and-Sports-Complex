@@ -2,14 +2,24 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { Building2, Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const NAV_ITEMS = [
   { href: "/panel/provincial-agency/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/panel/provincial-agency/calendar", label: "Facility Calendar", icon: Calendar },
-  { href: "/panel/provincial-agency/notifications", label: "Notifications", icon: Bell },
+  { href: "/panel/provincial-agency/notifications", label: "Notifications", icon: Bell, showBadge: true },
   { href: "/panel/provincial-agency/documents", label: "Documents", icon: FileText },
   { href: "/panel/provincial-agency/rescheduling", label: "Rescheduling", icon: CalendarRange },
   { href: "/panel/provincial-agency/history", label: "Booking History", icon: History },
@@ -19,13 +29,18 @@ export default function ProvincialAgencyLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [logoutOpen, setLogoutOpen] = React.useState(false);
+  const { unreadCount } = useUnreadNotificationCount("client");
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.clear();
+    setLogoutOpen(false);
+    toast.success("You have been logged out.");
     router.push("/login");
   };
 
   return (
+    <>
     <div className="flex min-h-screen bg-gray-50">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -65,7 +80,7 @@ export default function ProvincialAgencyLayout({ children }) {
               <Button
                 key={item.href}
                 variant={isActive ? "secondary" : "ghost"}
-                className="w-full justify-start gap-3"
+                className="w-full justify-start gap-3 relative"
                 onClick={() => {
                   router.push(item.href);
                   setSidebarOpen(false);
@@ -73,6 +88,14 @@ export default function ProvincialAgencyLayout({ children }) {
               >
                 <Icon className="size-4" />
                 {item.label}
+                {item.showBadge && unreadCount > 0 && (
+                  <span
+                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                    aria-label={`${unreadCount} unread notifications`}
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </Button>
             );
           })}
@@ -82,7 +105,7 @@ export default function ProvincialAgencyLayout({ children }) {
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-red-600 hover:text-red-700"
-            onClick={handleLogout}
+            onClick={() => setLogoutOpen(true)}
           >
             <LogOut className="size-4" />
             Logout
@@ -108,5 +131,25 @@ export default function ProvincialAgencyLayout({ children }) {
         </main>
       </div>
     </div>
+
+    <Dialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+      <DialogContent className="sm:max-w-md" showCloseButton>
+        <DialogHeader>
+          <DialogTitle>Do you want to log out?</DialogTitle>
+          <DialogDescription>
+            You will need to sign in again to access the provincial agency portal.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => setLogoutOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={confirmLogout}>
+            Log out
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
