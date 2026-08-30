@@ -25,13 +25,22 @@ import {
   sumReservationSummaryLines,
   syncVirtualPackageStateForTimeSlot,
   deriveTimeSlotFromVirtualPackage,
+  resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
+import { TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
+import {
+  getMinEventDate,
+  getMinEventDateKey,
+  isEventDateTooSoon,
+  validateAdvanceBookingDates,
+  MIN_ADVANCE_BOOKING_DAYS,
+} from "@/lib/reservation-advance-booking";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -136,7 +145,7 @@ export default function ClientReservationsPage() {
     setForm((prev) => {
       const updates = { timeSlotId: value };
       if (prev.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-        updates.venueRentalSlot = String(value) === "1" ? "1" : "2";
+        updates.venueRentalSlot = resolveVenueRentalSlot(value, value);
       }
       return { ...prev, ...updates };
     });
@@ -259,7 +268,11 @@ export default function ClientReservationsPage() {
     if (packageId && packageId !== "0" && packageId !== "custom") {
       const selectedPkg = packages.find(p => String(p.packageId) === packageId);
       if (selectedPkg) {
-        setForm(prev => ({ ...prev, packageId, timeSlotId: String(selectedPkg.timeSlotId) }));
+        setForm((prev) => ({
+          ...prev,
+          packageId,
+          timeSlotId: timeSlotAfterPackageChange(prev.timeSlotId, selectedPkg.timeSlotId),
+        }));
         setParticularQuantities({});
         // Sync per-date customizations when package changes and customize mode is active
         if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
@@ -291,7 +304,7 @@ export default function ClientReservationsPage() {
   };
 
   const toggleDate = (dateStr) => {
-    if (!availability[dateStr]?.available) return;
+    if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
     setSelectedDates((prev) => {
       const next = new Set(prev);
       if (next.has(dateStr)) next.delete(dateStr);
@@ -315,7 +328,10 @@ export default function ClientReservationsPage() {
       dateCustomizations[date]?.timeSlotId || form.timeSlotId || "1";
 
     if (selectedPkg && isRegularPackageId(pkgId)) {
-      nextTimeSlotId = String(selectedPkg.timeSlotId || nextTimeSlotId);
+      nextTimeSlotId = timeSlotAfterPackageChange(
+        nextTimeSlotId,
+        selectedPkg.timeSlotId
+      );
     } else if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
       nextTimeSlotId =
         dateCustomizations[date]?.venueRentalSlot ||
@@ -418,6 +434,13 @@ export default function ClientReservationsPage() {
 
     const sortedDates = [...selectedDates].sort();
     const primaryDate = sortedDates[0];
+
+    const advanceCheck = validateAdvanceBookingDates(sortedDates);
+    if (!advanceCheck.valid) {
+      toast.error(advanceCheck.error);
+      submitLockRef.current = false;
+      return;
+    }
 
     let selectedParticulars = [];
     let selectedPackageId = form.packageId || null;
@@ -564,6 +587,7 @@ export default function ClientReservationsPage() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const minEventDate = getMinEventDate();
 
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
@@ -595,9 +619,10 @@ export default function ClientReservationsPage() {
             if (!day) return <div key={`e${i}`} />;
             const isSelected = selectedDates.has(day.key);
             const avail = availability[day.key];
-            const isAvailable = avail?.available && !avail?.isPast;
-            const isBlocked = avail?.blocked || avail?.isPast;
+            const isTooSoon = day.dt < minEventDate || avail?.isTooSoon;
             const isPast = avail?.isPast || day.dt < today;
+            const isAvailable = avail?.available && !isPast && !isTooSoon;
+            const isBlocked = avail?.blocked || isPast || isTooSoon;
 
             return (
               <button
@@ -609,10 +634,16 @@ export default function ClientReservationsPage() {
                   py-2 rounded-md text-sm transition-colors
                   ${isSelected ? "bg-primary text-white font-semibold" : ""}
                   ${isAvailable && !isSelected ? "hover:bg-primary/10 cursor-pointer" : ""}
-                  ${isBlocked || isPast ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
-                  ${!isBlocked && !isPast && !isSelected ? "text-foreground" : ""}
+                  ${isBlocked ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
+                  ${!isBlocked && !isSelected ? "text-foreground" : ""}
                 `}
-                title={isBlocked ? (avail?.reason || "Unavailable") : day.key}
+                title={
+                  isTooSoon
+                    ? `Must be at least ${MIN_ADVANCE_BOOKING_DAYS} days in advance`
+                    : isBlocked
+                      ? avail?.reason || "Unavailable"
+                      : day.key
+                }
               >
                 {day.date}
               </button>
@@ -678,12 +709,15 @@ export default function ClientReservationsPage() {
               <div className="space-y-2">
                 <Label htmlFor="timeslot">Time Slot <span className="text-red-500">*</span></Label>
                 <Select value={form.timeSlotId} onValueChange={handleTimeSlotChange}>
-                  <SelectTrigger id="timeslot">
+                  <SelectTrigger id="timeslot" className="w-full min-w-0">
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Day (8:00 AM - 5:00 PM)</SelectItem>
-                    <SelectItem value="2">Night (5:00 PM - 10:00 PM)</SelectItem>
+                    {TIME_SLOT_OPTIONS.map((slot) => (
+                      <SelectItem key={slot.id} value={slot.value}>
+                        {slot.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -691,10 +725,10 @@ export default function ClientReservationsPage() {
               <div className="space-y-2">
                 <Label htmlFor="package">Package</Label>
                 <Select value={form.packageId} onValueChange={handlePackageSelect}>
-                  <SelectTrigger id="package">
+                  <SelectTrigger id="package" className="w-full min-w-0">
                     <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                     <SelectItem value="0">None</SelectItem>
                     <SelectItem value="custom">Custom — Pick Items</SelectItem>
                     <ReservationPackageSelectItems packages={packages} particulars={particulars} />
@@ -705,7 +739,10 @@ export default function ClientReservationsPage() {
 {/* Date Picker - Calendar Grid */}
             <div className="space-y-2">
               <Label>Select Dates <span className="text-red-500">*</span></Label>
-              <p className="text-xs text-muted-foreground">Click on available dates to select them. Blocked dates are unavailable.</p>
+              <p className="text-xs text-muted-foreground">
+                Events must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest date:{" "}
+                <span className="font-medium">{getMinEventDateKey()}</span>. Blocked dates are unavailable.
+              </p>
               {form.venueId ? renderCalendar() : (
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
@@ -906,9 +943,9 @@ export default function ClientReservationsPage() {
                       {line.date && (
                         <p className="text-xs font-medium text-muted-foreground">{line.date}</p>
                       )}
-                      <div className="flex justify-between pl-2">
-                        <span>{line.label}</span>
-                        <span className="tabular-nums font-medium">
+                      <div className="flex items-start justify-between gap-3 pl-2">
+                        <span className="min-w-0 wrap-break-word">{line.label}</span>
+                        <span className="shrink-0 tabular-nums font-medium">
                           ₱{line.amount.toLocaleString()}
                         </span>
                       </div>
@@ -966,10 +1003,10 @@ export default function ClientReservationsPage() {
                       value={cust.packageId}
                       onValueChange={(v) => handleDatePackageSelect(date, v)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full min-w-0">
                         <SelectValue placeholder="Select package" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         <ReservationPackageSelectItems packages={packages} particulars={particulars} />

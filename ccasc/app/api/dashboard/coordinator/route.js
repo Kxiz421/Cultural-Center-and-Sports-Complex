@@ -16,8 +16,10 @@ export async function GET() {
     const todayTransactions = await prisma.transaction.findMany({
       where: {
         paymentDate: { gte: startOfDay },
-        booking: {
-          venueId: { in: CULTURAL_VENUE_IDS },
+        payment: {
+          booking: {
+            reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
+          },
         },
       },
       include: { payment: { select: { amountPaid: true } } },
@@ -30,7 +32,7 @@ export async function GET() {
     const allPayments = await prisma.payment.findMany({
       where: {
         booking: {
-          venueId: { in: CULTURAL_VENUE_IDS },
+          reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
         },
       },
       select: { amountPaid: true },
@@ -114,8 +116,10 @@ export async function GET() {
     const transactions = await prisma.transaction.findMany({
       where: {
         paymentDate: { gte: twelveMonthsAgo },
-        booking: {
-          venueId: { in: CULTURAL_VENUE_IDS },
+        payment: {
+          booking: {
+            reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
+          },
         },
       },
       include: {

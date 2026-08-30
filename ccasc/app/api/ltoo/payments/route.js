@@ -2,10 +2,49 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { formatDbDate, roundMoney } from "@/lib/utils";
-import { computePaymentBreakdown, getPaymentTypeMax, isPaymentTypeAllowed, isFixedPaymentAmount } from "@/lib/payment-utils";
+import {
+  computePaymentBreakdown,
+  getPaymentTypeMax,
+  getPaymentTypeMin,
+  isPaymentTypeAllowed,
+  isFixedPaymentAmount,
+  getPaymentTypeLabel,
+} from "@/lib/payment-utils";
+import {
+  ensurePendingDeposit,
+  recordDepositPayment,
+} from "@/lib/deposit-utils";
+import { createClientNotification } from "@/lib/coordinator-notifications";
+import { getPackageBillingRate } from "@/lib/reservation-package-select";
+import { getBasketballPrice } from "@/lib/particular-options";
 
 export const dynamic = "force-dynamic";
 
+function getBookingDeposit(bookings) {
+  for (const b of bookings || []) {
+    if (b.deposit) return b.deposit;
+  }
+  return null;
+}
+
+const bookingDepositInclude = {
+  payments: { select: { amountPaid: true } },
+  deposit: { include: { status: true } },
+};
+
+const PACKAGE_RATE_SELECT = {
+  packageId: true,
+  packageName: true,
+  dayRate: true,
+  nightRate: true,
+  ledWallDayRate: true,
+  ledWallNightRate: true,
+  timeSlotId: true,
+};
+
+function fetchPackageCatalog() {
+  return prisma.package.findMany({ select: PACKAGE_RATE_SELECT });
+}
 
 export async function GET(request) {
   try {
@@ -16,10 +55,12 @@ export async function GET(request) {
       // Fetch reservations without client include to avoid orphaned FK errors
       const reservations = await prisma.reservation.findMany({
         where: {
-          reservationStatus: { notIn: ["Cancelled", "Confirmed"] },
+          reservationStatus: { notIn: ["Cancelled"] },
         },
         include: {
-          package: { select: { packageName: true, dayRate: true, nightRate: true } },
+          package: {
+            select: PACKAGE_RATE_SELECT,
+          },
           venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
           additionalDates: { select: { eventDate: true } },
@@ -31,11 +72,7 @@ export async function GET(request) {
             },
           },
           bookings: {
-            include: {
-              payments: {
-                select: { amountPaid: true },
-              },
-            },
+            include: bookingDepositInclude,
           },
         },
         orderBy: { reservationId: "desc" },
@@ -48,6 +85,7 @@ export async function GET(request) {
         select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { clientRoleId: true } } },
       });
       const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+      const packageCatalog = await fetchPackageCatalog();
 
       const mapped = reservations
         .filter((r) => clientMap[r.clientId] !== undefined)
@@ -60,20 +98,16 @@ export async function GET(request) {
           );
           // Calculate total amount from reservation
           const numDays = 1 + r.additionalDates.length;
-          const pkgRate = r.package?.dayRate
-            ? Number(r.package.dayRate)
-            : r.package?.nightRate
-              ? Number(r.package.nightRate)
-              : null;
+          const pkgRate = r.package
+            ? getPackageBillingRate(r.package, r.timeSlotId, packageCatalog)
+            : 0;
           const pkgTotal = pkgRate ? pkgRate * numDays : 0;
           const particularsTotal = r.reservedParticulars.reduce((sum, rp) => {
             let unitCost = rp.particular?.inventory?.unitCost
               ? Number(rp.particular.inventory.unitCost)
               : 0;
-            // Special pricing for Basketball Game (encoded quantity = option selector)
             if (rp.particular?.particularName === "Basketball Game") {
-              const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
-              return sum + (basketballPrices[rp.quantity] || unitCost);
+              return sum + (getBasketballPrice(rp.quantity) || unitCost);
             }
             return sum + unitCost * rp.quantity;
           }, 0);
@@ -83,7 +117,11 @@ export async function GET(request) {
             calculatedBase > 0
               ? roundMoney(Math.max(storedBase, calculatedBase))
               : storedBase;
-          const breakdown = computePaymentBreakdown(totalAmount, totalPaid);
+          const breakdown = computePaymentBreakdown(
+            totalAmount,
+            totalPaid,
+            getBookingDeposit(r.bookings)
+          );
 
           return {
             id: r.reservationId,
@@ -92,11 +130,11 @@ export async function GET(request) {
             clientName: `${client.firstName} ${client.lastName}`,
             clientType: client.clientRole?.clientRoleId === "PROV" ? "provincial-agency" : "client",
             eventType: r.eventType,
-            eventDate: r.eventDate ? new Date(r.eventDate).toISOString().split("T")[0] : "",
+            eventDate: r.eventDate ? formatDbDate(r.eventDate) : "",
             eventDates: [
-              r.eventDate.toISOString().split("T")[0],
-              ...r.additionalDates.map((ad) => ad.eventDate.toISOString().split("T")[0]),
-            ],
+              r.eventDate ? formatDbDate(r.eventDate) : null,
+              ...r.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
+            ].filter(Boolean),
             venue: r.venue?.venue,
             timeSlot: r.timeSlot ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}` : "",
             packageName: r.package?.packageName,
@@ -163,7 +201,7 @@ export async function GET(request) {
         };
       }
       if (reservationId && Number.isFinite(reservationId)) {
-        where.booking = { reservationId };
+        where.payment = { booking: { reservationId } };
       }
 
       const transactions = await prisma.transaction.findMany({
@@ -172,17 +210,20 @@ export async function GET(request) {
           payment: {
             include: {
               status: { select: { status: true } },
-            },
-          },
-          booking: {
-            include: {
-              reservation: {
+              booking: {
                 include: {
-                  venue: { select: { venue: true } },
-                  timeSlot: { select: { startTime: true, endTime: true } },
+                  reservation: {
+                    include: {
+                      venue: { select: { venue: true } },
+                      timeSlot: { select: { startTime: true, endTime: true } },
+                    },
+                  },
                 },
               },
             },
+          },
+          deposit: {
+            include: { status: { select: { status: true } } },
           },
         },
         orderBy: { paymentDate: "desc" },
@@ -191,7 +232,7 @@ export async function GET(request) {
       const clientIds = [
         ...new Set(
           transactions
-            .map((t) => t.booking?.reservation?.clientId)
+            .map((t) => t.payment?.booking?.reservation?.clientId)
             .filter((id) => id != null)
         ),
       ];
@@ -210,7 +251,7 @@ export async function GET(request) {
       const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
       const mapped = transactions.map((t) => {
-        const reservation = t.booking?.reservation;
+        const reservation = t.payment?.booking?.reservation;
         const client = reservation ? clientMap[reservation.clientId] : null;
         const notes = reservation?.notes || "";
         const walkInMatch = notes.match(/Client:\s*([^,]+)/);
@@ -225,11 +266,18 @@ export async function GET(request) {
         return {
           transactionId: t.transactionId,
           paymentId: t.paymentId,
-          bookingId: t.bookingId,
+          depositId: t.depositId ?? null,
+          bookingId: t.payment?.bookingId ?? null,
           reservationId: reservation?.reservationId ?? null,
-          orNumber: t.receiptNumber,
+          orNumber: t.receiptNumber || null,
           amountPaid: roundMoney(t.payment?.amountPaid ?? 0),
           paymentStatus: t.payment?.status?.status || "Partially Paid",
+          depositStatus: t.deposit?.status?.status ?? null,
+          depositRequiredAmount: t.deposit
+            ? roundMoney(t.deposit.requiredAmount)
+            : null,
+          depositAmountPaid: t.deposit ? roundMoney(t.deposit.amountPaid) : null,
+          depositNotes: t.deposit?.notes ?? null,
           clientName,
           clientType,
           activityName: reservation?.eventType || "",
@@ -315,16 +363,15 @@ export async function POST(request) {
       activityName,
       activityDate,
       amountPaid,
-      orNumber,
       selectedBookingId,
       paymentType,
       performedBy,
       performedByName,
     } = body;
 
-    if (!clientName || !amountPaid || !orNumber) {
+    if (!clientName || !amountPaid) {
       return NextResponse.json(
-        { error: "Client, payment amount, and OR number are required" },
+        { error: "Client and payment amount are required" },
         { status: 400 }
       );
     }
@@ -340,13 +387,28 @@ export async function POST(request) {
     let reservationId = selectedBookingId ? parseInt(selectedBookingId) : null;
     let bookingId = null;
     let statusToUse = clientType === "provincial" ? "Fully Paid" : "Partially Paid";
+    let notifyClientId = null;
+    let notifyEventType = activityName || "";
+    let notifyEventDate = activityDate || "";
+    let notifyVenue = "";
+    let depositRequiredAmount = 0;
+    let resolvedPaymentType =
+      paymentType === "deposit" ||
+      paymentType === "downpayment" ||
+      paymentType === "both" ||
+      paymentType === "balance"
+        ? paymentType
+        : "balance";
 
     // If recording against an existing reservation, validate the amount server-side.
     if (reservationId) {
       const reservation = await prisma.reservation.findFirst({
         where: { reservationId },
         include: {
-          package: { select: { packageName: true, dayRate: true, nightRate: true } },
+          package: {
+            select: PACKAGE_RATE_SELECT,
+          },
+          venue: { select: { venue: true } },
           timeSlot: { select: { startTime: true, endTime: true } },
           additionalDates: { select: { eventDate: true } },
           reservedParticulars: {
@@ -357,9 +419,7 @@ export async function POST(request) {
             },
           },
           bookings: {
-            include: {
-              payments: { select: { amountPaid: true } },
-            },
+            include: bookingDepositInclude,
           },
         },
       });
@@ -373,19 +433,17 @@ export async function POST(request) {
 
       // Recompute the total amount owed for this reservation.
       const numDays = 1 + reservation.additionalDates.length;
-      const pkgRate = reservation.package?.dayRate
-        ? Number(reservation.package.dayRate)
-        : reservation.package?.nightRate
-          ? Number(reservation.package.nightRate)
-          : null;
+      const packageCatalog = await fetchPackageCatalog();
+      const pkgRate = reservation.package
+        ? getPackageBillingRate(reservation.package, reservation.timeSlotId, packageCatalog)
+        : 0;
       const pkgTotal = pkgRate ? pkgRate * numDays : 0;
       const particularsTotal = reservation.reservedParticulars.reduce((sum, rp) => {
         let unitCost = rp.particular?.inventory?.unitCost
           ? Number(rp.particular.inventory.unitCost)
           : 0;
         if (rp.particular?.particularName === "Basketball Game") {
-          const basketballPrices = { 2: 1000, 3: 1500, 4: 1500, 5: 2000 };
-          return sum + (basketballPrices[rp.quantity] || unitCost);
+          return sum + (getBasketballPrice(rp.quantity) || unitCost);
         }
         return sum + unitCost * rp.quantity;
       }, 0);
@@ -403,11 +461,19 @@ export async function POST(request) {
           0
         ) || 0;
 
-      const breakdown = computePaymentBreakdown(totalAmt, totalPaid);
+      const breakdown = computePaymentBreakdown(
+        totalAmt,
+        totalPaid,
+        getBookingDeposit(reservation.bookings)
+      );
+      depositRequiredAmount = breakdown.requiredDeposit;
       const remainingBalance = breakdown.remainingBalance;
 
       const normalizedPaymentType =
-        paymentType === "deposit" || paymentType === "downpayment" || paymentType === "balance"
+        paymentType === "deposit" ||
+        paymentType === "downpayment" ||
+        paymentType === "both" ||
+        paymentType === "balance"
           ? paymentType
           : "balance";
 
@@ -415,6 +481,7 @@ export async function POST(request) {
         const label =
           normalizedPaymentType === "deposit" ? "10% deposit"
           : normalizedPaymentType === "downpayment" ? "50% down payment"
+          : normalizedPaymentType === "both" ? "50% down + 10% deposit"
           : "remaining balance";
         return NextResponse.json(
           { error: `The ${label} has already been recorded or is not available yet.` },
@@ -436,9 +503,24 @@ export async function POST(request) {
         const label =
           normalizedPaymentType === "deposit" ? "the 10% deposit"
           : normalizedPaymentType === "downpayment" ? "the 50% down payment"
+          : normalizedPaymentType === "both" ? "the 50% down + 10% deposit"
           : "the remaining balance";
         return NextResponse.json(
           { error: `Amount cannot exceed ${typeMax.toFixed(2)} for ${label}` },
+          { status: 400 }
+        );
+      }
+
+      const typeMin = getPaymentTypeMin(breakdown, normalizedPaymentType);
+      if (
+        normalizedPaymentType === "balance" &&
+        typeMin > 0 &&
+        roundMoney(amount) < typeMin
+      ) {
+        return NextResponse.json(
+          {
+            error: `Minimum payment for remaining balance is ${typeMin.toFixed(2)}. Enter at least this amount (or pay the full remaining balance if it is lower than ₱500).`,
+          },
           { status: 400 }
         );
       }
@@ -447,6 +529,7 @@ export async function POST(request) {
         const label =
           normalizedPaymentType === "deposit" ? "10% deposit"
           : normalizedPaymentType === "downpayment" ? "50% down payment"
+          : normalizedPaymentType === "both" ? "50% down + 10% deposit"
           : "remaining balance";
         return NextResponse.json(
           { error: `You must pay the full ${label} amount of ${typeMax.toFixed(2)}` },
@@ -456,9 +539,32 @@ export async function POST(request) {
 
       // Derive the stored status from the cumulative amount paid after this payment.
       if (clientType !== "provincial") {
-        const afterPayment = computePaymentBreakdown(totalAmt, totalPaid + amount);
+        let depositAfter = getBookingDeposit(reservation.bookings);
+        if (
+          normalizedPaymentType === "deposit" ||
+          normalizedPaymentType === "both"
+        ) {
+          depositAfter = {
+            amountPaid: breakdown.requiredDeposit,
+            requiredAmount: breakdown.requiredDeposit,
+            status: { status: "Held" },
+          };
+        }
+        const afterPayment = computePaymentBreakdown(
+          totalAmt,
+          totalPaid + amount,
+          depositAfter
+        );
         statusToUse = afterPayment.balanceSettled ? "Fully Paid" : "Partially Paid";
       }
+
+      notifyClientId = reservation.clientId;
+      notifyEventType = reservation.eventType || activityName || "";
+      notifyEventDate = reservation.eventDate
+        ? formatDbDate(reservation.eventDate)
+        : (activityDate || "");
+      notifyVenue = reservation.venue?.venue || "";
+      resolvedPaymentType = normalizedPaymentType;
     }
 
     // If no reservation selected, create one
@@ -485,6 +591,9 @@ export async function POST(request) {
       });
 
       reservationId = reservation.reservationId;
+      notifyClientId = tempClient.clientId;
+      notifyEventType = activityName || "Payment Recording";
+      notifyEventDate = activityDate || "";
     }
 
     // Find or create a booking for this reservation
@@ -496,7 +605,6 @@ export async function POST(request) {
       existingBooking = await prisma.booking.create({
         data: {
           reservationId: reservationId,
-          venueId: 1,
           bookingStatusId: statusToUse === "Fully Paid" ? 2 : 1, // Booked or Pending
           confirmationDate: new Date(),
           staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
@@ -534,15 +642,50 @@ export async function POST(request) {
       },
     });
 
-    // Create transaction (OR record)
+    const staffIdNum = performedBy
+      ? parseInt(String(performedBy).replace("STF-", ""), 10) || null
+      : null;
+
+    let linkedDeposit = null;
+    if (depositRequiredAmount > 0) {
+      linkedDeposit = await ensurePendingDeposit(prisma, {
+        bookingId,
+        requiredAmount: depositRequiredAmount,
+        staffId: staffIdNum,
+      });
+    }
+
+    if (
+      depositRequiredAmount > 0 &&
+      (resolvedPaymentType === "deposit" || resolvedPaymentType === "both")
+    ) {
+      linkedDeposit = await recordDepositPayment(prisma, {
+        bookingId,
+        requiredAmount: depositRequiredAmount,
+        paymentId: payment.paymentId,
+        staffId: staffIdNum,
+        notes:
+          resolvedPaymentType === "both"
+            ? "Recorded with combined 50% down + 10% deposit payment"
+            : "Recorded as 10% deposit payment",
+      });
+    }
+
+    // Create transaction record (no OR number), linked to Deposit when applicable
     await prisma.transaction.create({
       data: {
-        receiptNumber: orNumber,
+        receiptNumber: "", // OR numbers no longer used
         paymentDate: new Date(),
         recordedBy: performedByName || "LTOO",
-        bookingId: bookingId,
         paymentId: payment.paymentId,
+        depositId: linkedDeposit?.depositId ?? null,
       },
+    });
+
+    const paymentTypeLabel = getPaymentTypeLabel(resolvedPaymentType);
+    const formattedAmount = Number(amount).toLocaleString("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
 
     // Create audit log
@@ -553,9 +696,27 @@ export async function POST(request) {
         targetName: clientName,
         performedById: performedBy || "LTOO",
         performedByName: performedByName || "Local Treasury Operations Officer",
-        details: `Payment of ${amount} recorded. OR: ${orNumber}. Status: ${statusToUse}`,
+        details: `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
       },
     });
+
+    // Notify the client about the recorded payment
+    if (notifyClientId) {
+      const reservationBits = [
+        notifyEventType ? `"${notifyEventType}"` : null,
+        notifyEventDate ? `on ${notifyEventDate}` : null,
+        notifyVenue ? `at ${notifyVenue}` : null,
+        reservationId ? `(Reservation #${reservationId})` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      await createClientNotification({
+        clientId: notifyClientId,
+        type: "payment",
+        message: `A payment of ₱${formattedAmount} was recorded for your reservation${reservationBits ? ` ${reservationBits}` : ""}. Payment type: ${paymentTypeLabel}.`,
+      });
+    }
 
     return NextResponse.json({ success: true, paymentId: payment.paymentId });
   } catch (error) {

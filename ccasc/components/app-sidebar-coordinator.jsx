@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
+import { useCoordinatorPendingCounts } from "@/hooks/use-coordinator-pending-counts";
 
 const navMain = [
   {
@@ -51,6 +53,7 @@ const navMain = [
     title: "Notifications",
     url: "/panel/program-coordinator/notifications",
     icon: Bell,
+    showBadge: true,
   },
   {
     title: "Report Generation",
@@ -60,6 +63,24 @@ const navMain = [
 ];
 
 export function AppSidebarCoordinator(props) {
+  const { unreadCount } = useUnreadNotificationCount("staff", {
+    scope: "coordinator",
+  });
+  const { pendingBookings, pendingReschedules } = useCoordinatorPendingCounts();
+
+  const navItems = navMain.map((item) => {
+    if (item.url === "/panel/program-coordinator/bookings") {
+      return { ...item, showBadge: true, badgeCount: pendingBookings };
+    }
+    if (item.url === "/panel/program-coordinator/rescheduling") {
+      return { ...item, showBadge: true, badgeCount: pendingReschedules };
+    }
+    if (item.url === "/panel/program-coordinator/notifications") {
+      return { ...item, showBadge: true, badgeCount: unreadCount };
+    }
+    return item;
+  });
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -77,7 +98,7 @@ export function AppSidebarCoordinator(props) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUserCCASC />

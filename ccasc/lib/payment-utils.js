@@ -1,4 +1,5 @@
 import { roundMoney } from "@/lib/utils";
+import { isDepositRecordMet } from "@/lib/deposit-utils";
 
 /** 10% deposit portion satisfied (can be paid before or after 50% down). */
 export function isDepositPortionMet(paid, requiredDownPayment, requiredDeposit) {
@@ -14,8 +15,12 @@ export function isDepositPortionMet(paid, requiredDownPayment, requiredDeposit) 
  * Payment rules: 50% down + 10% deposit (both % of base); 10% deposit is on top
  * so total payable = base * 1.1. Down and deposit can be recorded in either order,
  * each as a single full installment (not partial).
+ *
+ * @param {number} totalAmount
+ * @param {number} totalPaid
+ * @param {{ amountPaid?: number, requiredAmount?: number, status?: { status?: string } }|null} [depositRecord]
  */
-export function computePaymentBreakdown(totalAmount, totalPaid) {
+export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = null) {
   const base = roundMoney(totalAmount || 0);
   const paid = roundMoney(totalPaid || 0);
 
@@ -43,7 +48,9 @@ export function computePaymentBreakdown(totalAmount, totalPaid) {
   const remainingBalance = roundMoney(Math.max(0, totalPayable - paid));
   const balanceSettled = remainingBalance <= 0;
   const downPaymentMet = paid >= requiredDownPayment;
-  const depositMet = isDepositPortionMet(paid, requiredDownPayment, requiredDeposit);
+  const depositMet = isDepositRecordMet(depositRecord)
+    ? true
+    : isDepositPortionMet(paid, requiredDownPayment, requiredDeposit);
   const requirementsMet = downPaymentMet && depositMet;
 
   let status = "Pending";
@@ -82,6 +89,11 @@ export function getRequiredPaymentAmount(breakdown, paymentType) {
     if (breakdown.depositMet) return 0;
     return roundMoney(breakdown.requiredDeposit);
   }
+  // Combined 50% down + 10% deposit in one installment (only when both are still unpaid).
+  if (paymentType === "both") {
+    if (breakdown.downPaymentMet || breakdown.depositMet) return 0;
+    return roundMoney(breakdown.requiredTotal);
+  }
   if (paymentType === "balance") {
     if (!breakdown.requirementsMet) return 0;
     return roundMoney(breakdown.remainingBalance);
@@ -112,6 +124,9 @@ export function suggestNextPayment(breakdown) {
   };
 }
 
+/** Minimum accepted amount when recording remaining balance (₱500, or full remaining if lower). */
+export const BALANCE_PAYMENT_MINIMUM = 500;
+
 /** Max allowed amount for a payment type (full installment, capped by remaining balance). */
 export function getPaymentTypeMax(breakdown, paymentType) {
   const remaining = roundMoney(breakdown.remainingBalance);
@@ -120,6 +135,26 @@ export function getPaymentTypeMax(breakdown, paymentType) {
   const required = getRequiredPaymentAmount(breakdown, paymentType);
   if (required <= 0) return 0;
   return roundMoney(Math.min(required, remaining));
+}
+
+/**
+ * Minimum allowed amount for a payment type.
+ * Remaining balance: ₱500 minimum (or the full remaining if it is less than ₱500).
+ * Fixed installments: same as the required full amount.
+ */
+export function getPaymentTypeMin(breakdown, paymentType) {
+  const max = getPaymentTypeMax(breakdown, paymentType);
+  if (max <= 0) return 0;
+
+  if (paymentType === "balance") {
+    return roundMoney(Math.min(BALANCE_PAYMENT_MINIMUM, max));
+  }
+
+  if (isFixedPaymentAmount(paymentType)) {
+    return max;
+  }
+
+  return 0;
 }
 
 /** Whether a payment type can still be recorded for this reservation. */
@@ -141,6 +176,19 @@ export function getPaymentTypeBlockReason(breakdown, paymentType) {
     return null;
   }
 
+  if (paymentType === "both") {
+    if (breakdown.downPaymentMet && breakdown.depositMet) {
+      return "50% down payment and 10% deposit already recorded";
+    }
+    if (breakdown.downPaymentMet) {
+      return "50% down payment already recorded — use 10% deposit instead";
+    }
+    if (breakdown.depositMet) {
+      return "10% deposit already recorded — use 50% down payment instead";
+    }
+    return null;
+  }
+
   if (paymentType === "balance") {
     if (!breakdown.requirementsMet) {
       return "Record 50% down payment and 10% deposit before paying the remaining balance";
@@ -151,7 +199,20 @@ export function getPaymentTypeBlockReason(breakdown, paymentType) {
   return "Invalid payment type";
 }
 
-/** Down payment and deposit must be recorded as a fixed full installment. */
+/** Down payment, deposit, and combined initial payment must be a fixed full installment. */
 export function isFixedPaymentAmount(paymentType) {
-  return paymentType === "downpayment" || paymentType === "deposit";
+  return (
+    paymentType === "downpayment" ||
+    paymentType === "deposit" ||
+    paymentType === "both"
+  );
+}
+
+/** Human-readable label for a payment type. */
+export function getPaymentTypeLabel(paymentType) {
+  if (paymentType === "deposit") return "10% deposit";
+  if (paymentType === "downpayment") return "50% down payment";
+  if (paymentType === "both") return "50% down + 10% deposit";
+  if (paymentType === "balance") return "remaining balance";
+  return "payment";
 }

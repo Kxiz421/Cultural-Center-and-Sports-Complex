@@ -1,71 +1,158 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarRange, Send } from "lucide-react";
 import { toast } from "sonner";
+import {
+  getMinEventDateKey,
+  MIN_ADVANCE_BOOKING_DAYS,
+} from "@/lib/reservation-advance-booking";
+import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
 
-export default function ReschedulingPage() {
+export default function ProvincialReschedulingPage() {
+  const [reservations, setReservations] = React.useState([]);
   const [requests, setRequests] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [reservationId, setReservationId] = React.useState("");
-  const [requestedDate, setRequestedDate] = React.useState("");
+  const [selectedReservation, setSelectedReservation] = React.useState("");
+  const [dateDrafts, setDateDrafts] = React.useState({});
   const [reason, setReason] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const minDate = getMinEventDateKey();
 
-  React.useEffect(() => {
-    fetchRequests();
-  }, []);
+  const selected = React.useMemo(
+    () => reservations.find((r) => r.id === selectedReservation) || null,
+    [reservations, selectedReservation]
+  );
 
-  async function fetchRequests() {
+  const eventEntries = React.useMemo(() => {
+    if (!selected) return [];
+    if (Array.isArray(selected.eventDateEntries) && selected.eventDateEntries.length > 0) {
+      return selected.eventDateEntries;
+    }
+    const dates = selected.eventDates?.length
+      ? selected.eventDates
+      : selected.eventDate
+        ? [selected.eventDate]
+        : [];
+    return dates.map((date, idx) => ({
+      date,
+      reservationDateId: idx === 0 ? null : undefined,
+      isPrimary: idx === 0,
+    }));
+  }, [selected]);
+
+  async function loadAll() {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) return;
+    const clientId = userId.replace("CLT-", "");
     try {
-      const userId = localStorage.getItem("user_id");
-      if (!userId) return;
-      const clientId = userId.replace("CLT-", "");
-      const res = await fetch(`/api/reservations?clientId=${clientId}`);
-      const data = await res.json();
-      setRequests(Array.isArray(data) ? data : []);
+      const [resRes, reqRes] = await Promise.all([
+        fetch(`/api/reservations?clientId=${clientId}`),
+        fetch(`/api/rescheduling?clientId=${clientId}`),
+      ]);
+      const resData = await resRes.json();
+      const reqData = await reqRes.json();
+      setReservations(Array.isArray(resData) ? resData : []);
+      setRequests(Array.isArray(reqData) ? reqData : []);
     } catch (err) {
-      console.error("Failed to load reservations:", err);
+      console.error("Failed to load rescheduling data:", err);
     } finally {
       setLoading(false);
     }
   }
 
+  React.useEffect(() => {
+    loadAll();
+  }, []);
+
+  React.useEffect(() => {
+    if (!selected) {
+      setDateDrafts({});
+      return;
+    }
+    const next = {};
+    for (const entry of eventEntries) {
+      const key = entry.isPrimary
+        ? "primary"
+        : `rd-${entry.reservationDateId ?? entry.date}`;
+      next[key] = entry.date;
+    }
+    setDateDrafts(next);
+  }, [selectedReservation, eventEntries]);
+
+  function entryKey(entry) {
+    return entry.isPrimary
+      ? "primary"
+      : `rd-${entry.reservationDateId ?? entry.date}`;
+  }
+
+  const handleDateDraftChange = (key, dateStr) => {
+    setDateDrafts((prev) => ({ ...prev, [key]: dateStr }));
+  };
+
   async function handleSubmitRequest(e) {
     e.preventDefault();
-    if (!reservationId || !requestedDate || !reason) {
-      toast.error("Please fill in all fields");
+    if (!selected || !reason.trim()) {
+      toast.error("Please select a reservation and provide a reason");
+      return;
+    }
+
+    const dateChanges = [];
+    for (const entry of eventEntries) {
+      const key = entryKey(entry);
+      const requestedDate = dateDrafts[key];
+      if (!requestedDate || requestedDate === entry.date) continue;
+      dateChanges.push({
+        originalDate: entry.date,
+        requestedDate,
+        reservationDateId: entry.isPrimary ? null : entry.reservationDateId ?? null,
+        isPrimary: Boolean(entry.isPrimary),
+      });
+    }
+
+    if (dateChanges.length === 0) {
+      toast.error("Change at least one event date before submitting");
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/rescheduling', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/rescheduling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          reservationId: parseInt(reservationId.replace("RES-", "")),
-          requestedDate,
-          reason
-        })
+          reservationId: parseInt(String(selected.id).replace("RES-", ""), 10),
+          reason: reason.trim(),
+          dateChanges,
+        }),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Failed to submit request');
+        const msg = err.error || "Failed to submit request";
+        if (err.conflictDates?.length) {
+          const next = { ...dateDrafts };
+          for (const entry of eventEntries) {
+            const key = entryKey(entry);
+            if (err.conflictDates.includes(dateDrafts[key])) {
+              next[key] = entry.date;
+            }
+          }
+          setDateDrafts(next);
+        }
+        throw new Error(msg);
       }
 
       toast.success("Reschedule request submitted successfully");
-      setReservationId("");
-      setRequestedDate("");
+      setSelectedReservation("");
       setReason("");
-      fetchRequests();
+      setDateDrafts({});
+      await loadAll();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -73,55 +160,82 @@ export default function ReschedulingPage() {
     }
   }
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Rescheduling</h1>
         <p className="text-muted-foreground text-sm">
-          Submit a request to change your event date, time, or particulars
+          Change event dates using the same availability calendar as reservations. New dates
+          must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today (earliest: {minDate}).
         </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Submit Reschedule Request</CardTitle>
+          <CardDescription>
+            Select a reservation, then pick new dates from the calendar for each scheduled
+            event day.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmitRequest} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reservationId">Reservation ID</Label>
-              <Input
-                id="reservationId"
-                type="number"
-                value={reservationId}
-                onChange={(e) => setReservationId(e.target.value)}
-                placeholder="Enter your reservation ID"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="requestedDate">New Event Date</Label>
-              <Input
-                id="requestedDate"
-                type="date"
-                value={requestedDate}
-                onChange={(e) => setRequestedDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="reason">Reason for Rescheduling</Label>
-              <Textarea
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Explain why you need to reschedule"
-                rows={3}
-              />
-            </div>
-            <Button type="submit" disabled={submitting}>
-              <Send className="mr-2 size-4" />
-              {submitting ? "Submitting..." : "Submit Request"}
-            </Button>
-          </form>
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : (
+            <form onSubmit={handleSubmitRequest} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reservationId">Reservation</Label>
+                <select
+                  id="reservationId"
+                  value={selectedReservation}
+                  onChange={(e) => setSelectedReservation(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select a reservation</option>
+                  {reservations
+                    .filter((r) => r.eventDate >= todayKey)
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.eventType} — {(r.eventDates || [r.eventDate]).join(", ")}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {selected && (
+                <RescheduleEventDatesPanel
+                  reservation={selected}
+                  eventEntries={eventEntries}
+                  dateDrafts={dateDrafts}
+                  onDateDraftChange={handleDateDraftChange}
+                  entryKey={entryKey}
+                />
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">
+                  Reason for Rescheduling <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  id="reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Explain why you need to reschedule"
+                  rows={3}
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={submitting || !selected || !reason.trim()}
+              >
+                <Send className="mr-2 size-4" />
+                {submitting ? "Submitting..." : "Submit Request"}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
 
@@ -141,23 +255,17 @@ export default function ReschedulingPage() {
                 <CardContent className="flex items-start justify-between p-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">Reservation #{req.reservationId}</span>
-                      <Badge
-                        variant={req.status === "Approved" ? "outline" : req.status === "Declined" ? "secondary" : "outline"}
-                        className={
-                          req.status === "Approved"
-                            ? "text-green-600 border-green-300"
-                            : req.status === "Declined"
-                              ? "text-red-600"
-                              : "text-yellow-600 border-yellow-300 bg-yellow-50"
-                        }
-                      >
-                        {req.status || "Pending"}
-                      </Badge>
+                      <span className="font-medium text-sm">
+                        {req.eventType || `Reservation #${req.reservationId}`}
+                      </span>
+                      <Badge variant="outline">{req.status || "Pending"}</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Requested Date: {req.requestedDate ? new Date(req.requestedDate).toLocaleDateString() : "—"}
-                    </p>
+                    {(req.dateChanges || []).map((c, idx) => (
+                      <p key={idx} className="text-xs text-muted-foreground">
+                        {c.originalDate} → {c.requestedDate}
+                        {c.isPrimary ? " (primary)" : ""}
+                      </p>
+                    ))}
                     {req.reason && (
                       <p className="text-xs text-muted-foreground">Reason: {req.reason}</p>
                     )}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { formatDbDate } from "@/lib/utils";
+import { documentEventDateKey } from "@/lib/document-event-date";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,7 @@ export async function GET() {
                     clientRole: { select: { clientRoleId: true } },
                   },
                 },
+                venue: { select: { venue: true } },
               },
             },
           },
@@ -56,6 +59,12 @@ export async function GET() {
         clientType = "provincial";
       }
 
+      const reservation = d.booking?.reservation;
+      const eventDate = documentEventDateKey(
+        d,
+        formatDbDate(reservation?.eventDate)
+      );
+
       return {
         id: d.documentId,
         documentId: d.documentId,
@@ -66,6 +75,9 @@ export async function GET() {
         filePath: d.filePath,
         remarks: d.remarks,
         submittedAt: d.submittedAt,
+        eventDate,
+        eventType: reservation?.eventType || null,
+        venue: reservation?.venue?.venue || null,
       };
     });
 

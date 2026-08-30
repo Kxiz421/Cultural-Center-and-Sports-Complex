@@ -6,6 +6,7 @@ import {
   isBasketballEncodedQuantity,
   formatFormParticularLine,
 } from "@/lib/particular-options";
+import { TIME_SLOT, isDaySlot, isWholeDaySlot } from "@/lib/time-slots";
 
 export const VIRTUAL_PACKAGE_IDS = {
   BASKETBALL: "basketball",
@@ -33,54 +34,127 @@ export function packageIncludesLedWall(pkg) {
   return inclusions.some((inc) => /led\s*wall/i.test(inc.itemName || ""));
 }
 
-/**
- * Resolve the billable rate for a package at a given time slot.
- * LED Wall packages store rates in ledWallDayRate/ledWallNightRate; fall back to day/night rates.
- */
-export function getPackageSlotRate(pkg, timeSlotId) {
-  if (!pkg) return 0;
-  const isDay = String(timeSlotId) === "1";
-  const dayStandard = Number(pkg.dayRate ?? 0);
-  const nightStandard = Number(pkg.nightRate ?? 0);
-  const dayLed = Number(pkg.ledWallDayRate ?? 0);
-  const nightLed = Number(pkg.ledWallNightRate ?? 0);
-  const useLed = packageIncludesLedWall(pkg);
+function packagePairKey(pkg) {
+  const led = packageIncludesLedWall(pkg);
+  const base = String(pkg?.packageName || "")
+    .replace(/\bwhole\s*day\b/gi, "")
+    .replace(/\b(day|night)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return `${led ? "led" : "std"}::${base}`;
+}
 
-  if (isDay) {
-    if (useLed && dayLed > 0) return dayLed;
-    if (dayStandard > 0) return dayStandard;
-    return dayLed > 0 ? dayLed : 0;
-  }
-  if (useLed && nightLed > 0) return nightLed;
+function ownDayRate(pkg) {
+  if (!pkg) return 0;
+  const dayStandard = Number(pkg.dayRate ?? 0);
+  const dayLed = Number(pkg.ledWallDayRate ?? 0);
+  if (packageIncludesLedWall(pkg) && dayLed > 0) return dayLed;
+  if (dayStandard > 0) return dayStandard;
+  return dayLed > 0 ? dayLed : 0;
+}
+
+function ownNightRate(pkg) {
+  if (!pkg) return 0;
+  const nightStandard = Number(pkg.nightRate ?? 0);
+  const nightLed = Number(pkg.ledWallNightRate ?? 0);
+  if (packageIncludesLedWall(pkg) && nightLed > 0) return nightLed;
   if (nightStandard > 0) return nightStandard;
   return nightLed > 0 ? nightLed : 0;
 }
 
+function isComplementaryPackage(pkg, other) {
+  const thisIsDay = ownDayRate(pkg) > 0 && ownNightRate(pkg) <= 0;
+  const thisIsNight = ownNightRate(pkg) > 0 && ownDayRate(pkg) <= 0;
+  if (thisIsDay) return ownNightRate(other) > 0;
+  if (thisIsNight) return ownDayRate(other) > 0;
+  return ownDayRate(other) > 0 || ownNightRate(other) > 0;
+}
+
+/** Matching day/night package (e.g. Standard Day <-> Standard Night, LED Day <-> LED Night). */
+export function findCounterpartPackage(pkg, allPackages = []) {
+  if (!pkg || !Array.isArray(allPackages) || allPackages.length === 0) return null;
+  const key = packagePairKey(pkg);
+  const selfId = String(pkg.packageId ?? "");
+  const led = packageIncludesLedWall(pkg);
+  const candidates = allPackages.filter((other) => {
+    if (!other || String(other.packageId ?? "") === selfId) return false;
+    if (packageIncludesLedWall(other) !== led) return false;
+    return isComplementaryPackage(pkg, other);
+  });
+  return (
+    candidates.find((other) => packagePairKey(other) === key) ||
+    candidates[0] ||
+    null
+  );
+}
+
+/**
+ * Resolve the billable rate for a package at a given time slot.
+ * Whole Day combines this package's day rate with the matching night package
+ * (or this package's own night rate when both are stored on one row).
+ */
+export function getPackageSlotRate(pkg, timeSlotId, allPackages = []) {
+  if (!pkg) return 0;
+  const dayRate = ownDayRate(pkg);
+  const nightRate = ownNightRate(pkg);
+
+  if (isWholeDaySlot(timeSlotId)) {
+    const counterpart = findCounterpartPackage(pkg, allPackages);
+    const day = dayRate || ownDayRate(counterpart);
+    const night = nightRate || ownNightRate(counterpart);
+    return (Number(day) || 0) + (Number(night) || 0);
+  }
+  if (isDaySlot(timeSlotId)) {
+    return dayRate;
+  }
+  return nightRate;
+}
+
 /** Pick the time slot that actually has a rate for this package (day-only / night-only packages). */
-export function resolvePackageBillingSlot(pkg, requestedSlotId) {
+export function resolvePackageBillingSlot(pkg, requestedSlotId, allPackages = []) {
   if (!pkg) return String(requestedSlotId || "1");
   const requested = String(requestedSlotId || pkg.timeSlotId || "1");
-  if (getPackageSlotRate(pkg, requested) > 0) return requested;
+  if (getPackageSlotRate(pkg, requested, allPackages) > 0) return requested;
   const pkgSlot = pkg.timeSlotId ? String(pkg.timeSlotId) : "";
-  if (pkgSlot && getPackageSlotRate(pkg, pkgSlot) > 0) return pkgSlot;
-  if (getPackageSlotRate(pkg, "1") > 0) return "1";
-  if (getPackageSlotRate(pkg, "2") > 0) return "2";
+  if (pkgSlot && getPackageSlotRate(pkg, pkgSlot, allPackages) > 0) return pkgSlot;
+  if (getPackageSlotRate(pkg, TIME_SLOT.DAY, allPackages) > 0) return TIME_SLOT.DAY;
+  if (getPackageSlotRate(pkg, TIME_SLOT.NIGHT, allPackages) > 0) return TIME_SLOT.NIGHT;
+  if (getPackageSlotRate(pkg, TIME_SLOT.WHOLE_DAY, allPackages) > 0) {
+    return TIME_SLOT.WHOLE_DAY;
+  }
   return requested;
 }
 
-export function getPackageBillingRate(pkg, requestedSlotId) {
-  const slot = resolvePackageBillingSlot(pkg, requestedSlotId);
-  return getPackageSlotRate(pkg, slot);
+export function getPackageBillingRate(pkg, requestedSlotId, allPackages = []) {
+  const slot = resolvePackageBillingSlot(pkg, requestedSlotId, allPackages);
+  return getPackageSlotRate(pkg, slot, allPackages);
 }
 
-export function formatPackageRateHint(pkg) {
+export function formatPackageRateHint(pkg, allPackages = []) {
   if (!pkg) return "";
-  const day = getPackageSlotRate(pkg, "1");
-  const night = getPackageSlotRate(pkg, "2");
+  const counterpart = findCounterpartPackage(pkg, allPackages);
+  const day = ownDayRate(pkg) || ownDayRate(counterpart);
+  const night = ownNightRate(pkg) || ownNightRate(counterpart);
+  const wholeDay = (Number(day) || 0) + (Number(night) || 0);
   const parts = [];
-  if (day > 0) parts.push(`Day: ₱${day.toLocaleString()}`);
-  if (night > 0) parts.push(`Night: ₱${night.toLocaleString()}`);
-  return parts.length ? ` (${parts.join(", ")})` : "";
+  if (day > 0) parts.push(`Day ₱${day.toLocaleString()}`);
+  if (night > 0) parts.push(`Night ₱${night.toLocaleString()}`);
+  if (day > 0 && night > 0) {
+    parts.push(`Whole ₱${wholeDay.toLocaleString()}`);
+  }
+  return parts.join(" · ");
+}
+
+export function packageSummaryLabel(pkg, timeSlotId, allPackages = []) {
+  if (!pkg) return "";
+  if (!isWholeDaySlot(timeSlotId)) return pkg.packageName;
+  const family = String(pkg.packageName || "")
+    .replace(/\bwhole\s*day\b/gi, "")
+    .replace(/\b(day|night)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return family ? `${family} (Whole Day)` : `${pkg.packageName} (Whole Day)`;
 }
 
 export function findBasketballParticular(particulars) {
@@ -103,33 +177,45 @@ export function findVenueRentalParticulars(particulars) {
 
 export function getVenueRentalParticular(particulars, timeSlotId) {
   const { day, night } = findVenueRentalParticulars(particulars);
-  return String(timeSlotId) === "1" ? day : night;
+  if (isWholeDaySlot(timeSlotId)) return day || night;
+  return isDaySlot(timeSlotId) ? day : night;
+}
+
+export function getVenueRentalParticularsForSlot(particulars, timeSlotId) {
+  const { day, night } = findVenueRentalParticulars(particulars);
+  if (isWholeDaySlot(timeSlotId)) {
+    return [day, night].filter(Boolean);
+  }
+  const one = isDaySlot(timeSlotId) ? day : night;
+  return one ? [one] : [];
 }
 
 /** Prefer explicit venue rental slot; fall back to reservation time slot. */
 export function resolveVenueRentalSlot(venueRentalSlot, timeSlotId) {
-  const slot = venueRentalSlot || timeSlotId || "1";
-  return String(slot) === "1" ? "1" : "2";
+  const slot = venueRentalSlot || timeSlotId || TIME_SLOT.DAY;
+  if (isWholeDaySlot(slot)) return TIME_SLOT.WHOLE_DAY;
+  return isDaySlot(slot) ? TIME_SLOT.DAY : TIME_SLOT.NIGHT;
 }
 
-const BASKETBALL_DAY_TO_NIGHT = { 2: 4, 3: 5 };
-const BASKETBALL_NIGHT_TO_DAY = { 4: 2, 5: 3 };
+const BASKETBALL_TO_DAY = { 2: 2, 3: 3, 4: 2, 5: 3, 6: 2, 7: 3 };
+const BASKETBALL_TO_NIGHT = { 2: 4, 3: 5, 4: 4, 5: 5, 6: 4, 7: 5 };
+const BASKETBALL_TO_WHOLE_DAY = { 2: 6, 3: 7, 4: 6, 5: 7, 6: 6, 7: 7 };
 
 /** Remap basketball encoded qty when reservation time slot changes (keeps shot clock preference). */
 export function remapBasketballEncodedQtyForTimeSlot(encodedQty, timeSlotId) {
   const qty = Number(encodedQty);
   if (!qty || qty <= 0) return qty;
-  if (String(timeSlotId) === "1") {
-    return BASKETBALL_NIGHT_TO_DAY[qty] ?? qty;
-  }
-  return BASKETBALL_DAY_TO_NIGHT[qty] ?? qty;
+  if (isWholeDaySlot(timeSlotId)) return BASKETBALL_TO_WHOLE_DAY[qty] ?? qty;
+  if (isDaySlot(timeSlotId)) return BASKETBALL_TO_DAY[qty] ?? qty;
+  return BASKETBALL_TO_NIGHT[qty] ?? qty;
 }
 
-/** Time slot implied by basketball encoded qty (2/3 = day, 4/5 = night). */
+/** Time slot implied by basketball encoded qty (2/3 = day, 4/5 = night, 6/7 = whole day). */
 export function basketballEncodedQtyToTimeSlot(encodedQty) {
   const qty = Number(encodedQty);
-  if (qty === 2 || qty === 3) return "1";
-  if (qty === 4 || qty === 5) return "2";
+  if (qty === 2 || qty === 3) return TIME_SLOT.DAY;
+  if (qty === 4 || qty === 5) return TIME_SLOT.NIGHT;
+  if (qty === 6 || qty === 7) return TIME_SLOT.WHOLE_DAY;
   return null;
 }
 
@@ -157,7 +243,7 @@ export function syncVirtualPackageStateForTimeSlot(
   }
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-    vrSlot = String(timeSlotId) === "1" ? "1" : "2";
+    vrSlot = resolveVenueRentalSlot(timeSlotId, timeSlotId);
   }
 
   return { particularQuantities: pq, venueRentalSlot: vrSlot };
@@ -264,8 +350,13 @@ export function buildReservationSummaryLines({
       } else if (isRegularPackageId(cust.packageId)) {
         const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
         if (pkg) {
-          const rate = getPackageBillingRate(pkg, cust.timeSlotId || timeSlotId);
-          lines.push({ date, label: pkg.packageName, amount: rate });
+          const slot = cust.timeSlotId || timeSlotId;
+          const rate = getPackageBillingRate(pkg, slot, packages);
+          lines.push({
+            date,
+            label: packageSummaryLabel(pkg, slot, packages),
+            amount: rate,
+          });
         }
       } else if (
         cust.packageId === "0" ||
@@ -305,9 +396,10 @@ export function buildReservationSummaryLines({
   } else if (isRegularPackageId(packageId)) {
     const pkg = packages.find((p) => String(p.packageId) === packageId);
     if (pkg) {
-      const rate = getPackageBillingRate(pkg, timeSlotId);
+      const rate = getPackageBillingRate(pkg, timeSlotId, packages);
+      const label = packageSummaryLabel(pkg, timeSlotId, packages);
       lines.push({
-        label: numDays > 1 ? `${pkg.packageName} × ${numDays} day(s)` : pkg.packageName,
+        label: numDays > 1 ? `${label} × ${numDays} day(s)` : label,
         amount: rate * numDays,
       });
     }
@@ -379,8 +471,10 @@ export function getVirtualPackageParticulars(
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
-    const vr = getVenueRentalParticular(particulars, slot);
-    return vr ? [{ particularId: vr.particularId, quantity: 1 }] : [];
+    return getVenueRentalParticularsForSlot(particulars, slot).map((vr) => ({
+      particularId: vr.particularId,
+      quantity: 1,
+    }));
   }
 
   return [];
@@ -409,8 +503,10 @@ export function calculateVirtualPackageAmount(
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
-    const vr = getVenueRentalParticular(particulars, slot);
-    return vr?.unitCost ? Number(vr.unitCost) : 0;
+    return getVenueRentalParticularsForSlot(particulars, slot).reduce(
+      (sum, vr) => sum + (vr.unitCost ? Number(vr.unitCost) : 0),
+      0
+    );
   }
 
   return 0;
@@ -447,15 +543,20 @@ export function getVirtualPackageDisplayInfo(
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
-    const vr = getVenueRentalParticular(particulars, slot);
-    if (!vr) return null;
-    const slotLabel =
-      slot === "1"
+    const items = getVenueRentalParticularsForSlot(particulars, slot);
+    if (items.length === 0) return null;
+    const amount = items.reduce(
+      (sum, vr) => sum + (vr.unitCost ? Number(vr.unitCost) : 0),
+      0
+    );
+    const slotLabel = isWholeDaySlot(slot)
+      ? "Whole Day (8:00 AM – 10:00 PM)"
+      : isDaySlot(slot)
         ? "Day (8:00 AM – 5:00 PM)"
-        : "Night (5:00 PM – 12 MN)";
+        : "Night (5:00 PM – 10:00 PM)";
     return {
       label: `Venue Rental — ${slotLabel}`,
-      amount: vr.unitCost ? Number(vr.unitCost) : 0,
+      amount,
     };
   }
 
@@ -467,6 +568,9 @@ export function getVenueRentalPriceHint(particulars) {
   return {
     dayPrice: day?.unitCost ? Number(day.unitCost) : 0,
     nightPrice: night?.unitCost ? Number(night.unitCost) : 0,
+    wholeDayPrice:
+      (day?.unitCost ? Number(day.unitCost) : 0) +
+      (night?.unitCost ? Number(night.unitCost) : 0),
   };
 }
 

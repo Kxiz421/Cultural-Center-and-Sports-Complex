@@ -75,6 +75,15 @@ async function main() {
   ]);
   console.log(`✓ Created ${paymentStatuses.length} payment statuses`);
 
+  // Deposit Statuses
+  const depositStatuses = await Promise.all([
+    prisma.depositStatus.create({ data: { status: 'Pending' } }),
+    prisma.depositStatus.create({ data: { status: 'Held' } }),
+    prisma.depositStatus.create({ data: { status: 'Refunded' } }),
+    prisma.depositStatus.create({ data: { status: 'Forfeited' } }),
+  ]);
+  console.log(`✓ Created ${depositStatuses.length} deposit statuses`);
+
   // Announcement Statuses
   const annStatuses = await Promise.all([
     prisma.announcementStatus.create({ data: { status: 'Active' } }),
@@ -105,6 +114,7 @@ async function main() {
   const timeSlots = await Promise.all([
     prisma.timeSlot.create({ data: { startTime: '08:00 AM', endTime: '05:00 PM' } }),
     prisma.timeSlot.create({ data: { startTime: '05:00 PM', endTime: '11:00 PM' } }),
+    prisma.timeSlot.create({ data: { startTime: '08:00 AM', endTime: '10:00 PM' } }),
   ]);
   console.log(`✓ Created ${timeSlots.length} time slots`);
 
@@ -460,21 +470,21 @@ async function main() {
 
   // ===== TRANSACTIONS =====
   await Promise.all([
-    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-001', paymentDate: new Date('2026-03-01'), recordedBy: 'Local Treasury Operations Officer', bookingId: 4, paymentId: 1 } }),
-    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-002', paymentDate: new Date('2026-03-03'), recordedBy: 'Local Treasury Operations Officer', bookingId: 4, paymentId: 2 } }),
-    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-003', paymentDate: new Date('2026-03-02'), recordedBy: 'Local Treasury Operations Officer', bookingId: 4, paymentId: 3 } }),
-    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-004', paymentDate: new Date('2026-03-05'), recordedBy: 'Local Treasury Operations Officer', bookingId: 4, paymentId: 4 } }),
-    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-005', paymentDate: new Date('2026-03-07'), recordedBy: 'Local Treasury Operations Officer', bookingId: 4, paymentId: 3 } }),
+    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-001', paymentDate: new Date('2026-03-01'), recordedBy: 'Local Treasury Operations Officer', paymentId: 1 } }),
+    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-002', paymentDate: new Date('2026-03-03'), recordedBy: 'Local Treasury Operations Officer', paymentId: 2 } }),
+    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-003', paymentDate: new Date('2026-03-02'), recordedBy: 'Local Treasury Operations Officer', paymentId: 3 } }),
+    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-004', paymentDate: new Date('2026-03-05'), recordedBy: 'Local Treasury Operations Officer', paymentId: 4 } }),
+    prisma.transaction.create({ data: { receiptNumber: 'OR-2026-005', paymentDate: new Date('2026-03-07'), recordedBy: 'Local Treasury Operations Officer', paymentId: 3 } }),
   ]);
   console.log(`✓ Created ${5} transactions`);
 
   // ===== DOCUMENTS =====
   await Promise.all([
-    prisma.document.create({ data: { documentTypeId: 1, filePath: 'docs/request_letter_booking1.pdf', status: 'Pending', remarks: 'Governor approved the request letter for Recognition Ceremony', submittedAt: new Date('2026-03-02T10:30:00'), bookingId: 1, staffId: 4 } }),
-    prisma.document.create({ data: { documentTypeId: 2, filePath: 'docs/contract_booking1.pdf', status: 'Pending', remarks: 'Contract of lease issued by Local Treasury Operations Officer', submittedAt: new Date('2026-03-05T10:35:00'), bookingId: 1, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 3, filePath: 'docs/cert_booking1.pdf', status: 'Pending', remarks: 'Certification issued by Provincial Treasurers Office', submittedAt: new Date('2026-03-05T10:40:00'), bookingId: 1, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 4, filePath: 'docs/billing_booking2.pdf', status: 'Pending', remarks: 'Please resubmit billing statement with complete breakdown of charges', submittedAt: new Date('2026-03-03T11:20:00'), bookingId: 2, staffId: 2 } }),
-    prisma.document.create({ data: { documentTypeId: 5, filePath: 'docs/receipt_booking2.pdf', status: 'Pending', remarks: 'Initial 50 percent payment receipt must be submitted 7 days before the event', submittedAt: new Date('2026-03-03T11:25:00'), bookingId: 2, staffId: null } }),
+    prisma.document.create({ data: { documentTypeId: 1, filePath: 'docs/request_letter_booking1.pdf', documentStatus: 'Pending', remarks: 'Governor approved the request letter for Recognition Ceremony', submittedAt: new Date('2026-03-02T10:30:00'), bookingId: 1, staffId: 4 } }),
+    prisma.document.create({ data: { documentTypeId: 2, filePath: 'docs/contract_booking1.pdf', documentStatus: 'Pending', remarks: 'Contract of lease issued by Local Treasury Operations Officer', submittedAt: new Date('2026-03-05T10:35:00'), bookingId: 1, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 3, filePath: 'docs/cert_booking1.pdf', documentStatus: 'Pending', remarks: 'Certification issued by Provincial Treasurers Office', submittedAt: new Date('2026-03-05T10:40:00'), bookingId: 1, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 4, filePath: 'docs/billing_booking2.pdf', documentStatus: 'Pending', remarks: 'Please resubmit billing statement with complete breakdown of charges', submittedAt: new Date('2026-03-03T11:20:00'), bookingId: 2, staffId: 2 } }),
+    prisma.document.create({ data: { documentTypeId: 5, filePath: 'docs/receipt_booking2.pdf', documentStatus: 'Pending', remarks: 'Initial 50 percent payment receipt must be submitted 7 days before the event', submittedAt: new Date('2026-03-03T11:25:00'), bookingId: 2, staffId: null } }),
   ]);
   console.log(`✓ Created ${5} documents`);
 
@@ -510,11 +520,11 @@ async function main() {
 
   // ===== SCHEDULES =====
   await Promise.all([
-    prisma.schedule.create({ data: { clientId: 1, reservationId: 1, facilityId: 1 } }),
-    prisma.schedule.create({ data: { clientId: 2, reservationId: 2, facilityId: 2 } }),
-    prisma.schedule.create({ data: { clientId: 3, bookingId: 3, facilityId: 3 } }),
-    prisma.schedule.create({ data: { clientId: 4, bookingId: 4, facilityId: 4 } }),
-    prisma.schedule.create({ data: { clientId: 5, reservationId: 5, facilityId: 1 } }),
+    prisma.schedule.create({ data: { reservationId: 1, facilityId: 1 } }),
+    prisma.schedule.create({ data: { reservationId: 2, facilityId: 2 } }),
+    prisma.schedule.create({ data: { bookingId: 3, facilityId: 3 } }),
+    prisma.schedule.create({ data: { bookingId: 4, facilityId: 4 } }),
+    prisma.schedule.create({ data: { reservationId: 5, facilityId: 1 } }),
   ]);
   console.log(`✓ Created ${5} schedule entries`);
 

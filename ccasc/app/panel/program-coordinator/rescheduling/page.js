@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Search, CheckCircle2, XCircle, CalendarSync, AlertTriangle } from "lucide-react";
+import { notifyPanelNotificationsUpdated } from "@/lib/panel-notifications";
 
 export default function CoordinatorReschedulingPage() {
   const [requests, setRequests] = useState([]);
@@ -98,6 +99,7 @@ export default function CoordinatorReschedulingPage() {
       );
 
       refreshRequests();
+      notifyPanelNotificationsUpdated();
       setConfirmAction(null);
       setDetailOpen(false);
       setSelectedRequest(null);
@@ -200,7 +202,9 @@ export default function CoordinatorReschedulingPage() {
                     {req.venue} &middot; {req.eventType}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    Current: {req.currentDate} &rarr; Requested: {req.requestedDate}
+                    {(req.dateChanges || [{ originalDate: req.currentDate, requestedDate: req.requestedDate }])
+                      .map((c) => `${c.originalDate} → ${c.requestedDate}`)
+                      .join(" · ")}
                   </p>
                   {req.declineReason && (
                     <p className="text-xs text-red-600 mt-1">
@@ -245,15 +249,24 @@ export default function CoordinatorReschedulingPage() {
                   <p className="font-medium">{selectedRequest.eventType}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs">Current Date</span>
-                  <p className="font-medium">{selectedRequest.currentDate}</p>
+                  <span className="text-muted-foreground text-xs">Date changes</span>
+                  <div className="mt-1 space-y-1">
+                    {(selectedRequest.dateChanges || [
+                      {
+                        originalDate: selectedRequest.currentDate,
+                        requestedDate: selectedRequest.requestedDate,
+                        isPrimary: true,
+                      },
+                    ]).map((c, idx) => (
+                      <p key={idx} className="font-medium text-sm">
+                        {c.originalDate} → {c.requestedDate}
+                        {c.isPrimary ? " (primary)" : ""}
+                      </p>
+                    ))}
+                  </div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs">Requested Date</span>
-                  <p className="font-medium">{selectedRequest.requestedDate}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">Client's Reason</span>
+                  <span className="text-muted-foreground text-xs">Client&apos;s Reason</span>
                   <p className="text-sm bg-muted/30 rounded-md p-2">{selectedRequest.reason}</p>
                 </div>
                 <div>
@@ -289,7 +302,7 @@ export default function CoordinatorReschedulingPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {confirmAction === "approve"
-                      ? "This will update the event date and notify the client."
+                      ? "This will apply all requested date changes and notify the client."
                       : "This will reject the request and notify the client."}
                   </p>
                   {confirmAction === "decline" && (

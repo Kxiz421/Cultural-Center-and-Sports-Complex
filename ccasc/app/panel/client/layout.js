@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const NAV_ITEMS = [
   { href: "/panel/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -31,27 +31,8 @@ export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const isOrderOfPayment = pathname?.includes("/order-of-payment");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [unreadCount, setUnreadCount] = React.useState(0);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    async function fetchUnreadCount() {
-      const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
-      if (!clientId) return;
-      try {
-        const res = await fetch(`/api/notifications?clientId=${clientId}`);
-        const data = await res.json();
-        const count = Array.isArray(data) ? data.filter((n) => !n.isRead).length : 0;
-        setUnreadCount(count);
-      } catch (err) {
-        console.error("Failed to fetch notification count:", err);
-      }
-    }
-    fetchUnreadCount();
-    // Poll every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const { unreadCount } = useUnreadNotificationCount("client");
 
   const confirmLogout = () => {
     localStorage.clear();
@@ -110,9 +91,12 @@ export default function ClientLayout({ children }) {
                 <Icon className="size-4" />
                 {item.label}
                 {item.showBadge && unreadCount > 0 && (
-                  <Badge className="absolute right-2 size-5 flex items-center justify-center p-0 text-[10px] bg-red-500 text-white">
+                  <span
+                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                    aria-label={`${unreadCount} unread notifications`}
+                  >
                     {unreadCount > 99 ? "99+" : unreadCount}
-                  </Badge>
+                  </span>
                 )}
               </Button>
             );

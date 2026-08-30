@@ -835,6 +835,11 @@ export default function UserManagementPage() {
                     <div className="flex items-center gap-2">
                       <FileText className="size-4 text-muted-foreground" />
                       <span className="font-medium text-sm">{doc.type}</span>
+                      {doc.eventDate && (
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(doc.eventDate).toLocaleDateString("en-US")}
+                        </span>
+                      )}
                       <Badge
                         variant={doc.status === "Verified" ? "outline" : "secondary"}
                         className={doc.status === "Verified" ? "text-green-600 border-green-300" : "text-yellow-600 border-yellow-300 bg-yellow-50"}

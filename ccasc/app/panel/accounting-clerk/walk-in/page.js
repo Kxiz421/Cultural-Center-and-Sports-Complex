@@ -43,25 +43,35 @@ import {
   isConsolidatedBasketballEntry,
   buildReservationSummaryLines,
   sumReservationSummaryLines,
+  resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
+import { TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
+import {
+  getMinEventDateKey,
+  isEventDateTooSoon,
+  validateAdvanceBookingDates,
+  MIN_ADVANCE_BOOKING_DAYS,
+} from "@/lib/reservation-advance-booking";
 
 const VENUES = [
   { id: 1, name: "Cultural Center" },
   { id: 2, name: "Sports Complex" },
 ];
 
-const TIME_SLOTS = [
-  { id: 1, name: "Day (8:00 AM - 5:00 PM)" },
-  { id: 2, name: "Night (5:00 PM - 10:00 PM)" },
-];
+const TIME_SLOTS = TIME_SLOT_OPTIONS.map((slot) => ({
+  id: slot.id,
+  name: slot.label,
+}));
 
 export default function WalkInReservationPage() {
+  const minEventDateKey = getMinEventDateKey();
+
   // Toggle state
   const [isExistingUser, setIsExistingUser] = React.useState(false);
 
@@ -178,7 +188,7 @@ export default function WalkInReservationPage() {
     setTimeSlotId(value);
 
     if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-      setVenueRentalSlot(String(value) === "1" ? "1" : "2");
+      setVenueRentalSlot(resolveVenueRentalSlot(value, value));
     }
 
     if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
@@ -299,7 +309,9 @@ export default function WalkInReservationPage() {
       const selectedPkg = packages.find(p => String(p.packageId) === value);
       if (selectedPkg) {
         setPackageId(value);
-        setTimeSlotId(String(selectedPkg.timeSlotId));
+        setTimeSlotId((prev) =>
+          timeSlotAfterPackageChange(prev, selectedPkg.timeSlotId)
+        );
         setParticularQuantities({});
         // Sync per-date customizations when package changes and customize mode is active
         if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
@@ -337,7 +349,10 @@ export default function WalkInReservationPage() {
       dateCustomizations[date]?.timeSlotId || timeSlotId || "1";
 
     if (selectedPkg && isRegularPackageId(pkgId)) {
-      nextTimeSlotId = String(selectedPkg.timeSlotId || nextTimeSlotId);
+      nextTimeSlotId = timeSlotAfterPackageChange(
+        nextTimeSlotId,
+        selectedPkg.timeSlotId
+      );
     } else if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
       nextTimeSlotId =
         dateCustomizations[date]?.venueRentalSlot ||
@@ -391,20 +406,11 @@ export default function WalkInReservationPage() {
     }
 
     // Validate 7-day advance booking
-    const minDate = new Date();
-    minDate.setDate(minDate.getDate() + 7);
-    const minDateStr = minDate.toISOString().split("T")[0];
-    if (eventDate < minDateStr) {
-      toast.error(`Reservations must be filed at least 7 days before the event. The earliest available date is ${minDateStr}.`);
+    const datesToCheck = [eventDate, ...selectedDates].filter(Boolean);
+    const advanceCheck = validateAdvanceBookingDates(datesToCheck);
+    if (!advanceCheck.valid) {
+      toast.error(advanceCheck.error);
       return;
-    }
-
-    // Also validate multi-day dates
-    for (const date of selectedDates) {
-      if (date < minDateStr) {
-        toast.error(`All selected dates must be at least 7 days from today.`);
-        return;
-      }
     }
 
     if (isExistingUser && !selectedClient) {
@@ -436,6 +442,14 @@ export default function WalkInReservationPage() {
 
   const handleSubmitReservation = async () => {
     if (submitting || submitLockRef.current) return;
+
+    const datesToCheck = [eventDate, ...selectedDates].filter(Boolean);
+    const advanceCheck = validateAdvanceBookingDates(datesToCheck);
+    if (!advanceCheck.valid) {
+      toast.error(advanceCheck.error);
+      return;
+    }
+
     submitLockRef.current = true;
     setSubmitting(true);
     try {
@@ -563,7 +577,7 @@ export default function WalkInReservationPage() {
           venueId: parseInt(venueId, 10),
           eventType,
           eventDate: primaryDate,
-          eventDates: sortedDates.length > 0 ? sortedDates : [eventDate],
+          eventDates: [...new Set([primaryDate, ...sortedDates].filter(Boolean))].sort(),
           timeSlotId: parseInt(timeSlotId, 10),
           packageId: selectedPackageId,
           clientId: actualClientId,
@@ -869,17 +883,31 @@ export default function WalkInReservationPage() {
             </div>
             <div className="space-y-2">
               <Label>Event Date *</Label>
+              <p className="text-xs text-muted-foreground">
+                Must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest:{" "}
+                <span className="font-medium">{minEventDateKey}</span>.
+              </p>
               <Input
                 type="date"
                 value={eventDate}
-                min={new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]}
-                onChange={(e) => setEventDate(e.target.value)}
+                min={minEventDateKey}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val && isEventDateTooSoon(val)) {
+                    toast.error(
+                      validateAdvanceBookingDates([val]).error ||
+                        `Earliest available date is ${minEventDateKey}.`
+                    );
+                    return;
+                  }
+                  setEventDate(val);
+                }}
               />
             </div>
             <div className="space-y-2">
               <Label>Time Slot *</Label>
               <Select value={timeSlotId} onValueChange={handleTimeSlotChange}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full min-w-0">
                   <SelectValue placeholder="Select time slot" />
                 </SelectTrigger>
                 <SelectContent>
@@ -894,10 +922,10 @@ export default function WalkInReservationPage() {
             <div className="space-y-2">
               <Label>Package</Label>
               <Select value={packageId} onValueChange={handlePackageSelect}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full min-w-0">
                   <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                   <SelectItem value="0">None</SelectItem>
                   <SelectItem value="custom">Custom — Pick Items</SelectItem>
                   <ReservationPackageSelectItems packages={packages} particulars={particulars} />
@@ -1000,26 +1028,33 @@ export default function WalkInReservationPage() {
             </div>
             <div className="space-y-2">
               <Label>Additional Dates</Label>
-              <p className="text-xs text-muted-foreground">Add multiple dates for multi-day events.</p>
+              <p className="text-xs text-muted-foreground">
+                Add multiple dates for multi-day events. Earliest:{" "}
+                <span className="font-medium">{minEventDateKey}</span>.
+              </p>
               <div className="flex gap-2">
                 <Input
                   type="date"
-                  min={new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]}
+                  min={minEventDateKey}
                   value={eventDates.length > 0 ? eventDates[eventDates.length - 1] : ""}
                   onChange={(e) => {
                     const val = e.target.value;
-                    if (val && !selectedDates.has(val) && val !== eventDate) {
-                      setSelectedDates((prev) => new Set(prev).add(val));
-                      setEventDates((prev) => [...prev, val]);
-                      e.target.value = "";
+                    if (!val || selectedDates.has(val) || val === eventDate) return;
+                    if (isEventDateTooSoon(val)) {
+                      toast.error(
+                        validateAdvanceBookingDates([val]).error ||
+                          `Earliest available date is ${minEventDateKey}.`
+                      );
+                      return;
                     }
+                    setSelectedDates((prev) => new Set(prev).add(val));
+                    setEventDates((prev) => [...prev, val]);
+                    e.target.value = "";
                   }}
                   className="flex-1"
                 />
                 <Button type="button" variant="outline" size="sm" onClick={() => {
-                  const d = new Date();
-                  const key = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-                  // Add a date helper - just show the date input field
+                  // Date picker above — plus is visual only
                 }}>
                   <Plus className="size-4" />
                 </Button>
@@ -1134,9 +1169,9 @@ export default function WalkInReservationPage() {
                     {line.date && (
                       <p className="text-xs font-medium text-muted-foreground">{line.date}</p>
                     )}
-                    <div className="flex justify-between pl-2">
-                      <span>{line.label}</span>
-                      <span className="tabular-nums font-medium">
+                    <div className="flex items-start justify-between gap-3 pl-2">
+                      <span className="min-w-0 wrap-break-word">{line.label}</span>
+                      <span className="shrink-0 tabular-nums font-medium">
                         ₱{line.amount.toLocaleString()}
                       </span>
                     </div>
@@ -1269,10 +1304,10 @@ export default function WalkInReservationPage() {
                   <div className="space-y-2 mb-3">
                     <Label className="text-xs">Package for {date}</Label>
                     <Select value={cust.packageId} onValueChange={(v) => handleDatePackageSelect(date, v)}>
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full min-w-0">
                         <SelectValue placeholder="Select package" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         <ReservationPackageSelectItems packages={packages} particulars={particulars} />

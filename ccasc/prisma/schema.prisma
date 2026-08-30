@@ -46,6 +46,7 @@ model Staff {
   documents       Document[]
   letters         LetterStatus[]
   payments        Payment[]
+  deposits        Deposit[]
 
   @@map("Staff")
 }
@@ -93,7 +94,6 @@ model Client {
 
   reservations  Reservation[]
   notifications Notification[]
-  schedules     Schedule[]
 
   @@map("Client")
 }
@@ -162,7 +162,6 @@ model FacilityVenue {
   facilities     Facility[]
   inventories    Inventory[]
   reservations   Reservation[]
-  bookings       Booking[]
   calendarBlocks CalendarBlock[]
 
   @@map("FacilityVenue")
@@ -174,6 +173,8 @@ model AvailabilityStatus {
 
   facilities  Facility[]
   inventories Inventory[]
+  packages    Package[]
+  particulars Particular[]
 
   @@map("AvailabilityStatus")
 }
@@ -186,7 +187,8 @@ model Particular {
   statusId       Int     @default(1) @map("status_id")
   itemId         Int?   @map("item_id")
 
-  inventory           Inventory?          @relation(fields: [itemId], references: [itemId])
+  inventory           Inventory?           @relation(fields: [itemId], references: [itemId])
+  status              AvailabilityStatus   @relation(fields: [statusId], references: [statusId])
   reservedParticulars ReservedParticular[]
 
   @@map("Particular")
@@ -220,7 +222,8 @@ model Package {
   statusId         Int      @default(1) @map("status_id")
   timeSlotId        Int     @map("time_slot_id")
 
-  timeSlot TimeSlot @relation(fields: [timeSlotId], references: [timeSlotId])
+  timeSlot TimeSlot            @relation(fields: [timeSlotId], references: [timeSlotId])
+  status   AvailabilityStatus  @relation(fields: [statusId], references: [statusId])
 
   inclusions   PackageInclusion[]
   reservations Reservation[]
@@ -309,7 +312,8 @@ model ReservationDate {
   reservationId     Int      @map("reservation_id")
   eventDate         DateTime @map("event_date") @db.Date
 
-  reservation Reservation @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  reservation         Reservation           @relation(fields: [reservationId], references: [reservationId], onDelete: Cascade)
+  rescheduleDateChanges RescheduleDateChange[]
 
   @@map("ReservationDate")
 }
@@ -330,19 +334,17 @@ model Booking {
   bookingId        Int       @id @default(autoincrement()) @map("booking_id")
   confirmationDate DateTime? @map("confirmation_date")
   reservationId    Int       @map("reservation_id")
-  venueId          Int?      @map("venue_id")
   bookingStatusId  Int       @map("booking_status_id")
   staffId          Int?      @map("staff_id")
 
-  reservation Reservation    @relation(fields: [reservationId], references: [reservationId])
-  venue       FacilityVenue? @relation(fields: [venueId], references: [venueId])
-  status      BookingStatus  @relation(fields: [bookingStatusId], references: [bookingStatusId])
+  reservation Reservation   @relation(fields: [reservationId], references: [reservationId])
+  status      BookingStatus @relation(fields: [bookingStatusId], references: [bookingStatusId])
   staff       Staff?        @relation(fields: [staffId], references: [staffId])
 
-  payments     Payment[]
-  documents    Document[]
-  schedules    Schedule[]
-  transactions Transaction[]
+  payments  Payment[]
+  documents Document[]
+  schedules Schedule[]
+  deposit   Deposit?
 
   @@map("Booking")
 }
@@ -368,8 +370,39 @@ model Payment {
   booking Booking       @relation(fields: [bookingId], references: [bookingId])
 
   transactions Transaction[]
+  deposit      Deposit?
 
   @@map("Payment")
+}
+
+model DepositStatus {
+  depositStatusId Int    @id @default(autoincrement()) @map("deposit_status_id")
+  status          String @unique @map("status") @db.VarChar(50)
+
+  deposits Deposit[]
+
+  @@map("DepositStatus")
+}
+
+model Deposit {
+  depositId       Int      @id @default(autoincrement()) @map("deposit_id")
+  bookingId       Int      @unique @map("booking_id")
+  requiredAmount  Decimal  @map("required_amount") @db.Decimal(10, 2)
+  amountPaid      Decimal  @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  depositStatusId Int      @map("deposit_status_id")
+  paymentId       Int?     @unique @map("payment_id")
+  staffId         Int?     @map("staff_id")
+  notes           String?  @map("notes") @db.Text
+  recordedAt      DateTime @default(now()) @map("recorded_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  booking       Booking       @relation(fields: [bookingId], references: [bookingId], onDelete: Cascade)
+  status        DepositStatus @relation(fields: [depositStatusId], references: [depositStatusId])
+  payment       Payment?      @relation(fields: [paymentId], references: [paymentId])
+  staff         Staff?        @relation(fields: [staffId], references: [staffId])
+  transactions  Transaction[]
+
+  @@map("Deposit")
 }
 
 model PaymentStatus {
@@ -382,15 +415,15 @@ model PaymentStatus {
 }
 
 model Transaction {
-  transactionId Int      @id @default(autoincrement()) @map("transaction_id")
-  receiptNumber String   @map("receipt_number") @db.VarChar(50)
-  paymentDate   DateTime @map("payment_date")
-  recordedBy    String?  @map("recorded_by") @db.VarChar(255)
-  bookingId     Int      @map("booking_id")
-  paymentId     Int      @map("payment_id")
+  transactionId Int       @id @default(autoincrement()) @map("transaction_id")
+  receiptNumber String?   @map("receipt_number") @db.VarChar(50)
+  paymentDate   DateTime  @map("payment_date")
+  recordedBy    String?   @map("recorded_by") @db.VarChar(255)
+  paymentId     Int       @map("payment_id")
+  depositId     Int?      @map("deposit_id")
 
-  booking Booking @relation(fields: [bookingId], references: [bookingId])
-  payment Payment @relation(fields: [paymentId], references: [paymentId])
+  payment Payment  @relation(fields: [paymentId], references: [paymentId])
+  deposit Deposit? @relation(fields: [depositId], references: [depositId], onDelete: SetNull)
 
   @@map("Transaction")
 }
@@ -400,9 +433,9 @@ model Document {
   documentTypeId Int      @map("document_type_id")
   filePath       String?  @map("file_path") @db.MediumText
   documentStatus String   @default("Pending") @map("document_status") @db.VarChar(50)
-  status         String   @default("Pending") @map("status") @db.VarChar(50)
   remarks        String?  @db.Text
   submittedAt    DateTime @map("submitted_at")
+  eventDate      DateTime? @map("event_date") @db.Date
   bookingId      Int?     @map("booking_id")
   staffId        Int?     @map("staff_id")
 
@@ -463,12 +496,10 @@ model Notification {
 
 model Schedule {
   scheduleId    Int  @id @default(autoincrement()) @map("schedule_id")
-  clientId      Int  @map("client_id")
   reservationId Int? @map("reservation_id")
   bookingId     Int? @map("booking_id")
   facilityId    Int  @map("facility_id")
 
-  client      Client      @relation(fields: [clientId], references: [clientId])
   reservation Reservation? @relation(fields: [reservationId], references: [reservationId])
   booking     Booking?     @relation(fields: [bookingId], references: [bookingId])
   facility    Facility     @relation(fields: [facilityId], references: [facilityId])
@@ -487,8 +518,23 @@ model RescheduleRequest {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   reservation Reservation @relation(fields: [reservationId], references: [reservationId])
-  
+  dateChanges RescheduleDateChange[]
+
   @@map("RescheduleRequest")
+}
+
+model RescheduleDateChange {
+  rescheduleDateChangeId Int      @id @default(autoincrement()) @map("reschedule_date_change_id")
+  rescheduleId           Int      @map("reschedule_id")
+  originalDate           DateTime @map("original_date") @db.Date
+  requestedDate          DateTime @map("requested_date") @db.Date
+  reservationDateId      Int?     @map("reservation_date_id")
+  isPrimary              Boolean  @default(false) @map("is_primary")
+
+  rescheduleRequest RescheduleRequest @relation(fields: [rescheduleId], references: [rescheduleId], onDelete: Cascade)
+  reservationDate   ReservationDate?  @relation(fields: [reservationDateId], references: [reservationDateId])
+
+  @@map("RescheduleDateChange")
 }
 
 model CalendarBlock {

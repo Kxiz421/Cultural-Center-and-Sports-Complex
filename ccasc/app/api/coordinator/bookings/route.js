@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { formatDbDate } from "@/lib/utils";
+import { documentEventDateKey } from "@/lib/document-event-date";
+import { createClientNotification } from "@/lib/coordinator-notifications";
 
 const CULTURAL_VENUE_IDS = [1];
 
@@ -69,13 +72,15 @@ export async function GET(request) {
         0
       );
 
+      const primaryDate = formatDbDate(r.eventDate);
       const docs = r.bookings.flatMap(b => b.documents || []).map(d => ({
         id: d.documentId,
         type: d.documentType?.type || "Document",
-        status: d.status || "Pending",
+        status: d.documentStatus || "Pending",
         filePath: d.filePath,
         remarks: d.remarks,
         submittedAt: d.submittedAt,
+        eventDate: documentEventDateKey(d, primaryDate),
       }));
 
       const allDates = [
@@ -166,14 +171,10 @@ export async function PATCH(request) {
       });
 
       if (reservation) {
-        await prisma.notification.create({
-          data: {
-            clientId: reservation.clientId,
-            staffId: 1,
-            message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
-            type: "Booking Confirmation",
-            sentAt: new Date(),
-          },
+        await createClientNotification({
+          clientId: reservation.clientId,
+          type: "Booking Confirmation",
+          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
         });
       }
 

@@ -18,6 +18,9 @@ export async function GET() {
             endTime: true,
           },
         },
+        additionalDates: {
+          select: { eventDate: true },
+        },
         bookings: {
           select: {
             bookingId: true,
@@ -52,19 +55,25 @@ export async function GET() {
     // Format DATE columns as YYYY-MM-DD (UTC calendar day)
     const formatLocalDate = formatDbDate;
 
-    // Transform reservations into calendar events, skip orphaned
+    // One calendar event per reserved day (primary + additional dates)
     const events = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
-      .map((r) => {
+      .flatMap((r) => {
         const client = clientMap[r.clientId];
-        // Get the latest non-cancelled booking's status
         const activeBookings = r.bookings.filter((b) => b.status?.status !== "Cancelled");
         const latestBooking = activeBookings.length > 0 ? activeBookings[activeBookings.length - 1] : null;
         const bookingStatus = latestBooking?.status?.status || "Unbooked";
-        return {
-          id: `RES-${r.reservationId}`,
+        const allDates = [
+          formatLocalDate(r.eventDate),
+          ...r.additionalDates.map((ad) => formatLocalDate(ad.eventDate)),
+        ].filter(Boolean);
+        const uniqueDates = [...new Set(allDates)];
+
+        return uniqueDates.map((dateKey, idx) => ({
+          id: `RES-${r.reservationId}-${dateKey}`,
+          reservationId: r.reservationId,
           title: r.eventType,
-          date: formatLocalDate(r.eventDate),
+          date: dateKey,
           start: r.timeSlot.startTime,
           end: r.timeSlot.endTime,
           venue: r.venue.venue,
@@ -73,8 +82,10 @@ export async function GET() {
           type: "event",
           clientName: `${client.firstName} ${client.lastName}`,
           packageName: r.package?.packageName || null,
-          bookingStatus: bookingStatus,
-        };
+          bookingStatus,
+          isPrimary: idx === 0,
+          eventDates: uniqueDates,
+        }));
       });
 
     // Transform blocks into calendar events
