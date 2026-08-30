@@ -4,7 +4,7 @@
  * NEXT_PUBLIC_LOGIN_BG=/images/backgrounds/my-photo.png
  */
 export const LOGIN_PAGE_BACKGROUND =
-  process.env.NEXT_PUBLIC_LOGIN_BG ?? "/images/backgrounds/login-bg.jpg";
+  process.env.NEXT_PUBLIC_LOGIN_BG ?? "/images/backgrounds/login-bg.jpg?v=2";
 
 /** Landing page logo (file under `public/`). */
 export const PAGE_LOGO =

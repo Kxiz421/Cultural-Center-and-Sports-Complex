@@ -169,6 +169,7 @@ export default function ResubmitPage() {
         alt=""
         fill
         priority
+        unoptimized
         className="object-cover"
         sizes="100vw"
       />
