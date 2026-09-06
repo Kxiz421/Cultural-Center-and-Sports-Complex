@@ -469,6 +469,7 @@ export async function POST(request) {
     let paymentDiscountAmount = 0;
     let paymentDiscountPercent = null;
     let paymentAmountAfterDiscount = null;
+    let skipDepositHold = false;
     if (paymentType && !isValidPaymentType(paymentType)) {
       return NextResponse.json(
         { error: "Invalid payment type." },
@@ -544,21 +545,27 @@ export async function POST(request) {
       let discountAmount = 0;
       let discountPercentValue = null;
       if (applyDiscount) {
+        const isFullDiscount = discountMode === "full";
         discountAmount = computeDiscountPeso(currentBreakdown.totalPayable, {
-          mode: discountMode === "percent" ? "percent" : "peso",
+          mode: isFullDiscount ? "full" : discountMode === "percent" ? "percent" : "peso",
           peso: discountPeso,
-          percent: discountPercent,
+          percent: isFullDiscount ? 100 : discountPercent,
+          remainingBalance: currentBreakdown.remainingBalance,
         });
         const discountCheck = validateDiscountAmount(
           currentBreakdown.totalPayable,
           totalPaid,
           discountAmount,
-          currentBreakdown.requiredDeposit
+          currentBreakdown.requiredDeposit,
+          { waiveDeposit: isFullDiscount }
         );
         if (!discountCheck.ok) {
           return NextResponse.json({ error: discountCheck.error }, { status: 400 });
         }
-        if (discountMode === "percent") {
+        if (isFullDiscount) {
+          discountPercentValue = 100;
+          skipDepositHold = !currentBreakdown.depositMet;
+        } else if (discountMode === "percent") {
           discountPercentValue = Number(discountPercent);
         }
       }
@@ -738,7 +745,7 @@ export async function POST(request) {
       : null;
 
     let linkedDeposit = null;
-    if (depositRequiredAmount > 0) {
+    if (depositRequiredAmount > 0 && !skipDepositHold) {
       linkedDeposit = await ensurePendingDeposit(prisma, {
         bookingId,
         requiredAmount: depositRequiredAmount,
@@ -748,6 +755,7 @@ export async function POST(request) {
 
     if (
       depositRequiredAmount > 0 &&
+      !skipDepositHold &&
       paymentBreakdown &&
       paymentCoversDeposit(paymentBreakdown, resolvedPaymentType, amount)
     ) {
