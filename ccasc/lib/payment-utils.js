@@ -26,15 +26,27 @@ export function isDepositPortionMet(paid, requiredDownPayment, requiredDeposit) 
 
 /**
  * Current billed totals after discounts.
- * The 10% deposit stays on the original base; only the 50% down and remaining shrink.
+ * Regular discounts leave the 10% deposit on the original base and only shrink
+ * the 50% down and remaining. A 100% waiver (discount larger than the rental)
+ * can include the unpaid deposit and bring the payable to zero.
  */
 export function getBilledTotals(originalBase, totalDiscount = 0) {
   const sourceBase = roundMoney(originalBase || 0);
   const requiredDeposit = roundMoney(sourceBase * 0.1);
   const originalTotalPayable = roundMoney(sourceBase * 1.1);
   const discount = roundMoney(totalDiscount || 0);
-  const maxDiscount = roundMoney(Math.max(0, originalTotalPayable - requiredDeposit));
-  const appliedDiscount = roundMoney(Math.min(Math.max(0, discount), maxDiscount));
+  const rentalMax = roundMoney(Math.max(0, originalTotalPayable - requiredDeposit));
+  const appliedDiscount = roundMoney(Math.min(Math.max(0, discount), originalTotalPayable));
+  if (appliedDiscount > rentalMax) {
+    return {
+      originalBase: sourceBase,
+      originalTotalPayable,
+      totalDiscount: appliedDiscount,
+      totalPayable: roundMoney(Math.max(0, originalTotalPayable - appliedDiscount)),
+      requiredDeposit: 0,
+      base: 0,
+    };
+  }
   const totalPayable = roundMoney(Math.max(requiredDeposit, originalTotalPayable - appliedDiscount));
   const discountedRental = roundMoney(Math.max(0, sourceBase - appliedDiscount));
   return {
@@ -53,7 +65,13 @@ export function sumPaymentDiscounts(payments) {
   );
 }
 
-export function computeDiscountPeso(currentTotalPayable, { mode, peso, percent }) {
+export function computeDiscountPeso(currentTotalPayable, { mode, peso, percent, remainingBalance }) {
+  if (mode === "full") {
+    const remaining = remainingBalance != null
+      ? roundMoney(remainingBalance)
+      : roundMoney(currentTotalPayable);
+    return remaining;
+  }
   const current = roundMoney(currentTotalPayable);
   if (mode === "percent") {
     const value = Number(percent);
@@ -63,11 +81,19 @@ export function computeDiscountPeso(currentTotalPayable, { mode, peso, percent }
   return roundMoney(peso || 0);
 }
 
-export function validateDiscountAmount(currentTotalPayable, totalPaid, discountAmount, requiredDeposit = 0) {
+export function validateDiscountAmount(
+  currentTotalPayable,
+  totalPaid,
+  discountAmount,
+  requiredDeposit = 0,
+  options = {}
+) {
   const remaining = roundMoney(Math.max(0, roundMoney(currentTotalPayable) - roundMoney(totalPaid)));
   const depositFloor = roundMoney(requiredDeposit);
   const maxKeepDeposit = roundMoney(Math.max(0, roundMoney(currentTotalPayable) - depositFloor));
-  const maxDiscount = roundMoney(Math.min(remaining, maxKeepDeposit));
+  const maxDiscount = options.waiveDeposit
+    ? remaining
+    : roundMoney(Math.min(remaining, maxKeepDeposit));
   const discount = roundMoney(discountAmount);
   if (!Number.isFinite(discount) || discount <= 0) {
     return { ok: false, error: "Enter a discount greater than zero." };
@@ -75,7 +101,9 @@ export function validateDiscountAmount(currentTotalPayable, totalPaid, discountA
   if (discount > maxDiscount) {
     return {
       ok: false,
-      error: `Discount cannot exceed ${formatPhp(maxDiscount)} (the 10% deposit is not discounted).`,
+      error: options.waiveDeposit
+        ? `Discount cannot exceed the remaining unpaid total of ${formatPhp(remaining)}.`
+        : `Discount cannot exceed ${formatPhp(maxDiscount)} (the 10% deposit is not discounted).`,
     };
   }
   return { ok: true };
@@ -128,8 +156,11 @@ export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = 
   const requirementsMet = downPaymentMet && depositMet;
 
   let status = "Pending";
-  if (paid <= 0) status = "No Payment";
-  else if (remainingBalance > 0) {
+  if (balanceSettled && billed.originalTotalPayable > 0) {
+    status = "Fully Paid";
+  } else if (paid <= 0) {
+    status = "No Payment";
+  } else if (remainingBalance > 0) {
     if (requirementsMet) status = "DepositPaid";
     else if (downPaymentMet) status = "DownPaymentPaid";
     else status = "IncompletePayment";
@@ -148,7 +179,10 @@ export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = 
     depositMet,
     requirementsMet,
     balanceSettled,
-    paidPercent: getShareOfTotal(paid, billed.totalPayable),
+    paidPercent:
+      billed.totalPayable <= 0 && billed.originalTotalPayable > 0
+        ? 100
+        : getShareOfTotal(paid, billed.totalPayable),
     status,
   };
 }
@@ -162,11 +196,26 @@ export function getShareOfTotal(amount, totalPayable) {
 }
 
 export function getProjectedPaidPercent(breakdown, amount) {
+  if (breakdown?.balanceSettled || (roundMoney(breakdown?.totalPayable) <= 0 && breakdown?.originalTotalPayable > 0)) {
+    return 100;
+  }
   if (!breakdown?.totalPayable) return 0;
   return getShareOfTotal(
     roundMoney((breakdown.paid || 0) + roundMoney(amount || 0)),
     breakdown.totalPayable
   );
+}
+
+/** Split a 100% waiver across unpaid 10% deposit, 50% down, and remaining. */
+export function allocateFullDiscountCoverage(breakdown) {
+  if (!breakdown) return { deposit: 0, downpayment: 0, balance: 0, total: 0 };
+  const allocation = allocateManualPayment(breakdown, breakdown.remainingBalance);
+  return {
+    ...allocation,
+    total: roundMoney(
+      (allocation.deposit || 0) + (allocation.downpayment || 0) + (allocation.balance || 0)
+    ),
+  };
 }
 
 export function isValidPaymentType(paymentType) {

@@ -62,6 +62,7 @@ import {
   paymentCoversDeposit,
   computeDiscountPeso,
   validateDiscountAmount,
+  allocateFullDiscountCoverage,
   BALANCE_PAYMENT_MINIMUM,
 } from "@/lib/payment-utils";
 import { isDepositRecordMet, sanitizeDeductionReason } from "@/lib/deposit-utils";
@@ -291,6 +292,7 @@ export default function LTOOPaymentsPage() {
       mode: discountMode,
       peso: discountPeso,
       percent: discountPercent,
+      remainingBalance: current.remainingBalance,
     });
   }, [discountEnabled, selectedReservation, discountMode, discountPeso, discountPercent]);
 
@@ -303,9 +305,17 @@ export default function LTOOPaymentsPage() {
       current.totalPayable,
       current.paid,
       pendingDiscount,
-      current.requiredDeposit
+      current.requiredDeposit,
+      { waiveDeposit: discountMode === "full" }
     );
-  }, [discountEnabled, selectedReservation, pendingDiscount]);
+  }, [discountEnabled, selectedReservation, pendingDiscount, discountMode]);
+
+  const fullDiscountCoverage = React.useMemo(() => {
+    if (!discountEnabled || discountMode !== "full" || !selectedReservation) return null;
+    const current = breakdownFromReservation(selectedReservation, 0);
+    if (!current) return null;
+    return allocateFullDiscountCoverage(current);
+  }, [discountEnabled, discountMode, selectedReservation]);
 
   const currentBreakdown = React.useMemo(
     () => breakdownFromReservation(selectedReservation, discountCheck.ok ? pendingDiscount : 0),
@@ -539,7 +549,8 @@ export default function LTOOPaymentsPage() {
   const handleRecordPayment = async () => {
     if (!selectedReservation) return;
 
-    const amount = roundMoney(paymentAmount || 0);
+    const isFullDiscount = discountEnabled && discountMode === "full";
+    const amount = isFullDiscount ? 0 : roundMoney(paymentAmount || 0);
     if (discountEnabled && !discountCheck.ok) {
       toast.error(discountCheck.error || "Enter a valid discount.");
       return;
@@ -549,8 +560,8 @@ export default function LTOOPaymentsPage() {
       selectedReservation,
       discountCheck.ok ? pendingDiscount : 0
     );
-    const check = validatePaymentAmount(current, paymentType || "full", amount, {
-      discountSettlesRemaining,
+    const check = validatePaymentAmount(current, isFullDiscount ? "full" : (paymentType || "full"), amount, {
+      discountSettlesRemaining: discountSettlesRemaining || isFullDiscount,
     });
     if (!check.ok) {
       setAmountError(check.error);
@@ -558,7 +569,7 @@ export default function LTOOPaymentsPage() {
       return;
     }
 
-    if (amount > current.remainingBalance) {
+    if (!isFullDiscount && amount > current.remainingBalance) {
       toast.error(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
       return;
     }
@@ -573,8 +584,10 @@ export default function LTOOPaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedBookingId: String(selectedReservation.reservationId),
-          paymentType: discountSettlesRemaining ? (paymentType || "full") : paymentType,
-          amountPaid: amount,
+          paymentType: (discountEnabled && discountMode === "full") || discountSettlesRemaining
+            ? "full"
+            : paymentType,
+          amountPaid: discountEnabled && discountMode === "full" ? 0 : amount,
           clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
           clientName: selectedReservation.clientName,
           activityName: selectedReservation.eventType || "",
@@ -582,8 +595,8 @@ export default function LTOOPaymentsPage() {
           performedByName,
           applyDiscount: discountEnabled && pendingDiscount > 0,
           discountMode,
-          discountPeso: roundMoney(discountPeso || 0),
-          discountPercent: Number(discountPercent || 0),
+          discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
+          discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
         }),
       });
 
@@ -974,7 +987,11 @@ export default function LTOOPaymentsPage() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium">Discount</p>
-                  <p className="text-xs text-muted-foreground">Optional. Applies to the current 100% total, then 10% / 50% / remaining are recalculated.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {discountEnabled && discountMode === "full"
+                      ? "Waives the unpaid 10% deposit, 50% down payment, and remaining balance. A ₱0 payment is still recorded."
+                      : "Optional. Lowers the 50% down payment and remaining balance only. The 10% deposit stays the same unless you choose 100%."}
+                  </p>
                 </div>
                 <Button
                   type="button"
@@ -984,6 +1001,7 @@ export default function LTOOPaymentsPage() {
                     const next = !discountEnabled;
                     setDiscountEnabled(next);
                     if (!next) {
+                      setDiscountMode("peso");
                       setDiscountPeso("");
                       setDiscountPercent("");
                       syncAmountToBreakdown(selectedReservation, 0, paymentType);
@@ -996,7 +1014,7 @@ export default function LTOOPaymentsPage() {
               </div>
               {discountEnabled && (
                 <div className="space-y-2">
-                  <div className="flex gap-3 text-sm">
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                     <label className="inline-flex items-center gap-2">
                       <input
                         type="radio"
@@ -1005,6 +1023,7 @@ export default function LTOOPaymentsPage() {
                         onChange={() => {
                           setDiscountMode("peso");
                           setDiscountPercent("");
+                          syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
                       Peso
@@ -1017,12 +1036,30 @@ export default function LTOOPaymentsPage() {
                         onChange={() => {
                           setDiscountMode("percent");
                           setDiscountPeso("");
+                          syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
                       Percent of 100% total
                     </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="discount-mode"
+                        checked={discountMode === "full"}
+                        onChange={() => {
+                          setDiscountMode("full");
+                          setDiscountPeso("");
+                          setDiscountPercent("100");
+                          setPaymentType("full");
+                          setPaymentAmount("0.00");
+                          const current = breakdownFromReservation(selectedReservation, 0);
+                          syncAmountToBreakdown(selectedReservation, current?.remainingBalance || 0, "full");
+                        }}
+                      />
+                      100%
+                    </label>
                   </div>
-                  {discountMode === "peso" ? (
+                  {discountMode === "peso" && (
                     <Input
                       inputMode="decimal"
                       placeholder="0.00"
@@ -1041,7 +1078,8 @@ export default function LTOOPaymentsPage() {
                       }}
                       className="tabular-nums"
                     />
-                  ) : (
+                  )}
+                  {discountMode === "percent" && (
                     <Input
                       inputMode="decimal"
                       placeholder="0"
@@ -1057,10 +1095,37 @@ export default function LTOOPaymentsPage() {
                       className="tabular-nums"
                     />
                   )}
+                  {discountMode === "full" && fullDiscountCoverage && (
+                    <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-xs">
+                      <p className="font-medium text-foreground">This 100% discount waives:</p>
+                      {fullDiscountCoverage.deposit > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-muted-foreground">10% deposit</span>
+                          <span className="tabular-nums font-medium">{formatPhp(fullDiscountCoverage.deposit)}</span>
+                        </div>
+                      )}
+                      {fullDiscountCoverage.downpayment > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-muted-foreground">50% down payment</span>
+                          <span className="tabular-nums font-medium">{formatPhp(fullDiscountCoverage.downpayment)}</span>
+                        </div>
+                      )}
+                      {fullDiscountCoverage.balance > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-muted-foreground">Remaining balance</span>
+                          <span className="tabular-nums font-medium">{formatPhp(fullDiscountCoverage.balance)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-3 border-t pt-1 font-medium">
+                        <span>Total discounted</span>
+                        <span className="tabular-nums">{formatPhp(fullDiscountCoverage.total)}</span>
+                      </div>
+                    </div>
+                  )}
                   {discountCheck.error && (
                     <p className="text-xs text-destructive">{discountCheck.error}</p>
                   )}
-                  {pendingDiscount > 0 && discountCheck.ok && (
+                  {pendingDiscount > 0 && discountCheck.ok && discountMode !== "full" && (
                     <p className="text-xs text-muted-foreground">
                       This discount: {formatPhp(pendingDiscount)}
                       {discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}
@@ -1077,7 +1142,7 @@ export default function LTOOPaymentsPage() {
             </div>
 
             <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
-              <fieldset className="space-y-2" disabled={currentBreakdown?.balanceSettled && !discountSettlesRemaining}>
+              <fieldset className="space-y-2" disabled={(discountEnabled && discountMode === "full") || (currentBreakdown?.balanceSettled && !discountSettlesRemaining)}>
                 <legend className="text-sm font-medium">Record What?</legend>
                 <div className="space-y-2">
                   {PAYMENT_RADIO_OPTIONS.map((option) => {
@@ -1132,7 +1197,9 @@ export default function LTOOPaymentsPage() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {currentBreakdown?.balanceSettled
+                  {discountEnabled && discountMode === "full"
+                    ? "100% discount records a ₱0 payment covering the unpaid 10% deposit, 50% down, and remaining balance."
+                    : currentBreakdown?.balanceSettled
                     ? "All payment requirements are satisfied."
                     : paymentTypeBlockReason || (currentBreakdown ? getPaymentTypeHint(currentBreakdown, paymentType) : "")}
                 </p>
@@ -1148,11 +1215,11 @@ export default function LTOOPaymentsPage() {
                   value={paymentAmount}
                   onChange={handlePaymentAmountChange}
                   onBlur={handlePaymentAmountBlur}
-                  readOnly={isFixedPaymentAmount(paymentType)}
+                  readOnly={(discountEnabled && discountMode === "full") || isFixedPaymentAmount(paymentType)}
                   aria-invalid={Boolean(amountError || (paymentAmount && !paymentAmountCheck.ok))}
                   className={cn(
                     "tabular-nums",
-                    isFixedPaymentAmount(paymentType) && "bg-muted",
+                    ((discountEnabled && discountMode === "full") || isFixedPaymentAmount(paymentType)) && "bg-muted",
                     (amountError || (paymentAmount && !paymentAmountCheck.ok)) && "border-destructive"
                   )}
                 />
@@ -1277,9 +1344,9 @@ export default function LTOOPaymentsPage() {
                 onClick={() => {
                   const check = validatePaymentAmount(
                     currentBreakdown,
-                    paymentType || "full",
-                    roundMoney(paymentAmount || 0),
-                    { discountSettlesRemaining }
+                    discountEnabled && discountMode === "full" ? "full" : (paymentType || "full"),
+                    discountEnabled && discountMode === "full" ? 0 : roundMoney(paymentAmount || 0),
+                    { discountSettlesRemaining: discountSettlesRemaining || (discountEnabled && discountMode === "full") }
                   );
                   if (!check.ok) {
                     setAmountError(check.error);
@@ -1670,16 +1737,29 @@ export default function LTOOPaymentsPage() {
             <div className="flex justify-between"><span className="text-foreground/70">Client:</span><span className="font-medium text-foreground">{selectedReservation?.clientName}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Event:</span><span className="font-medium text-foreground">{selectedReservation?.eventType}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Date:</span><span className="font-medium text-foreground">{selectedReservation?.eventDate}</span></div>
-            <div className="flex justify-between"><span className="text-foreground/70">Payment type:</span><span className="font-medium text-foreground capitalize">{getPaymentTypeLabel(paymentType)}</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">Payment type:</span><span className="font-medium text-foreground capitalize">{discountEnabled && discountMode === "full" ? "100% discount" : getPaymentTypeLabel(paymentType)}</span></div>
             {pendingDiscount > 0 && (
               <>
                 <div className="flex justify-between"><span className="text-foreground/70">100% total before this discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(roundMoney((currentBreakdown?.totalPayable || 0) + pendingDiscount))}</span></div>
-                <div className="flex justify-between"><span className="text-foreground/70">Discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(pendingDiscount)}{discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}</span></div>
+                <div className="flex justify-between"><span className="text-foreground/70">Discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(pendingDiscount)}{discountMode === "full" ? " (100%)" : discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}</span></div>
+                {discountMode === "full" && fullDiscountCoverage && (
+                  <>
+                    {fullDiscountCoverage.deposit > 0 && (
+                      <div className="flex justify-between"><span className="text-foreground/70">Includes 10% deposit:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(fullDiscountCoverage.deposit)}</span></div>
+                    )}
+                    {fullDiscountCoverage.downpayment > 0 && (
+                      <div className="flex justify-between"><span className="text-foreground/70">Includes 50% down:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(fullDiscountCoverage.downpayment)}</span></div>
+                    )}
+                    {fullDiscountCoverage.balance > 0 && (
+                      <div className="flex justify-between"><span className="text-foreground/70">Includes remaining:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(fullDiscountCoverage.balance)}</span></div>
+                    )}
+                  </>
+                )}
                 <div className="flex justify-between"><span className="text-foreground/70">Amount after discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(currentBreakdown?.totalPayable)}</span></div>
               </>
             )}
             <div className="flex justify-between"><span className="text-foreground/70">Amount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(paymentAmount || 0)}</span></div>
-            <div className="flex justify-between"><span className="text-foreground/70">This entry:</span><span className="font-medium tabular-nums text-foreground">{formatPercent(getShareOfTotal(roundMoney(paymentAmount || 0), currentBreakdown?.totalPayable || 0))} of 100% total</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">This entry:</span><span className="font-medium tabular-nums text-foreground">{discountEnabled && discountMode === "full" ? "100% waived" : `${formatPercent(getShareOfTotal(roundMoney(paymentAmount || 0), currentBreakdown?.totalPayable || 0))} of 100% total`}</span></div>
             {bothPlusSplit && (
               <div className="flex justify-between gap-3">
                 <span className="text-foreground/70">Split:</span>
