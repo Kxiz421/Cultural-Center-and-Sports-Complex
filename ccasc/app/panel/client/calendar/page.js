@@ -224,7 +224,8 @@ export default function ClientCalendarPage() {
   React.useEffect(() => {
     async function fetchCalendar() {
       try {
-        const res = await fetch('/api/calendar');
+        const clientId = localStorage.getItem("user_id")?.replace("CLT-", "") || "";
+        const res = await fetch(`/api/calendar?clientId=${encodeURIComponent(clientId)}`);
         const data = await res.json();
         setCultural(data.cultural || []);
         setSports(data.sports || []);
@@ -242,7 +243,7 @@ export default function ClientCalendarPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Facility Calendar</h2>
         <p className="text-muted-foreground text-sm">
-          View availability and schedules for both venues. You can browse months to check event dates.
+          View your scheduled events at both venues. Holidays and maintenance still appear for availability.
         </p>
       </div>
 

@@ -25,21 +25,25 @@ export function isDepositPortionMet(paid, requiredDownPayment, requiredDeposit) 
 }
 
 /**
- * Current billed base / 100% total after subtracting recorded discounts
- * from the original (pre-discount) 100% total.
+ * Current billed totals after discounts.
+ * The 10% deposit stays on the original base; only the 50% down and remaining shrink.
  */
 export function getBilledTotals(originalBase, totalDiscount = 0) {
   const sourceBase = roundMoney(originalBase || 0);
+  const requiredDeposit = roundMoney(sourceBase * 0.1);
   const originalTotalPayable = roundMoney(sourceBase * 1.1);
   const discount = roundMoney(totalDiscount || 0);
-  const totalPayable = roundMoney(Math.max(0, originalTotalPayable - discount));
-  const base = roundMoney(totalPayable / 1.1);
+  const maxDiscount = roundMoney(Math.max(0, originalTotalPayable - requiredDeposit));
+  const appliedDiscount = roundMoney(Math.min(Math.max(0, discount), maxDiscount));
+  const totalPayable = roundMoney(Math.max(requiredDeposit, originalTotalPayable - appliedDiscount));
+  const discountedRental = roundMoney(Math.max(0, sourceBase - appliedDiscount));
   return {
     originalBase: sourceBase,
     originalTotalPayable,
-    totalDiscount: discount,
+    totalDiscount: appliedDiscount,
     totalPayable,
-    base,
+    requiredDeposit,
+    base: discountedRental,
   };
 }
 
@@ -59,16 +63,19 @@ export function computeDiscountPeso(currentTotalPayable, { mode, peso, percent }
   return roundMoney(peso || 0);
 }
 
-export function validateDiscountAmount(currentTotalPayable, totalPaid, discountAmount) {
+export function validateDiscountAmount(currentTotalPayable, totalPaid, discountAmount, requiredDeposit = 0) {
   const remaining = roundMoney(Math.max(0, roundMoney(currentTotalPayable) - roundMoney(totalPaid)));
+  const depositFloor = roundMoney(requiredDeposit);
+  const maxKeepDeposit = roundMoney(Math.max(0, roundMoney(currentTotalPayable) - depositFloor));
+  const maxDiscount = roundMoney(Math.min(remaining, maxKeepDeposit));
   const discount = roundMoney(discountAmount);
   if (!Number.isFinite(discount) || discount <= 0) {
     return { ok: false, error: "Enter a discount greater than zero." };
   }
-  if (discount > remaining) {
+  if (discount > maxDiscount) {
     return {
       ok: false,
-      error: `Discount cannot exceed the remaining unpaid total of ${formatPhp(remaining)}.`,
+      error: `Discount cannot exceed ${formatPhp(maxDiscount)} (the 10% deposit is not discounted).`,
     };
   }
   return { ok: true };
@@ -87,17 +94,11 @@ export function validateDiscountAmount(currentTotalPayable, totalPaid, discountA
 export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = null, billing = null) {
   const billed = billing
     ? getBilledTotals(billing.originalBase ?? totalAmount, billing.totalDiscount)
-    : {
-        originalBase: roundMoney(totalAmount || 0),
-        originalTotalPayable: roundMoney(roundMoney(totalAmount || 0) * 1.1),
-        totalDiscount: 0,
-        totalPayable: roundMoney(roundMoney(totalAmount || 0) * 1.1),
-        base: roundMoney(totalAmount || 0),
-      };
+    : getBilledTotals(totalAmount, 0);
   const base = billed.base;
   const paid = roundMoney(totalPaid || 0);
 
-  if (base <= 0 && billed.totalPayable <= 0) {
+  if (billed.originalBase <= 0 && billed.totalPayable <= 0) {
     return {
       ...billed,
       paid,
@@ -115,8 +116,8 @@ export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = 
   }
 
   const totalPayable = billed.totalPayable;
+  const requiredDeposit = billed.requiredDeposit;
   const requiredDownPayment = roundMoney(base * 0.5);
-  const requiredDeposit = roundMoney(base * 0.1);
   const requiredTotal = roundMoney(requiredDownPayment + requiredDeposit);
   const remainingBalance = roundMoney(Math.max(0, totalPayable - paid));
   const balanceSettled = remainingBalance <= 0;

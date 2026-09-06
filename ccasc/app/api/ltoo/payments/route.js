@@ -552,7 +552,8 @@ export async function POST(request) {
         const discountCheck = validateDiscountAmount(
           currentBreakdown.totalPayable,
           totalPaid,
-          discountAmount
+          discountAmount,
+          currentBreakdown.requiredDeposit
         );
         if (!discountCheck.ok) {
           return NextResponse.json({ error: discountCheck.error }, { status: 400 });
