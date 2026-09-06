@@ -13,6 +13,19 @@ export const DEPOSIT_SATISFIED_STATUSES = [
 export const DEPOSIT_CONSUMABLE_STATUSES = ["Held", "Deducted"];
 export const DEPOSIT_PULLOUT_STATUSES = ["Held", "Deducted"];
 
+/** Deduction reasons may contain letters and spaces only. */
+export function sanitizeDeductionReason(raw) {
+  return String(raw ?? "").replace(/[^\p{L}\s]/gu, "");
+}
+
+export function validateDeductionReason(reason) {
+  const cleaned = sanitizeDeductionReason(reason).replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return { ok: false, error: "Enter a reason for the deduction. Letters only." };
+  }
+  return { ok: true, reason: cleaned };
+}
+
 /**
  * Whether a Deposit row indicates the 10% deposit has been met.
  * @param {{ amountPaid?: number|string|null, requiredAmount?: number|string|null, status?: { status?: string }|null }|null} deposit
@@ -196,9 +209,9 @@ export async function consumeDeposit(prisma, {
   if (!check.ok) {
     return { ok: false, error: check.error };
   }
-  const trimmedReason = String(reason || "").trim();
-  if (!trimmedReason) {
-    return { ok: false, error: "Enter a reason for the deduction." };
+  const reasonCheck = validateDeductionReason(reason);
+  if (!reasonCheck.ok) {
+    return { ok: false, error: reasonCheck.error };
   }
 
   const nextRemaining = roundMoney(check.remaining - check.deduction);
@@ -210,7 +223,7 @@ export async function consumeDeposit(prisma, {
       data: {
         depositId: deposit.depositId,
         amount: check.deduction,
-        reason: trimmedReason,
+        reason: reasonCheck.reason,
         staffId: staffId || null,
       },
     }),

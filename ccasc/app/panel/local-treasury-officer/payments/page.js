@@ -64,7 +64,7 @@ import {
   validateDiscountAmount,
   BALANCE_PAYMENT_MINIMUM,
 } from "@/lib/payment-utils";
-import { isDepositRecordMet } from "@/lib/deposit-utils";
+import { isDepositRecordMet, sanitizeDeductionReason } from "@/lib/deposit-utils";
 
 const PAYMENT_RADIO_OPTIONS = [
   { value: "deposit", title: "10% Deposit" },
@@ -438,6 +438,24 @@ export default function LTOOPaymentsPage() {
     setRecordOpen(true);
   };
 
+  const applyDepositSnapshot = (reservationId, deposit) => {
+    if (!deposit || reservationId == null) return;
+    const merge = (row) =>
+      row && row.reservationId === reservationId ? { ...row, deposit } : row;
+    setReservations((rows) => rows.map(merge));
+    setSelectedReservation((current) => merge(current));
+    setHistoryReservation((current) => merge(current));
+  };
+
+  const loadHistoryTransactions = async (reservationId) => {
+    const res = await fetch(
+      `/api/ltoo/payments?history=true&reservationId=${reservationId}`
+    );
+    if (!res.ok) throw new Error("Failed to load payment history");
+    const data = await res.json();
+    setHistoryTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+  };
+
   const openPaymentHistory = async (reservation, viewOnly = false) => {
     setHistoryReservation(reservation);
     setHistoryViewOnly(viewOnly);
@@ -449,12 +467,7 @@ export default function LTOOPaymentsPage() {
     setConsumeReason("");
     setDepositPanelOpen(false);
     try {
-      const res = await fetch(
-        `/api/ltoo/payments?history=true&reservationId=${reservation.reservationId}`
-      );
-      if (!res.ok) throw new Error("Failed to load payment history");
-      const data = await res.json();
-      setHistoryTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+      await loadHistoryTransactions(reservation.reservationId);
     } catch (err) {
       toast.error(err.message || "Failed to load payment history");
     } finally {
@@ -595,19 +608,19 @@ export default function LTOOPaymentsPage() {
     const data = await res.json();
     if (!res.ok || !Array.isArray(data)) return;
     setReservations(data);
-    if (selectedReservation) {
-      const next = data.find((row) => row.reservationId === selectedReservation.reservationId);
-      if (next) setSelectedReservation(next);
-    }
-    if (historyReservation) {
-      const nextHistory = data.find((row) => row.reservationId === historyReservation.reservationId);
-      if (nextHistory) setHistoryReservation(nextHistory);
-    }
+    setSelectedReservation((current) => {
+      if (!current) return current;
+      return data.find((row) => row.reservationId === current.reservationId) || current;
+    });
+    setHistoryReservation((current) => {
+      if (!current) return current;
+      return data.find((row) => row.reservationId === current.reservationId) || current;
+    });
   };
 
   const handleConsumeDeposit = async () => {
-    if (!selectedReservation && !historyReservation) return;
-    const reservation = selectedReservation || historyReservation;
+    const reservation = (historyOpen && historyReservation) || selectedReservation;
+    if (!reservation) return;
     setDepositSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
@@ -629,8 +642,10 @@ export default function LTOOPaymentsPage() {
       toast.success("Deposit deduction recorded");
       setConsumeAmount("");
       setConsumeReason("");
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
+      setDepositPanelOpen(true);
       await refreshSelectedReservation();
-      if (historyOpen) await openPaymentHistory(reservation, historyViewOnly);
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
     } catch (err) {
       toast.error(err.message || "Failed to record deduction");
     } finally {
@@ -639,8 +654,8 @@ export default function LTOOPaymentsPage() {
   };
 
   const handlePulloutDeposit = async () => {
-    if (!selectedReservation && !historyReservation) return;
-    const reservation = selectedReservation || historyReservation;
+    const reservation = (historyOpen && historyReservation) || selectedReservation;
+    if (!reservation) return;
     setDepositSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
@@ -658,8 +673,17 @@ export default function LTOOPaymentsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to pull out deposit");
       toast.success(`Pulled out ${formatPhp(data.releaseAmount)}`);
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
+      setDepositPanelOpen(true);
       await refreshSelectedReservation();
-      if (historyOpen) await openPaymentHistory(reservation, historyViewOnly);
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
+      if (historyOpen) {
+        try {
+          await loadHistoryTransactions(reservation.reservationId);
+        } catch (err) {
+          toast.error(err.message || "Failed to refresh payment history");
+        }
+      }
     } catch (err) {
       toast.error(err.message || "Failed to pull out deposit");
     } finally {
@@ -1417,9 +1441,9 @@ export default function LTOOPaymentsPage() {
                         className="tabular-nums"
                       />
                       <Textarea
-                        placeholder="Reason for deduction"
+                        placeholder="Reason for deduction (letters only)"
                         value={consumeReason}
-                        onChange={(e) => setConsumeReason(e.target.value)}
+                        onChange={(e) => setConsumeReason(sanitizeDeductionReason(e.target.value))}
                         rows={2}
                       />
                       <div className="flex flex-wrap gap-2">
