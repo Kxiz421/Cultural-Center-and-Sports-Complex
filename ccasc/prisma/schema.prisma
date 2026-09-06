@@ -45,8 +45,9 @@ model Staff {
   notifications   Notification[]    @relation("StaffNotifications")
   documents       Document[]
   letters         LetterStatus[]
-  payments        Payment[]
-  deposits        Deposit[]
+  payments           Payment[]
+  deposits           Deposit[]
+  depositDeductions  DepositDeduction[]
 
   @@map("Staff")
 }
@@ -359,11 +360,15 @@ model BookingStatus {
 }
 
 model Payment {
-  paymentId       Int     @id @default(autoincrement()) @map("payment_id")
-  amountPaid      Decimal @map("amount_paid") @db.Decimal(10, 2)
-  paymentStatusId Int     @map("payment_status_id")
-  staffId         Int?    @map("staff_id")
-  bookingId       Int     @map("booking_id")
+  paymentId            Int      @id @default(autoincrement()) @map("payment_id")
+  amountPaid           Decimal  @map("amount_paid") @db.Decimal(10, 2)
+  paymentStatusId      Int      @map("payment_status_id")
+  staffId              Int?     @map("staff_id")
+  bookingId            Int      @map("booking_id")
+  baseAmount           Decimal? @map("base_amount") @db.Decimal(12, 2)
+  discountAmount       Decimal  @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  discountPercent      Decimal? @map("discount_percent") @db.Decimal(5, 2)
+  amountAfterDiscount  Decimal? @map("amount_after_discount") @db.Decimal(12, 2)
 
   status  PaymentStatus @relation(fields: [paymentStatusId], references: [statusId])
   staff   Staff?        @relation(fields: [staffId], references: [staffId])
@@ -385,24 +390,41 @@ model DepositStatus {
 }
 
 model Deposit {
-  depositId       Int      @id @default(autoincrement()) @map("deposit_id")
-  bookingId       Int      @unique @map("booking_id")
-  requiredAmount  Decimal  @map("required_amount") @db.Decimal(10, 2)
-  amountPaid      Decimal  @default(0) @map("amount_paid") @db.Decimal(10, 2)
-  depositStatusId Int      @map("deposit_status_id")
-  paymentId       Int?     @unique @map("payment_id")
-  staffId         Int?     @map("staff_id")
-  notes           String?  @map("notes") @db.Text
-  recordedAt      DateTime @default(now()) @map("recorded_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  depositId             Int       @id @default(autoincrement()) @map("deposit_id")
+  bookingId             Int       @unique @map("booking_id")
+  requiredAmount        Decimal   @map("required_amount") @db.Decimal(10, 2)
+  amountPaid            Decimal   @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  amountAfterDeductions Decimal?  @map("amount_after_deductions") @db.Decimal(10, 2)
+  depositStatusId       Int       @map("deposit_status_id")
+  paymentId             Int?      @unique @map("payment_id")
+  staffId               Int?      @map("staff_id")
+  notes                 String?   @map("notes") @db.Text
+  recordedAt            DateTime  @default(now()) @map("recorded_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  pulledOutAt           DateTime? @map("pulled_out_at")
 
-  booking       Booking       @relation(fields: [bookingId], references: [bookingId], onDelete: Cascade)
-  status        DepositStatus @relation(fields: [depositStatusId], references: [depositStatusId])
-  payment       Payment?      @relation(fields: [paymentId], references: [paymentId])
-  staff         Staff?        @relation(fields: [staffId], references: [staffId])
+  booking       Booking             @relation(fields: [bookingId], references: [bookingId], onDelete: Cascade)
+  status        DepositStatus       @relation(fields: [depositStatusId], references: [depositStatusId])
+  payment       Payment?            @relation(fields: [paymentId], references: [paymentId])
+  staff         Staff?              @relation(fields: [staffId], references: [staffId])
   transactions  Transaction[]
+  deductions    DepositDeduction[]
 
   @@map("Deposit")
+}
+
+model DepositDeduction {
+  deductionId Int      @id @default(autoincrement()) @map("deduction_id")
+  depositId   Int      @map("deposit_id")
+  amount      Decimal  @map("amount") @db.Decimal(10, 2)
+  reason      String   @map("reason") @db.VarChar(500)
+  recordedAt  DateTime @default(now()) @map("recorded_at")
+  staffId     Int?     @map("staff_id")
+
+  deposit Deposit @relation(fields: [depositId], references: [depositId], onDelete: Cascade)
+  staff   Staff?  @relation(fields: [staffId], references: [staffId])
+
+  @@map("DepositDeduction")
 }
 
 model PaymentStatus {
@@ -419,10 +441,12 @@ model Transaction {
   receiptNumber String?   @map("receipt_number") @db.VarChar(50)
   paymentDate   DateTime  @map("payment_date")
   recordedBy    String?   @map("recorded_by") @db.VarChar(255)
-  paymentId     Int       @map("payment_id")
+  paymentId     Int?      @map("payment_id")
   depositId     Int?      @map("deposit_id")
+  entryType     String    @default("payment") @map("entry_type") @db.VarChar(30)
+  releaseAmount Decimal?  @map("release_amount") @db.Decimal(10, 2)
 
-  payment Payment  @relation(fields: [paymentId], references: [paymentId])
+  payment Payment? @relation(fields: [paymentId], references: [paymentId])
   deposit Deposit? @relation(fields: [depositId], references: [depositId], onDelete: SetNull)
 
   @@map("Transaction")

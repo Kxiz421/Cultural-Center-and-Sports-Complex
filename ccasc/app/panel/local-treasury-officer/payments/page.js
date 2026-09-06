@@ -29,13 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Wallet,
   Search,
@@ -47,9 +41,75 @@ import {
   XCircle,
   History,
   Receipt,
+  Percent,
 } from "lucide-react";
-import { formatPhp, formatMoneyInput, roundMoney, sanitizeMoneyInput } from "@/lib/utils";
-import { computePaymentBreakdown, suggestNextPayment, getPaymentTypeMax, getPaymentTypeMin, isPaymentTypeAllowed, getPaymentTypeBlockReason, isFixedPaymentAmount, getPaymentTypeLabel, BALANCE_PAYMENT_MINIMUM } from "@/lib/payment-utils";
+import { cn, formatPhp, formatMoneyInput, roundMoney, sanitizeMoneyInput } from "@/lib/utils";
+import {
+  computePaymentBreakdown,
+  suggestNextPayment,
+  getPaymentTypeMax,
+  getPaymentTypeMin,
+  isPaymentTypeAllowed,
+  getPaymentTypeBlockReason,
+  isFixedPaymentAmount,
+  getPaymentTypeLabel,
+  getPaymentTypeHint,
+  getShareOfTotal,
+  getProjectedPaidPercent,
+  getDefaultPaymentAmount,
+  validatePaymentAmount,
+  allocateManualPayment,
+  paymentCoversDeposit,
+  computeDiscountPeso,
+  validateDiscountAmount,
+  BALANCE_PAYMENT_MINIMUM,
+} from "@/lib/payment-utils";
+
+const PAYMENT_RADIO_OPTIONS = [
+  { value: "deposit", title: "10% Deposit" },
+  { value: "downpayment", title: "50% Down Payment" },
+  { value: "both_plus", title: "60% (Down + Deposit) + additional" },
+  { value: "full", title: "100% Full Payment" },
+  { value: "balance", title: "Remaining Balance" },
+  { value: "manual", title: "Manual amount" },
+];
+
+function breakdownFromReservation(reservation, extraDiscount = 0) {
+  if (!reservation) return null;
+  const originalBase = reservation.originalAmount ?? reservation.totalAmount;
+  const existingDiscount = reservation.totalDiscount ?? 0;
+  const depositRecord = reservation.deposit
+    ? {
+        amountPaid: reservation.deposit.amountPaid,
+        requiredAmount: reservation.deposit.requiredAmount,
+        status: { status: reservation.deposit.status },
+      }
+    : reservation.depositMet
+      ? {
+          amountPaid: reservation.requiredDeposit,
+          requiredAmount: reservation.requiredDeposit,
+          status: { status: "Held" },
+        }
+      : null;
+  return computePaymentBreakdown(
+    originalBase,
+    reservation.totalPaid,
+    depositRecord,
+    { originalBase, totalDiscount: existingDiscount + extraDiscount }
+  );
+}
+
+function canConsumeDeposit(deposit) {
+  return Boolean(deposit && ["Held", "Deducted"].includes(deposit.status));
+}
+
+function canPulloutDeposit(deposit) {
+  return Boolean(
+    deposit &&
+    ["Held", "Deducted"].includes(deposit.status) &&
+    roundMoney(deposit.amountAfterDeductions) > 0
+  );
+}
 
 // Human-friendly label for a status token (used where a colored badge isn't wanted).
 function getStatusLabel(status) {
@@ -61,6 +121,39 @@ function getStatusLabel(status) {
     IncompletePayment: "Incomplete Payment",
   };
   return map[status] || status;
+}
+
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`;
+}
+
+function getRadioOptionPercent(breakdown, value, selectedAmount, isSelected) {
+  if (!breakdown) return "";
+  if (value === "full") return formatPercent(100);
+  const amount = (value === "both_plus" || value === "manual" || value === "balance")
+    ? (isSelected && selectedAmount ? roundMoney(selectedAmount) : getPaymentTypeMin(breakdown, value))
+    : getPaymentTypeMax(breakdown, value);
+  return formatPercent(getProjectedPaidPercent(breakdown, amount));
+}
+
+function getRadioOptionDetail(breakdown, value) {
+  if (!breakdown) return "";
+  const max = getPaymentTypeMax(breakdown, value);
+  const min = getPaymentTypeMin(breakdown, value);
+  if (max <= 0) return "";
+  if (value === "both_plus") {
+    return `${formatPhp(min)} (${formatPercent(getShareOfTotal(min, breakdown.totalPayable))} of total) up to ${formatPhp(max)} (100%)`;
+  }
+  if (value === "full") {
+    return `${formatPhp(max)} · settles the remaining balance to 100%`;
+  }
+  if (value === "manual") {
+    return `Min ${formatPhp(min)} · up to ${formatPhp(max)}`;
+  }
+  if (value === "balance") {
+    return `${formatPhp(min)}–${formatPhp(max)} remaining`;
+  }
+  return `${formatPhp(max)} · ${formatPercent(getShareOfTotal(max, breakdown.totalPayable))} of total`;
 }
 
 function formatDateTime(value) {
@@ -92,6 +185,14 @@ export default function LTOOPaymentsPage() {
   const [selectedReservation, setSelectedReservation] = React.useState(null);
   const [paymentAmount, setPaymentAmount] = React.useState("");
   const [paymentType, setPaymentType] = React.useState("deposit");
+  const [amountError, setAmountError] = React.useState("");
+  const [discountEnabled, setDiscountEnabled] = React.useState(false);
+  const [discountMode, setDiscountMode] = React.useState("peso");
+  const [discountPeso, setDiscountPeso] = React.useState("");
+  const [discountPercent, setDiscountPercent] = React.useState("");
+  const [consumeAmount, setConsumeAmount] = React.useState("");
+  const [consumeReason, setConsumeReason] = React.useState("");
+  const [depositSaving, setDepositSaving] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyReservation, setHistoryReservation] = React.useState(null);
   const [historyTransactions, setHistoryTransactions] = React.useState([]);
@@ -99,13 +200,10 @@ export default function LTOOPaymentsPage() {
   const [historyViewOnly, setHistoryViewOnly] = React.useState(false);
   const [selectedTransaction, setSelectedTransaction] = React.useState(null);
 
-  const historyBreakdown = React.useMemo(() => {
-    if (!historyReservation) return null;
-    return computePaymentBreakdown(
-      historyReservation.totalAmount,
-      historyReservation.totalPaid
-    );
-  }, [historyReservation]);
+  const historyBreakdown = React.useMemo(
+    () => breakdownFromReservation(historyReservation),
+    [historyReservation]
+  );
 
   React.useEffect(() => {
     loadReservations();
@@ -132,7 +230,7 @@ export default function LTOOPaymentsPage() {
   // Compute payment breakdown for each reservation
   const enrichedReservations = React.useMemo(() => {
     return reservations.map((r) => {
-      const breakdown = computePaymentBreakdown(r.totalAmount, r.totalPaid);
+      const breakdown = breakdownFromReservation(r);
       return {
         ...r,
         requiredDownPayment: breakdown.requiredDownPayment,
@@ -143,6 +241,7 @@ export default function LTOOPaymentsPage() {
         computedStatus: breakdown.status,
         totalPayable: breakdown.totalPayable,
         remainingBalance: breakdown.remainingBalance,
+        paidPercent: breakdown.paidPercent,
       };
     });
   }, [reservations]);
@@ -174,23 +273,58 @@ export default function LTOOPaymentsPage() {
     return items;
   }, [enrichedReservations, search, paymentFilter]);
 
-  const currentBreakdown = React.useMemo(() => {
-    if (!selectedReservation) return null;
-    return computePaymentBreakdown(
-      selectedReservation.totalAmount,
-      selectedReservation.totalPaid
-    );
-  }, [selectedReservation]);
+  const pendingDiscount = React.useMemo(() => {
+    if (!discountEnabled || !selectedReservation) return 0;
+    const current = breakdownFromReservation(selectedReservation, 0);
+    if (!current) return 0;
+    return computeDiscountPeso(current.totalPayable, {
+      mode: discountMode,
+      peso: discountPeso,
+      percent: discountPercent,
+    });
+  }, [discountEnabled, selectedReservation, discountMode, discountPeso, discountPercent]);
+
+  const discountCheck = React.useMemo(() => {
+    if (!discountEnabled || !selectedReservation || pendingDiscount <= 0) {
+      return { ok: !discountEnabled, error: "" };
+    }
+    const current = breakdownFromReservation(selectedReservation, 0);
+    return validateDiscountAmount(current.totalPayable, current.paid, pendingDiscount);
+  }, [discountEnabled, selectedReservation, pendingDiscount]);
+
+  const currentBreakdown = React.useMemo(
+    () => breakdownFromReservation(selectedReservation, discountCheck.ok ? pendingDiscount : 0),
+    [selectedReservation, pendingDiscount, discountCheck.ok]
+  );
 
   const projectedBreakdown = React.useMemo(() => {
-    if (!selectedReservation || !paymentAmount) return null;
-    const add = roundMoney(paymentAmount);
-    if (add <= 0) return null;
+    if (!selectedReservation || !currentBreakdown) return null;
+    const add = roundMoney(paymentAmount || 0);
+    const coversDeposit = add > 0 && paymentCoversDeposit(currentBreakdown, paymentType, add);
+    const originalBase = selectedReservation.originalAmount ?? selectedReservation.totalAmount;
+    const existingDiscount = selectedReservation.totalDiscount ?? 0;
     return computePaymentBreakdown(
-      selectedReservation.totalAmount,
-      roundMoney((selectedReservation.totalPaid || 0) + add)
+      originalBase,
+      roundMoney((selectedReservation.totalPaid || 0) + add),
+      currentBreakdown.depositMet || coversDeposit
+        ? {
+            amountPaid: currentBreakdown.requiredDeposit,
+            requiredAmount: currentBreakdown.requiredDeposit,
+            status: { status: "Held" },
+          }
+        : selectedReservation.deposit
+          ? {
+              amountPaid: selectedReservation.deposit.amountPaid,
+              requiredAmount: selectedReservation.deposit.requiredAmount,
+              status: { status: selectedReservation.deposit.status },
+            }
+          : null,
+      {
+        originalBase,
+        totalDiscount: existingDiscount + (discountCheck.ok ? pendingDiscount : 0),
+      }
     );
-  }, [selectedReservation, paymentAmount]);
+  }, [selectedReservation, currentBreakdown, paymentAmount, paymentType, pendingDiscount, discountCheck.ok]);
 
   const paymentTypeMax = React.useMemo(() => {
     if (!currentBreakdown) return 0;
@@ -207,6 +341,59 @@ export default function LTOOPaymentsPage() {
     return getPaymentTypeBlockReason(currentBreakdown, paymentType);
   }, [currentBreakdown, paymentType]);
 
+  const paidPercent = currentBreakdown?.paidPercent ?? 0;
+  const projectedPercent = React.useMemo(() => {
+    if (!currentBreakdown) return 0;
+    return getProjectedPaidPercent(currentBreakdown, paymentAmount);
+  }, [currentBreakdown, paymentAmount]);
+
+  const manualAllocation = React.useMemo(() => {
+    if (!currentBreakdown || paymentType !== "manual" || !paymentAmount) return null;
+    const amt = roundMoney(paymentAmount);
+    if (amt <= 0) return null;
+    return allocateManualPayment(currentBreakdown, amt);
+  }, [currentBreakdown, paymentType, paymentAmount]);
+
+  const bothPlusSplit = React.useMemo(() => {
+    if (!currentBreakdown || paymentType !== "both_plus" || !paymentAmount) return null;
+    const amt = roundMoney(paymentAmount);
+    if (amt <= 0) return null;
+    const installment = roundMoney(Math.min(amt, currentBreakdown.requiredTotal));
+    return {
+      installment,
+      additional: roundMoney(Math.max(0, amt - installment)),
+    };
+  }, [currentBreakdown, paymentType, paymentAmount]);
+
+  const discountSettlesRemaining =
+    discountEnabled &&
+    discountCheck.ok &&
+    pendingDiscount > 0 &&
+    !!currentBreakdown &&
+    currentBreakdown.remainingBalance <= 0;
+
+  const paymentAmountCheck = React.useMemo(() => {
+    if (!currentBreakdown) return { ok: false, error: "" };
+    if (discountSettlesRemaining) {
+      return validatePaymentAmount(currentBreakdown, paymentType || "full", roundMoney(paymentAmount || 0), {
+        discountSettlesRemaining: true,
+      });
+    }
+    if (!paymentAmount) return { ok: false, error: "" };
+    const amt = roundMoney(paymentAmount);
+    if (!Number.isFinite(amt) || amt <= 0) return { ok: false, error: "" };
+    return validatePaymentAmount(currentBreakdown, paymentType, amt);
+  }, [currentBreakdown, paymentType, paymentAmount, discountSettlesRemaining]);
+
+  const canSubmitPayment =
+    !!currentBreakdown &&
+    discountCheck.ok &&
+    (discountSettlesRemaining ||
+      (!currentBreakdown.balanceSettled &&
+        isPaymentTypeAllowed(currentBreakdown, paymentType) &&
+        !!paymentAmount &&
+        paymentAmountCheck.ok));
+
   const counts = React.useMemo(() => ({
     all: enrichedReservations.length,
     paid: enrichedReservations.filter((r) => r.computedStatus === "Fully Paid").length,
@@ -219,17 +406,19 @@ export default function LTOOPaymentsPage() {
   }), [enrichedReservations]);
 
   const openRecordPayment = (reservation) => {
-    const breakdown = computePaymentBreakdown(
-      reservation.totalAmount,
-      reservation.totalPaid
-    );
+    const breakdown = breakdownFromReservation(reservation);
     const next = suggestNextPayment(breakdown);
-    const max = getPaymentTypeMax(breakdown, next.paymentType);
-    const min = getPaymentTypeMin(breakdown, next.paymentType);
+    const defaultAmount = getDefaultPaymentAmount(breakdown, next.paymentType);
     setSelectedReservation(reservation);
     setPaymentType(next.paymentType);
-    const defaultAmount = next.paymentType === "balance" ? min : max;
+    setAmountError("");
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
+    setDiscountEnabled(false);
+    setDiscountMode("peso");
+    setDiscountPeso("");
+    setDiscountPercent("");
+    setConsumeAmount("");
+    setConsumeReason("");
     setRecordOpen(true);
   };
 
@@ -240,6 +429,8 @@ export default function LTOOPaymentsPage() {
     setSelectedTransaction(null);
     setHistoryLoading(true);
     setHistoryTransactions([]);
+    setConsumeAmount("");
+    setConsumeReason("");
     try {
       const res = await fetch(
         `/api/ltoo/payments?history=true&reservationId=${reservation.reservationId}`
@@ -268,33 +459,15 @@ export default function LTOOPaymentsPage() {
       toast.error(getPaymentTypeBlockReason(currentBreakdown, value) || "This payment type is not available.");
       return;
     }
-    const max = getPaymentTypeMax(currentBreakdown, value);
-    const min = getPaymentTypeMin(currentBreakdown, value);
     setPaymentType(value);
-    const defaultAmount = value === "balance" ? min : max;
+    setAmountError("");
+    const defaultAmount = getDefaultPaymentAmount(currentBreakdown, value);
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
   };
 
-  React.useEffect(() => {
-    if (!recordOpen || !currentBreakdown) return;
-    if (!isPaymentTypeAllowed(currentBreakdown, paymentType)) {
-      const next = suggestNextPayment(currentBreakdown);
-      const max = getPaymentTypeMax(currentBreakdown, next.paymentType);
-      setPaymentType(next.paymentType);
-      setPaymentAmount(max > 0 ? formatMoneyInput(max) : "");
-      return;
-    }
-    const max = getPaymentTypeMax(currentBreakdown, paymentType);
-    const min = getPaymentTypeMin(currentBreakdown, paymentType);
-    if (isFixedPaymentAmount(paymentType) && max > 0) {
-      setPaymentAmount(formatMoneyInput(max));
-    } else if (paymentType === "balance" && min > 0) {
-      setPaymentAmount(formatMoneyInput(min));
-    }
-  }, [recordOpen, currentBreakdown, paymentType]);
-
   const handlePaymentAmountChange = (e) => {
     if (isFixedPaymentAmount(paymentType)) return;
+    setAmountError("");
     setPaymentAmount(sanitizeMoneyInput(e.target.value, paymentTypeMax));
   };
 
@@ -304,57 +477,59 @@ export default function LTOOPaymentsPage() {
     const numeric = roundMoney(paymentAmount);
     if (!Number.isFinite(numeric) || numeric <= 0) {
       setPaymentAmount("");
+      setAmountError("Enter a valid positive payment amount.");
       return;
     }
-    let clamped = Math.min(numeric, paymentTypeMax);
-    if (paymentType === "balance" && paymentTypeMin > 0 && clamped < paymentTypeMin) {
-      toast.error(`Minimum payment for remaining balance is ${formatPhp(paymentTypeMin)}.`);
-      clamped = paymentTypeMin;
+    const check = validatePaymentAmount(currentBreakdown, paymentType, numeric);
+    if (!check.ok) {
+      setAmountError(check.error);
+      if (paymentTypeMin > 0 && numeric < paymentTypeMin) {
+        setPaymentAmount(formatMoneyInput(paymentTypeMin));
+      } else if (numeric > paymentTypeMax) {
+        setPaymentAmount(formatMoneyInput(paymentTypeMax));
+      }
+      toast.error(check.error);
+      return;
     }
-    setPaymentAmount(formatMoneyInput(clamped));
+    setAmountError("");
+    setPaymentAmount(formatMoneyInput(Math.min(numeric, paymentTypeMax)));
+  };
+
+  const syncAmountToBreakdown = (reservation, extraDiscount, type) => {
+    const next = breakdownFromReservation(reservation, extraDiscount);
+    if (!next) return;
+    const allowedType = isPaymentTypeAllowed(next, type)
+      ? type
+      : suggestNextPayment(next).paymentType;
+    if (allowedType !== type) setPaymentType(allowedType);
+    const defaultAmount = getDefaultPaymentAmount(next, allowedType);
+    setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "0.00");
   };
 
   const handleRecordPayment = async () => {
-    if (!selectedReservation || !paymentAmount) return;
+    if (!selectedReservation) return;
 
-    const amount = roundMoney(paymentAmount);
-    const {
-      totalAmount = 0,
-      totalPaid = 0,
-      remainingBalance = 0,
-    } = selectedReservation;
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid positive payment amount.");
+    const amount = roundMoney(paymentAmount || 0);
+    if (discountEnabled && !discountCheck.ok) {
+      toast.error(discountCheck.error || "Enter a valid discount.");
       return;
     }
 
-    const current = computePaymentBreakdown(totalAmount, totalPaid);
-    const typeMax = getPaymentTypeMax(current, paymentType);
-
-    if (!isPaymentTypeAllowed(current, paymentType)) {
-      const label =
-        paymentType === "deposit" ? "10% deposit"
-        : paymentType === "downpayment" ? "50% down payment"
-        : paymentType === "both" ? "50% down + 10% deposit"
-        : "remaining balance";
-      toast.error(`The ${label} has already been recorded or is not available yet.`);
+    const current = breakdownFromReservation(
+      selectedReservation,
+      discountCheck.ok ? pendingDiscount : 0
+    );
+    const check = validatePaymentAmount(current, paymentType || "full", amount, {
+      discountSettlesRemaining,
+    });
+    if (!check.ok) {
+      setAmountError(check.error);
+      toast.error(check.error);
       return;
     }
 
-    if (amount > remainingBalance || amount > typeMax) {
-      toast.error(`Amount cannot exceed ${formatPhp(typeMax)} for this payment.`);
-      return;
-    }
-
-    const typeMin = getPaymentTypeMin(current, paymentType);
-    if (paymentType === "balance" && typeMin > 0 && amount < typeMin) {
-      toast.error(`Minimum payment for remaining balance is ${formatPhp(typeMin)}.`);
-      return;
-    }
-
-    if (isFixedPaymentAmount(paymentType) && roundMoney(amount) !== roundMoney(typeMax)) {
-      toast.error(`You must pay the full amount of ${formatPhp(typeMax)}.`);
+    if (amount > current.remainingBalance) {
+      toast.error(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
       return;
     }
 
@@ -368,13 +543,17 @@ export default function LTOOPaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedBookingId: String(selectedReservation.reservationId),
-          paymentType,
+          paymentType: discountSettlesRemaining ? (paymentType || "full") : paymentType,
           amountPaid: amount,
           clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
           clientName: selectedReservation.clientName,
           activityName: selectedReservation.eventType || "",
           performedBy,
           performedByName,
+          applyDiscount: discountEnabled && pendingDiscount > 0,
+          discountMode,
+          discountPeso: roundMoney(discountPeso || 0),
+          discountPercent: Number(discountPercent || 0),
         }),
       });
 
@@ -394,6 +573,83 @@ export default function LTOOPaymentsPage() {
     }
   };
 
+  const refreshSelectedReservation = async () => {
+    const res = await fetch("/api/ltoo/payments?bookings=true");
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) return;
+    setReservations(data);
+    if (selectedReservation) {
+      const next = data.find((row) => row.reservationId === selectedReservation.reservationId);
+      if (next) setSelectedReservation(next);
+    }
+    if (historyReservation) {
+      const nextHistory = data.find((row) => row.reservationId === historyReservation.reservationId);
+      if (nextHistory) setHistoryReservation(nextHistory);
+    }
+  };
+
+  const handleConsumeDeposit = async () => {
+    if (!selectedReservation && !historyReservation) return;
+    const reservation = selectedReservation || historyReservation;
+    setDepositSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/ltoo/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "consume",
+          reservationId: reservation.reservationId,
+          amount: roundMoney(consumeAmount),
+          reason: consumeReason,
+          performedBy,
+          performedByName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to record deduction");
+      toast.success("Deposit deduction recorded");
+      setConsumeAmount("");
+      setConsumeReason("");
+      await refreshSelectedReservation();
+      if (historyOpen) await openPaymentHistory(reservation, historyViewOnly);
+    } catch (err) {
+      toast.error(err.message || "Failed to record deduction");
+    } finally {
+      setDepositSaving(false);
+    }
+  };
+
+  const handlePulloutDeposit = async () => {
+    if (!selectedReservation && !historyReservation) return;
+    const reservation = selectedReservation || historyReservation;
+    setDepositSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/ltoo/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "pullout",
+          reservationId: reservation.reservationId,
+          performedBy,
+          performedByName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to pull out deposit");
+      toast.success(`Pulled out ${formatPhp(data.releaseAmount)}`);
+      await refreshSelectedReservation();
+      if (historyOpen) await openPaymentHistory(reservation, historyViewOnly);
+    } catch (err) {
+      toast.error(err.message || "Failed to pull out deposit");
+    } finally {
+      setDepositSaving(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const s = (status || "").toLowerCase();
     if (s === "fully paid") {
@@ -410,6 +666,18 @@ export default function LTOOPaymentsPage() {
     }
     if (s === "no payment" || s === "pending") {
       return <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50">Unpaid</Badge>;
+    }
+    if (s === "held") {
+      return <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Held</Badge>;
+    }
+    if (s === "deducted") {
+      return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">Deducted</Badge>;
+    }
+    if (s === "fully deducted") {
+      return <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">Fully Deducted</Badge>;
+    }
+    if (s === "pulled out") {
+      return <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">Pulled Out</Badge>;
     }
     return <Badge variant="outline">{status}</Badge>;
   };
@@ -513,6 +781,9 @@ export default function LTOOPaymentsPage() {
                     <TableCell className="tabular-nums">
                       <span className="font-medium tabular-nums">{formatPhp(r.totalPaid)}</span>
                       <span className="text-foreground/70 text-xs tabular-nums"> / {formatPhp(r.totalPayable)}</span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {formatPercent(r.paidPercent)} of total
+                      </span>
                     </TableCell>
                     <TableCell className="text-center">{getPaymentCheckIcon(r.downPaymentMet)}</TableCell>
                     <TableCell className="text-center">{getPaymentCheckIcon(r.depositMet)}</TableCell>
@@ -561,7 +832,13 @@ export default function LTOOPaymentsPage() {
       </Card>
 
       {/* Record Payment Dialog */}
-      <Dialog open={recordOpen} onOpenChange={(open) => { setRecordOpen(open); if (!open) setSelectedReservation(null); }}>
+      <Dialog open={recordOpen} onOpenChange={(open) => {
+        setRecordOpen(open);
+        if (!open) {
+          setSelectedReservation(null);
+          setAmountError("");
+        }
+      }}>
         <DialogContent className="sm:max-w-lg max-h-[min(90vh,680px)] flex flex-col gap-0 p-0 overflow-hidden">
           <DialogHeader className="shrink-0 px-6 pt-6 pb-2 border-b border-border/60">
             <DialogTitle>Record Payment</DialogTitle>
@@ -584,7 +861,17 @@ export default function LTOOPaymentsPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                  <span className="text-muted-foreground">Base amount</span>
+                  <span className="text-muted-foreground">Original base</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.originalBase)}</span>
+                  <span className="text-muted-foreground">Original 100% total</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
+                  {currentBreakdown.totalDiscount > 0 && (
+                    <>
+                      <span className="text-muted-foreground">Discounts applied</span>
+                      <span className="tabular-nums font-medium text-right text-emerald-700">-{formatPhp(currentBreakdown.totalDiscount)}</span>
+                    </>
+                  )}
+                  <span className="text-muted-foreground">Current base</span>
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.base)}</span>
                   <span className="text-muted-foreground">10% deposit</span>
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.requiredDeposit)}</span>
@@ -594,6 +881,35 @@ export default function LTOOPaymentsPage() {
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.paid)}</span>
                   <span className="text-muted-foreground font-medium">Remaining</span>
                   <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.remainingBalance)}</span>
+                </div>
+
+                <div className="space-y-1.5 border-t border-border/80 pt-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Paid of 100% total</span>
+                    <span className="tabular-nums font-semibold">{formatPercent(paidPercent)}</span>
+                  </div>
+                  <div className="relative h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-primary/30"
+                      style={{ width: `${Math.min(100, projectedPercent)}%` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 left-0 bg-primary"
+                      style={{ width: `${Math.min(100, paidPercent)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    After this entry:{" "}
+                    <span className="tabular-nums font-medium text-foreground">
+                      {formatPercent(paymentAmount ? projectedPercent : paidPercent)}
+                    </span>
+                    {paymentAmount ? (
+                      <span className="tabular-nums">
+                        {" "}
+                        (+{formatPercent(getShareOfTotal(roundMoney(paymentAmount), currentBreakdown.totalPayable))})
+                      </span>
+                    ) : null}
+                  </p>
                 </div>
 
                 <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2">
@@ -613,64 +929,237 @@ export default function LTOOPaymentsPage() {
               </div>
             )}
 
-            <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
-              <div className="space-y-2">
-                <Label htmlFor="pay-type">Record What?</Label>
-                <Select
-                  value={paymentType}
-                  onValueChange={handlePaymentTypeChange}
-                  disabled={currentBreakdown?.balanceSettled}
+            <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">Discount</p>
+                  <p className="text-xs text-muted-foreground">Optional. Applies to the current 100% total, then 10% / 50% / remaining are recalculated.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant={discountEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    const next = !discountEnabled;
+                    setDiscountEnabled(next);
+                    if (!next) {
+                      setDiscountPeso("");
+                      setDiscountPercent("");
+                      syncAmountToBreakdown(selectedReservation, 0, paymentType);
+                    }
+                  }}
                 >
-                  <SelectTrigger id="pay-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      value="downpayment"
-                      disabled={currentBreakdown?.downPaymentMet}
+                  <Percent className="size-4 mr-1" />
+                  {discountEnabled ? "Remove discount" : "Add discount"}
+                </Button>
+              </div>
+              {discountEnabled && (
+                <div className="space-y-2">
+                  <div className="flex gap-3 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="discount-mode"
+                        checked={discountMode === "peso"}
+                        onChange={() => {
+                          setDiscountMode("peso");
+                          setDiscountPercent("");
+                        }}
+                      />
+                      Peso
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="discount-mode"
+                        checked={discountMode === "percent"}
+                        onChange={() => {
+                          setDiscountMode("percent");
+                          setDiscountPeso("");
+                        }}
+                      />
+                      Percent of 100% total
+                    </label>
+                  </div>
+                  {discountMode === "peso" ? (
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={discountPeso}
+                      onChange={(e) => {
+                        const max = currentBreakdown
+                          ? roundMoney((breakdownFromReservation(selectedReservation, 0)?.remainingBalance) || 0)
+                          : 0;
+                        const next = sanitizeMoneyInput(e.target.value, max);
+                        setDiscountPeso(next);
+                        syncAmountToBreakdown(selectedReservation, roundMoney(next || 0), paymentType);
+                      }}
+                      className="tabular-nums"
+                    />
+                  ) : (
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={discountPercent}
+                      onChange={(e) => {
+                        const raw = String(e.target.value).replace(/[^\d.]/g, "");
+                        const value = Math.min(100, Number(raw) || 0);
+                        setDiscountPercent(raw === "" ? "" : String(value));
+                        const current = breakdownFromReservation(selectedReservation, 0);
+                        const peso = computeDiscountPeso(current?.totalPayable || 0, { mode: "percent", percent: value });
+                        syncAmountToBreakdown(selectedReservation, peso, paymentType);
+                      }}
+                      className="tabular-nums"
+                    />
+                  )}
+                  {discountCheck.error && (
+                    <p className="text-xs text-destructive">{discountCheck.error}</p>
+                  )}
+                  {pendingDiscount > 0 && discountCheck.ok && (
+                    <p className="text-xs text-muted-foreground">
+                      This discount: {formatPhp(pendingDiscount)}
+                      {discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}
+                      {" · "}New 100% total {formatPhp(currentBreakdown.totalPayable)}
+                      {" · "}New 10% {formatPhp(currentBreakdown.requiredDeposit)}
+                      {" · "}New 50% {formatPhp(currentBreakdown.requiredDownPayment)}
+                    </p>
+                  )}
+                  {discountSettlesRemaining && (
+                    <p className="text-xs text-emerald-700">This discount settles the remaining balance. No cash is collected.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {selectedReservation?.deposit && (
+              <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">10% Deposit</p>
+                  {getStatusBadge(selectedReservation.deposit.status)}
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Original 10%</span>
+                  <span className="tabular-nums text-right">{formatPhp(selectedReservation.deposit.requiredAmount)}</span>
+                  <span className="text-muted-foreground">After deductions</span>
+                  <span className="tabular-nums text-right">{formatPhp(selectedReservation.deposit.amountAfterDeductions)}</span>
+                  <span className="text-muted-foreground">Pullout</span>
+                  <span className="text-right">
+                    {selectedReservation.deposit.pulledOutAt
+                      ? `Pulled out ${formatDateTime(selectedReservation.deposit.pulledOutAt)}`
+                      : "Not pulled out"}
+                  </span>
+                </div>
+                {(selectedReservation.deposit.deductions || []).length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium">Deductions</p>
+                    {selectedReservation.deposit.deductions.map((row) => (
+                      <p key={row.deductionId} className="text-xs text-muted-foreground">
+                        {formatPhp(row.amount)} — {row.reason}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {canConsumeDeposit(selectedReservation.deposit) && (
+                  <div className="space-y-2 border-t pt-2">
+                    <Label>Consume (damages / overtime)</Label>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="Deduction amount"
+                      value={consumeAmount}
+                      onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value, selectedReservation.deposit.amountAfterDeductions))}
+                      className="tabular-nums"
+                    />
+                    <Textarea
+                      placeholder="Reason for deduction"
+                      value={consumeReason}
+                      onChange={(e) => setConsumeReason(e.target.value)}
+                      rows={2}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={depositSaving || !consumeAmount || !consumeReason.trim()}
+                      onClick={handleConsumeDeposit}
                     >
-                      50% Down Payment
-                      {currentBreakdown?.downPaymentMet ? " (Paid)" : ""}
-                    </SelectItem>
-                    <SelectItem
-                      value="deposit"
-                      disabled={currentBreakdown?.depositMet}
-                    >
-                      10% Deposit
-                      {currentBreakdown?.depositMet ? " (Paid)" : ""}
-                    </SelectItem>
-                    <SelectItem
-                      value="both"
-                      disabled={
-                        currentBreakdown?.downPaymentMet ||
-                        currentBreakdown?.depositMet
-                      }
-                    >
-                      50% Down + 10% Deposit
-                      {(currentBreakdown?.downPaymentMet ||
-                        currentBreakdown?.depositMet)
-                        ? " (Unavailable)"
-                        : ""}
-                    </SelectItem>
-                    {currentBreakdown?.requirementsMet && !currentBreakdown?.balanceSettled && (
-                      <SelectItem value="balance">
-                        Remaining Balance
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                      {depositSaving ? "Saving..." : "Record deduction"}
+                    </Button>
+                  </div>
+                )}
+                {canPulloutDeposit(selectedReservation.deposit) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={depositSaving}
+                    onClick={handlePulloutDeposit}
+                  >
+                    Pull out remaining {formatPhp(selectedReservation.deposit.amountAfterDeductions)}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
+              <fieldset className="space-y-2" disabled={currentBreakdown?.balanceSettled && !discountSettlesRemaining}>
+                <legend className="text-sm font-medium">Record What?</legend>
+                <div className="space-y-2">
+                  {PAYMENT_RADIO_OPTIONS.map((option) => {
+                    const allowed = currentBreakdown
+                      ? isPaymentTypeAllowed(currentBreakdown, option.value)
+                      : false;
+                    const blocked = currentBreakdown
+                      ? getPaymentTypeBlockReason(currentBreakdown, option.value)
+                      : null;
+                    const selected = paymentType === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className={cn(
+                          "flex items-start gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors",
+                          selected && allowed && "border-primary bg-primary/5",
+                          allowed && !selected && "hover:bg-muted/50 cursor-pointer",
+                          !allowed && "opacity-60 cursor-not-allowed bg-muted/20"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="payment-type"
+                          value={option.value}
+                          checked={selected}
+                          disabled={!allowed}
+                          onChange={() => handlePaymentTypeChange(option.value)}
+                          className="mt-1 size-4 accent-primary"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                            <span className="font-medium">{option.title}</span>
+                            {allowed ? (
+                              <span className="tabular-nums text-xs text-muted-foreground">
+                                {getRadioOptionPercent(
+                                  currentBreakdown,
+                                  option.value,
+                                  paymentAmount,
+                                  selected
+                                )}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {allowed
+                              ? getRadioOptionDetail(currentBreakdown, option.value)
+                              : blocked}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {currentBreakdown?.balanceSettled
                     ? "All payment requirements are satisfied."
-                    : paymentTypeBlockReason
-                      ? paymentTypeBlockReason
-                      : paymentType === "deposit"
-                        ? `Required: ${formatPhp(paymentTypeMax)} (10% of base)`
-                        : paymentType === "downpayment"
-                          ? `Required: ${formatPhp(paymentTypeMax)} (50% of base)`
-                          : paymentType === "both"
-                            ? `Required: ${formatPhp(paymentTypeMax)} (50% down + 10% deposit)`
-                          : `Minimum ${formatPhp(paymentTypeMin)} · up to ${formatPhp(paymentTypeMax)} remaining`}
+                    : paymentTypeBlockReason || (currentBreakdown ? getPaymentTypeHint(currentBreakdown, paymentType) : "")}
                 </p>
-              </div>
+              </fieldset>
 
               <div className="space-y-2">
                 <Label htmlFor="pay-amount">Payment Amount (₱) *</Label>
@@ -683,12 +1172,73 @@ export default function LTOOPaymentsPage() {
                   onChange={handlePaymentAmountChange}
                   onBlur={handlePaymentAmountBlur}
                   readOnly={isFixedPaymentAmount(paymentType)}
-                  className={`tabular-nums ${isFixedPaymentAmount(paymentType) ? "bg-muted" : ""}`}
+                  aria-invalid={Boolean(amountError || (paymentAmount && !paymentAmountCheck.ok))}
+                  className={cn(
+                    "tabular-nums",
+                    isFixedPaymentAmount(paymentType) && "bg-muted",
+                    (amountError || (paymentAmount && !paymentAmountCheck.ok)) && "border-destructive"
+                  )}
                 />
                 {isFixedPaymentAmount(paymentType) && (
                   <p className="text-xs text-muted-foreground">
-                    Fixed installment amount.
+                    Fixed amount for this payment type.
                   </p>
+                )}
+                {(amountError || (paymentAmount && !paymentAmountCheck.ok && paymentAmountCheck.error)) && (
+                  <p className="text-xs text-destructive">
+                    {amountError || paymentAmountCheck.error}
+                  </p>
+                )}
+                {paymentType === "both_plus" && paymentTypeMax > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <p>
+                      <span className="font-medium">Minimum: </span>
+                      <span className="tabular-nums font-semibold">{formatPhp(paymentTypeMin)}</span>
+                      <span className="text-amber-800/80"> (60% down + deposit)</span>
+                    </p>
+                    <p className="mt-0.5 text-amber-800/80">
+                      You can add more toward the remaining balance, up to{" "}
+                      <span className="tabular-nums font-medium">{formatPhp(paymentTypeMax)}</span>.
+                    </p>
+                    {bothPlusSplit && (
+                      <p className="mt-1 tabular-nums">
+                        This entry: {formatPhp(bothPlusSplit.installment)} toward 60%
+                        {bothPlusSplit.additional > 0
+                          ? ` + ${formatPhp(bothPlusSplit.additional)} additional`
+                          : ""}
+                        .
+                      </p>
+                    )}
+                  </div>
+                )}
+                {paymentType === "manual" && paymentTypeMax > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <p>
+                      <span className="font-medium">Minimum: </span>
+                      <span className="tabular-nums font-semibold">{formatPhp(paymentTypeMin)}</span>
+                      <span className="text-amber-800/80">
+                        {!currentBreakdown?.depositMet
+                          ? " (10% deposit first)"
+                          : !currentBreakdown?.downPaymentMet
+                            ? " (50% down payment next)"
+                            : paymentTypeMin < BALANCE_PAYMENT_MINIMUM
+                              ? " (full remaining balance)"
+                              : ` (₱${BALANCE_PAYMENT_MINIMUM.toLocaleString()} remaining-balance minimum)`}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-amber-800/80">
+                      Applied in order: unpaid 10% deposit, then unpaid 50% down, then remaining balance.
+                      Maximum {formatPhp(paymentTypeMax)}. Partial down payment after the deposit is not allowed.
+                    </p>
+                    {manualAllocation && (
+                      <p className="mt-1 tabular-nums">
+                        Allocation: deposit {formatPhp(manualAllocation.deposit)}
+                        {manualAllocation.downpayment > 0 ? ` · down ${formatPhp(manualAllocation.downpayment)}` : ""}
+                        {manualAllocation.balance > 0 ? ` · balance ${formatPhp(manualAllocation.balance)}` : ""}
+                        .
+                      </p>
+                    )}
+                  </div>
                 )}
                 {paymentType === "balance" && paymentTypeMax > 0 && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -713,9 +1263,11 @@ export default function LTOOPaymentsPage() {
               <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
                 <span className="text-xs text-muted-foreground">Status after this entry</span>
                 <div className="text-right">
-                  {getStatusBadge(currentBreakdown?.status)}
+                  {getStatusBadge(projectedBreakdown?.status ?? currentBreakdown?.status)}
                   <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-                    Remaining: {formatPhp(currentBreakdown?.remainingBalance ?? 0)}
+                    Remaining: {formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown?.remainingBalance ?? 0)}
+                    {" · "}
+                    {formatPercent(paymentAmount ? projectedPercent : paidPercent)} paid
                   </p>
                 </div>
               </div>
@@ -743,7 +1295,24 @@ export default function LTOOPaymentsPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
-              <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={saving || !currentBreakdown || currentBreakdown.balanceSettled || !isPaymentTypeAllowed(currentBreakdown, paymentType) || !paymentAmount || roundMoney(paymentAmount || 0) <= 0 || roundMoney(paymentAmount || 0) > paymentTypeMax || (paymentType === "balance" && roundMoney(paymentAmount || 0) < paymentTypeMin)}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const check = validatePaymentAmount(
+                    currentBreakdown,
+                    paymentType || "full",
+                    roundMoney(paymentAmount || 0),
+                    { discountSettlesRemaining }
+                  );
+                  if (!check.ok) {
+                    setAmountError(check.error);
+                    toast.error(check.error);
+                    return;
+                  }
+                  setConfirmOpen(true);
+                }}
+                disabled={saving || !canSubmitPayment}
+              >
                 {saving ? "Saving..." : "Save Payment"}
               </Button>
             </div>
@@ -786,7 +1355,23 @@ export default function LTOOPaymentsPage() {
                 {getStatusBadge(historyBreakdown.status)}
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <span className="text-muted-foreground">Base amount</span>
+                <span className="text-muted-foreground">Original base</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.originalBase)}
+                </span>
+                <span className="text-muted-foreground">Original 100% total</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPhp(historyBreakdown.originalTotalPayable)}
+                </span>
+                {historyBreakdown.totalDiscount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">Discounts applied</span>
+                    <span className="tabular-nums font-medium text-right text-emerald-700">
+                      -{formatPhp(historyBreakdown.totalDiscount)}
+                    </span>
+                  </>
+                )}
+                <span className="text-muted-foreground">Current base</span>
                 <span className="tabular-nums font-medium text-right">
                   {formatPhp(historyBreakdown.base)}
                 </span>
@@ -802,7 +1387,67 @@ export default function LTOOPaymentsPage() {
                 <span className="tabular-nums font-medium text-right">
                   {formatPhp(historyBreakdown.remainingBalance)}
                 </span>
+                <span className="text-muted-foreground">Paid of 100% total</span>
+                <span className="tabular-nums font-medium text-right">
+                  {formatPercent(historyBreakdown.paidPercent)}
+                </span>
               </div>
+              {historyReservation.deposit && (
+                <div className="rounded-md border bg-background px-2 py-2 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">10% deposit</span>
+                    {getStatusBadge(historyReservation.deposit.status)}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">Original 10%</span>
+                    <span className="tabular-nums text-right">{formatPhp(historyReservation.deposit.requiredAmount)}</span>
+                    <span className="text-muted-foreground">After deductions</span>
+                    <span className="tabular-nums text-right">{formatPhp(historyReservation.deposit.amountAfterDeductions)}</span>
+                    <span className="text-muted-foreground">Pullout</span>
+                    <span className="text-right">
+                      {historyReservation.deposit.pulledOutAt
+                        ? formatDateTime(historyReservation.deposit.pulledOutAt)
+                        : "Not pulled out"}
+                    </span>
+                  </div>
+                  {(historyReservation.deposit.deductions || []).length > 0 && (
+                    <div className="pt-1 space-y-1">
+                      {historyReservation.deposit.deductions.map((row) => (
+                        <p key={row.deductionId} className="text-xs text-muted-foreground">
+                          Deduction {formatPhp(row.amount)} — {row.reason}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {canConsumeDeposit(historyReservation.deposit) && (
+                    <div className="space-y-2 pt-2">
+                      <Input
+                        inputMode="decimal"
+                        placeholder="Deduction amount"
+                        value={consumeAmount}
+                        onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value, historyReservation.deposit.amountAfterDeductions))}
+                        className="tabular-nums"
+                      />
+                      <Textarea
+                        placeholder="Reason for deduction"
+                        value={consumeReason}
+                        onChange={(e) => setConsumeReason(e.target.value)}
+                        rows={2}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" disabled={depositSaving || !consumeAmount || !consumeReason.trim()} onClick={handleConsumeDeposit}>
+                          Record deduction
+                        </Button>
+                        {canPulloutDeposit(historyReservation.deposit) && (
+                          <Button type="button" size="sm" disabled={depositSaving} onClick={handlePulloutDeposit}>
+                            Pull out remaining
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 pt-1">
                 <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
                   {getPaymentCheckIcon(historyBreakdown.downPaymentMet)}
@@ -846,7 +1491,10 @@ export default function LTOOPaymentsPage() {
                         {formatDateTime(t.paymentDate)}
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
-                        {formatPhp(t.amountPaid)}
+                        {t.entryType === "deposit_release" ? `Released ${formatPhp(t.amountPaid)}` : formatPhp(t.amountPaid)}
+                        {t.discountAmount > 0 && (
+                          <span className="block text-xs text-emerald-700">-{formatPhp(t.discountAmount)} discount</span>
+                        )}
                       </TableCell>
                       <TableCell>{getStatusBadge(t.paymentStatus)}</TableCell>
                       <TableCell className="text-sm text-foreground/80">{t.recordedBy}</TableCell>
@@ -864,7 +1512,9 @@ export default function LTOOPaymentsPage() {
               </span>
               <span className="font-medium tabular-nums">
                 Total: {formatPhp(
-                  historyTransactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0)
+                  historyTransactions.reduce((sum, t) => (
+                    t.entryType === "deposit_release" ? sum : sum + (t.amountPaid || 0)
+                  ), 0)
                 )}
               </span>
             </div>
@@ -891,11 +1541,36 @@ export default function LTOOPaymentsPage() {
           {selectedTransaction && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Amount</span>
+                <span className="text-muted-foreground">
+                  {selectedTransaction.entryType === "deposit_release" ? "Amount released" : "Amount paid"}
+                </span>
                 <span className="font-semibold tabular-nums">
                   {formatPhp(selectedTransaction.amountPaid)}
                 </span>
               </div>
+              {selectedTransaction.baseAmount != null && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Base amount</span>
+                  <span className="font-medium tabular-nums">{formatPhp(selectedTransaction.baseAmount)}</span>
+                </div>
+              )}
+              {selectedTransaction.discountAmount > 0 && (
+                <>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span className="font-medium tabular-nums">
+                      {formatPhp(selectedTransaction.discountAmount)}
+                      {selectedTransaction.discountPercent != null ? ` (${selectedTransaction.discountPercent}%)` : ""}
+                    </span>
+                  </div>
+                  {selectedTransaction.amountAfterDiscount != null && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Amount after discount</span>
+                      <span className="font-medium tabular-nums">{formatPhp(selectedTransaction.amountAfterDiscount)}</span>
+                    </div>
+                  )}
+                </>
+              )}
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Date & time</span>
                 <span className="font-medium tabular-nums">
@@ -907,16 +1582,10 @@ export default function LTOOPaymentsPage() {
                 <span className="font-medium">{selectedTransaction.recordedBy || "—"}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Payment status</span>
+                <span className="text-muted-foreground">
+                  {selectedTransaction.entryType === "deposit_release" ? "Entry" : "Payment status"}
+                </span>
                 <span>{getStatusBadge(selectedTransaction.paymentStatus)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Payment ID</span>
-                <span className="font-mono text-xs">{selectedTransaction.paymentId}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Transaction ID</span>
-                <span className="font-mono text-xs">{selectedTransaction.transactionId}</span>
               </div>
               {selectedTransaction.orNumber && (
                 <div className="flex justify-between gap-4">
@@ -924,32 +1593,46 @@ export default function LTOOPaymentsPage() {
                   <span className="font-medium">{selectedTransaction.orNumber}</span>
                 </div>
               )}
-              {selectedTransaction.depositId && (
+              {(selectedTransaction.depositStatus || selectedTransaction.depositRequiredAmount != null) && (
                 <>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Deposit ID</span>
-                    <span className="font-mono text-xs">{selectedTransaction.depositId}</span>
-                  </div>
                   {selectedTransaction.depositStatus && (
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">Deposit status</span>
-                      <span className="font-medium">{selectedTransaction.depositStatus}</span>
+                      <span>{getStatusBadge(selectedTransaction.depositStatus)}</span>
                     </div>
                   )}
                   {selectedTransaction.depositRequiredAmount != null && (
                     <div className="flex justify-between gap-4">
-                      <span className="text-muted-foreground">Deposit required</span>
+                      <span className="text-muted-foreground">Original 10%</span>
                       <span className="font-medium tabular-nums">
                         {formatPhp(selectedTransaction.depositRequiredAmount)}
                       </span>
                     </div>
                   )}
-                  {selectedTransaction.depositAmountPaid != null && (
+                  {selectedTransaction.depositAmountAfterDeductions != null && (
                     <div className="flex justify-between gap-4">
-                      <span className="text-muted-foreground">Deposit paid</span>
+                      <span className="text-muted-foreground">After deductions</span>
                       <span className="font-medium tabular-nums">
-                        {formatPhp(selectedTransaction.depositAmountPaid)}
+                        {formatPhp(selectedTransaction.depositAmountAfterDeductions)}
                       </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Pullout</span>
+                    <span className="font-medium">
+                      {selectedTransaction.depositPulledOutAt
+                        ? formatDateTime(selectedTransaction.depositPulledOutAt)
+                        : "Not pulled out"}
+                    </span>
+                  </div>
+                  {(selectedTransaction.depositDeductions || []).length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground">Deductions</span>
+                      {selectedTransaction.depositDeductions.map((row) => (
+                        <p key={row.deductionId} className="text-sm bg-background rounded-md border p-2">
+                          {formatPhp(row.amount)} — {row.reason}
+                        </p>
+                      ))}
                     </div>
                   )}
                   {selectedTransaction.depositNotes && (
@@ -974,7 +1657,7 @@ export default function LTOOPaymentsPage() {
 
       {/* Confirm Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Wallet className="size-5" />Confirm Payment</DialogTitle>
             <DialogDescription>Recording payment for {selectedReservation?.clientName}</DialogDescription>
@@ -984,7 +1667,37 @@ export default function LTOOPaymentsPage() {
             <div className="flex justify-between"><span className="text-foreground/70">Event:</span><span className="font-medium text-foreground">{selectedReservation?.eventType}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Date:</span><span className="font-medium text-foreground">{selectedReservation?.eventDate}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Payment type:</span><span className="font-medium text-foreground capitalize">{getPaymentTypeLabel(paymentType)}</span></div>
-            <div className="flex justify-between"><span className="text-foreground/70">Amount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(paymentAmount)}</span></div>
+            {pendingDiscount > 0 && (
+              <>
+                <div className="flex justify-between"><span className="text-foreground/70">100% total before this discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(roundMoney((currentBreakdown?.totalPayable || 0) + pendingDiscount))}</span></div>
+                <div className="flex justify-between"><span className="text-foreground/70">Discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(pendingDiscount)}{discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}</span></div>
+                <div className="flex justify-between"><span className="text-foreground/70">Amount after discount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(currentBreakdown?.totalPayable)}</span></div>
+              </>
+            )}
+            <div className="flex justify-between"><span className="text-foreground/70">Amount:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(paymentAmount || 0)}</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">This entry:</span><span className="font-medium tabular-nums text-foreground">{formatPercent(getShareOfTotal(roundMoney(paymentAmount || 0), currentBreakdown?.totalPayable || 0))} of 100% total</span></div>
+            {bothPlusSplit && (
+              <div className="flex justify-between gap-3">
+                <span className="text-foreground/70">Split:</span>
+                <span className="font-medium tabular-nums text-right text-foreground">
+                  {formatPhp(bothPlusSplit.installment)} (60%)
+                  {bothPlusSplit.additional > 0 ? ` + ${formatPhp(bothPlusSplit.additional)} additional` : ""}
+                </span>
+              </div>
+            )}
+            {manualAllocation && (
+              <div className="flex justify-between gap-3">
+                <span className="text-foreground/70">Applied as:</span>
+                <span className="font-medium tabular-nums text-right text-foreground">
+                  {[
+                    manualAllocation.deposit > 0 ? `deposit ${formatPhp(manualAllocation.deposit)}` : null,
+                    manualAllocation.downpayment > 0 ? `down ${formatPhp(manualAllocation.downpayment)}` : null,
+                    manualAllocation.balance > 0 ? `balance ${formatPhp(manualAllocation.balance)}` : null,
+                  ].filter(Boolean).join(" · ") || "—"}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between"><span className="text-foreground/70">Paid after:</span><span className="font-medium tabular-nums text-foreground">{formatPercent(projectedPercent)}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Status after payment:</span><span className="font-medium text-foreground">{getStatusLabel(projectedBreakdown?.status ?? currentBreakdown?.status)}</span></div>
             <div className="flex justify-between"><span className="text-foreground/70">Remaining after:</span><span className="font-medium tabular-nums text-foreground">{formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown?.remainingBalance ?? 0)}</span></div>
           </div>

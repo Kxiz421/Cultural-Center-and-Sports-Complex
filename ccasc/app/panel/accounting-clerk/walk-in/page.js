@@ -906,7 +906,7 @@ export default function WalkInReservationPage() {
             </div>
             <div className="space-y-2">
               <Label>Time Slot *</Label>
-              <Select value={timeSlotId} onValueChange={handleTimeSlotChange}>
+              <Select value={timeSlotId} onValueChange={handleTimeSlotChange} disabled={customizePerDate}>
                 <SelectTrigger className="w-full min-w-0">
                   <SelectValue placeholder="Select time slot" />
                 </SelectTrigger>
@@ -918,10 +918,15 @@ export default function WalkInReservationPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {customizePerDate && (
+                <p className="text-xs text-muted-foreground">
+                  Locked while using per-date settings. Press Using Per-Date Settings to unlock.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Package</Label>
-              <Select value={packageId} onValueChange={handlePackageSelect}>
+              <Select value={packageId} onValueChange={handlePackageSelect} disabled={customizePerDate}>
                 <SelectTrigger className="w-full min-w-0">
                   <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
                 </SelectTrigger>
@@ -931,8 +936,24 @@ export default function WalkInReservationPage() {
                   <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                 </SelectContent>
               </Select>
+              {customizePerDate && (
+                <p className="text-xs text-muted-foreground">
+                  Locked while using per-date settings. Edit each date in Per-Date Details.
+                </p>
+              )}
             </div>
 {/* Conditional: Package Inclusions, virtual packages, or particulars */}
+            {customizePerDate ? (
+              <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                <p>
+                  Packages and additional services are configured per date. Use{" "}
+                  <span className="font-medium text-foreground">Edit Per-Date Details</span> to
+                  update each day, or press{" "}
+                  <span className="font-medium text-foreground">Using Per-Date Settings</span> to
+                  unlock the default time slot and package.
+                </p>
+              </div>
+            ) : (
             <div className="space-y-2">
               {isVirtualPackageId(packageId) ? (
                 <ReservationVirtualPackagePanel
@@ -1026,6 +1047,7 @@ export default function WalkInReservationPage() {
                 </>
               ) : null}
             </div>
+            )}
             <div className="space-y-2">
               <Label>Additional Dates</Label>
               <p className="text-xs text-muted-foreground">
