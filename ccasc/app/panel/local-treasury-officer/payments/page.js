@@ -64,6 +64,7 @@ import {
   validateDiscountAmount,
   BALANCE_PAYMENT_MINIMUM,
 } from "@/lib/payment-utils";
+import { isDepositRecordMet } from "@/lib/deposit-utils";
 
 const PAYMENT_RADIO_OPTIONS = [
   { value: "deposit", title: "10% Deposit" },
@@ -97,6 +98,14 @@ function breakdownFromReservation(reservation, extraDiscount = 0) {
     depositRecord,
     { originalBase, totalDiscount: existingDiscount + extraDiscount }
   );
+}
+
+function hasPaidDeposit(deposit) {
+  return isDepositRecordMet(deposit);
+}
+
+function isFullyPaidReservation(reservation) {
+  return reservation?.computedStatus === "Fully Paid" || reservation?.balanceSettled === true;
 }
 
 function canConsumeDeposit(deposit) {
@@ -193,6 +202,7 @@ export default function LTOOPaymentsPage() {
   const [consumeAmount, setConsumeAmount] = React.useState("");
   const [consumeReason, setConsumeReason] = React.useState("");
   const [depositSaving, setDepositSaving] = React.useState(false);
+  const [depositPanelOpen, setDepositPanelOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyReservation, setHistoryReservation] = React.useState(null);
   const [historyTransactions, setHistoryTransactions] = React.useState([]);
@@ -289,7 +299,12 @@ export default function LTOOPaymentsPage() {
       return { ok: !discountEnabled, error: "" };
     }
     const current = breakdownFromReservation(selectedReservation, 0);
-    return validateDiscountAmount(current.totalPayable, current.paid, pendingDiscount);
+    return validateDiscountAmount(
+      current.totalPayable,
+      current.paid,
+      pendingDiscount,
+      current.requiredDeposit
+    );
   }, [discountEnabled, selectedReservation, pendingDiscount]);
 
   const currentBreakdown = React.useMemo(
@@ -419,6 +434,7 @@ export default function LTOOPaymentsPage() {
     setDiscountPercent("");
     setConsumeAmount("");
     setConsumeReason("");
+    setDepositPanelOpen(false);
     setRecordOpen(true);
   };
 
@@ -431,6 +447,7 @@ export default function LTOOPaymentsPage() {
     setHistoryTransactions([]);
     setConsumeAmount("");
     setConsumeReason("");
+    setDepositPanelOpen(false);
     try {
       const res = await fetch(
         `/api/ltoo/payments?history=true&reservationId=${reservation.reservationId}`
@@ -871,7 +888,7 @@ export default function LTOOPaymentsPage() {
                       <span className="tabular-nums font-medium text-right text-emerald-700">-{formatPhp(currentBreakdown.totalDiscount)}</span>
                     </>
                   )}
-                  <span className="text-muted-foreground">Current base</span>
+                  <span className="text-muted-foreground">Discounted rental</span>
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.base)}</span>
                   <span className="text-muted-foreground">10% deposit</span>
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.requiredDeposit)}</span>
@@ -987,8 +1004,12 @@ export default function LTOOPaymentsPage() {
                       placeholder="0.00"
                       value={discountPeso}
                       onChange={(e) => {
-                        const max = currentBreakdown
-                          ? roundMoney((breakdownFromReservation(selectedReservation, 0)?.remainingBalance) || 0)
+                        const current = breakdownFromReservation(selectedReservation, 0);
+                        const max = current
+                          ? roundMoney(Math.min(
+                            current.remainingBalance,
+                            Math.max(0, current.totalPayable - current.requiredDeposit)
+                          ))
                           : 0;
                         const next = sanitizeMoneyInput(e.target.value, max);
                         setDiscountPeso(next);
@@ -1020,7 +1041,7 @@ export default function LTOOPaymentsPage() {
                       This discount: {formatPhp(pendingDiscount)}
                       {discountMode === "percent" && discountPercent ? ` (${discountPercent}%)` : ""}
                       {" · "}New 100% total {formatPhp(currentBreakdown.totalPayable)}
-                      {" · "}New 10% {formatPhp(currentBreakdown.requiredDeposit)}
+                      {" · "}10% deposit stays {formatPhp(currentBreakdown.requiredDeposit)}
                       {" · "}New 50% {formatPhp(currentBreakdown.requiredDownPayment)}
                     </p>
                   )}
@@ -1030,74 +1051,6 @@ export default function LTOOPaymentsPage() {
                 </div>
               )}
             </div>
-
-            {selectedReservation?.deposit && (
-              <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">10% Deposit</p>
-                  {getStatusBadge(selectedReservation.deposit.status)}
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">Original 10%</span>
-                  <span className="tabular-nums text-right">{formatPhp(selectedReservation.deposit.requiredAmount)}</span>
-                  <span className="text-muted-foreground">After deductions</span>
-                  <span className="tabular-nums text-right">{formatPhp(selectedReservation.deposit.amountAfterDeductions)}</span>
-                  <span className="text-muted-foreground">Pullout</span>
-                  <span className="text-right">
-                    {selectedReservation.deposit.pulledOutAt
-                      ? `Pulled out ${formatDateTime(selectedReservation.deposit.pulledOutAt)}`
-                      : "Not pulled out"}
-                  </span>
-                </div>
-                {(selectedReservation.deposit.deductions || []).length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium">Deductions</p>
-                    {selectedReservation.deposit.deductions.map((row) => (
-                      <p key={row.deductionId} className="text-xs text-muted-foreground">
-                        {formatPhp(row.amount)} — {row.reason}
-                      </p>
-                    ))}
-                  </div>
-                )}
-                {canConsumeDeposit(selectedReservation.deposit) && (
-                  <div className="space-y-2 border-t pt-2">
-                    <Label>Consume (damages / overtime)</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="Deduction amount"
-                      value={consumeAmount}
-                      onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value, selectedReservation.deposit.amountAfterDeductions))}
-                      className="tabular-nums"
-                    />
-                    <Textarea
-                      placeholder="Reason for deduction"
-                      value={consumeReason}
-                      onChange={(e) => setConsumeReason(e.target.value)}
-                      rows={2}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={depositSaving || !consumeAmount || !consumeReason.trim()}
-                      onClick={handleConsumeDeposit}
-                    >
-                      {depositSaving ? "Saving..." : "Record deduction"}
-                    </Button>
-                  </div>
-                )}
-                {canPulloutDeposit(selectedReservation.deposit) && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={depositSaving}
-                    onClick={handlePulloutDeposit}
-                  >
-                    Pull out remaining {formatPhp(selectedReservation.deposit.amountAfterDeductions)}
-                  </Button>
-                )}
-              </div>
-            )}
 
             <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
               <fieldset className="space-y-2" disabled={currentBreakdown?.balanceSettled && !discountSettlesRemaining}>
@@ -1371,7 +1324,7 @@ export default function LTOOPaymentsPage() {
                     </span>
                   </>
                 )}
-                <span className="text-muted-foreground">Current base</span>
+                <span className="text-muted-foreground">Discounted rental</span>
                 <span className="tabular-nums font-medium text-right">
                   {formatPhp(historyBreakdown.base)}
                 </span>
@@ -1392,10 +1345,44 @@ export default function LTOOPaymentsPage() {
                   {formatPercent(historyBreakdown.paidPercent)}
                 </span>
               </div>
-              {historyReservation.deposit && (
-                <div className="rounded-md border bg-background px-2 py-2 space-y-1">
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.downPaymentMet)}
+                  50% down
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.depositMet)}
+                  10% deposit
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  {getPaymentCheckIcon(historyBreakdown.balanceSettled)}
+                  Balance
+                </span>
+              </div>
+            </div>
+          )}
+
+          {isFullyPaidReservation(historyReservation) && hasPaidDeposit(historyReservation?.deposit) && (
+            <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">10% Deposit</p>
+                  <p className="text-xs text-muted-foreground">
+                    Consume for damages/overtime or pull out the remaining amount.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={depositPanelOpen ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDepositPanelOpen((open) => !open)}
+                >
+                  {depositPanelOpen ? "Hide deposit" : "Manage deposit"}
+                </Button>
+              </div>
+              {depositPanelOpen && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">10% deposit</span>
                     {getStatusBadge(historyReservation.deposit.status)}
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -1411,16 +1398,17 @@ export default function LTOOPaymentsPage() {
                     </span>
                   </div>
                   {(historyReservation.deposit.deductions || []).length > 0 && (
-                    <div className="pt-1 space-y-1">
+                    <div className="space-y-1">
                       {historyReservation.deposit.deductions.map((row) => (
                         <p key={row.deductionId} className="text-xs text-muted-foreground">
-                          Deduction {formatPhp(row.amount)} — {row.reason}
+                          {formatPhp(row.amount)} — {row.reason}
                         </p>
                       ))}
                     </div>
                   )}
                   {canConsumeDeposit(historyReservation.deposit) && (
-                    <div className="space-y-2 pt-2">
+                    <div className="space-y-2 border-t pt-2">
+                      <Label>Consume (damages / overtime)</Label>
                       <Input
                         inputMode="decimal"
                         placeholder="Deduction amount"
@@ -1435,12 +1423,18 @@ export default function LTOOPaymentsPage() {
                         rows={2}
                       />
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" disabled={depositSaving || !consumeAmount || !consumeReason.trim()} onClick={handleConsumeDeposit}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={depositSaving || !consumeAmount || !consumeReason.trim()}
+                          onClick={handleConsumeDeposit}
+                        >
                           Record deduction
                         </Button>
                         {canPulloutDeposit(historyReservation.deposit) && (
                           <Button type="button" size="sm" disabled={depositSaving} onClick={handlePulloutDeposit}>
-                            Pull out remaining
+                            Pull out remaining {formatPhp(historyReservation.deposit.amountAfterDeductions)}
                           </Button>
                         )}
                       </div>
@@ -1448,20 +1442,6 @@ export default function LTOOPaymentsPage() {
                   )}
                 </div>
               )}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                  {getPaymentCheckIcon(historyBreakdown.downPaymentMet)}
-                  50% down
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                  {getPaymentCheckIcon(historyBreakdown.depositMet)}
-                  10% deposit
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                  {getPaymentCheckIcon(historyBreakdown.balanceSettled)}
-                  Balance
-                </span>
-              </div>
             </div>
           )}
 

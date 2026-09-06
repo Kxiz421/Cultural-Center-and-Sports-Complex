@@ -3,10 +3,18 @@ import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 
 
-export async function GET() {
+export async function GET(request) {
   try {
-    // Fetch all reservations without client include to avoid orphaned FK errors
+    const { searchParams } = new URL(request.url);
+    const rawClientId = searchParams.get("clientId");
+    const ownEventsOnly = rawClientId !== null;
+    const mineClientId = parseInt(String(rawClientId || "").replace(/^CLT-/i, ""), 10);
+
+    // Fetch reservations without client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
+      where: ownEventsOnly
+        ? { clientId: Number.isFinite(mineClientId) ? mineClientId : -1 }
+        : undefined,
       include: {
         venue: true,
         package: {
@@ -72,6 +80,7 @@ export async function GET() {
         return uniqueDates.map((dateKey, idx) => ({
           id: `RES-${r.reservationId}-${dateKey}`,
           reservationId: r.reservationId,
+          clientId: r.clientId,
           title: r.eventType,
           date: dateKey,
           start: r.timeSlot.startTime,

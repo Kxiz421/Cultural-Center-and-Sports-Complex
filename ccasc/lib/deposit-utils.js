@@ -19,7 +19,10 @@ export const DEPOSIT_PULLOUT_STATUSES = ["Held", "Deducted"];
  */
 export function isDepositRecordMet(deposit) {
   if (!deposit) return false;
-  const statusName = deposit.status?.status || deposit.statusName || null;
+  const statusName =
+    (typeof deposit.status === "string" ? deposit.status : deposit.status?.status) ||
+    deposit.statusName ||
+    null;
   if (statusName && DEPOSIT_SATISFIED_STATUSES.includes(statusName)) return true;
   const paid = roundMoney(deposit.amountPaid || 0);
   const required = roundMoney(deposit.requiredAmount || 0);
