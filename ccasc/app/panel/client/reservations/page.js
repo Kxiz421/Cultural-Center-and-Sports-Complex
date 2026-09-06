@@ -708,7 +708,11 @@ export default function ClientReservationsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="timeslot">Time Slot <span className="text-red-500">*</span></Label>
-                <Select value={form.timeSlotId} onValueChange={handleTimeSlotChange}>
+                <Select
+                  value={form.timeSlotId}
+                  onValueChange={handleTimeSlotChange}
+                  disabled={customizePerDate}
+                >
                   <SelectTrigger id="timeslot" className="w-full min-w-0">
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
@@ -720,11 +724,20 @@ export default function ClientReservationsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {customizePerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Locked while using per-date settings. Press Using Per-Date Settings to unlock.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="package">Package</Label>
-                <Select value={form.packageId} onValueChange={handlePackageSelect}>
+                <Select
+                  value={form.packageId}
+                  onValueChange={handlePackageSelect}
+                  disabled={customizePerDate}
+                >
                   <SelectTrigger id="package" className="w-full min-w-0">
                     <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
@@ -734,6 +747,11 @@ export default function ClientReservationsPage() {
                     <ReservationPackageSelectItems packages={packages} particulars={particulars} />
                   </SelectContent>
                 </Select>
+                {customizePerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Locked while using per-date settings. Edit each date in Per-Date Details.
+                  </p>
+                )}
               </div>
             </div>
 {/* Date Picker - Calendar Grid */}

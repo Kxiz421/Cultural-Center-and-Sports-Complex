@@ -5,7 +5,15 @@
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const STATUSES = ["Pending", "Held", "Refunded", "Forfeited"];
+const STATUSES = [
+  "Pending",
+  "Held",
+  "Refunded",
+  "Forfeited",
+  "Deducted",
+  "Fully Deducted",
+  "Pulled Out",
+];
 
 async function main() {
   for (const status of STATUSES) {

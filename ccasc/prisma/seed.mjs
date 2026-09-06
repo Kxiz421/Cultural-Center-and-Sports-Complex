@@ -81,6 +81,9 @@ async function main() {
     prisma.depositStatus.create({ data: { status: 'Held' } }),
     prisma.depositStatus.create({ data: { status: 'Refunded' } }),
     prisma.depositStatus.create({ data: { status: 'Forfeited' } }),
+    prisma.depositStatus.create({ data: { status: 'Deducted' } }),
+    prisma.depositStatus.create({ data: { status: 'Fully Deducted' } }),
+    prisma.depositStatus.create({ data: { status: 'Pulled Out' } }),
   ]);
   console.log(`✓ Created ${depositStatuses.length} deposit statuses`);
 

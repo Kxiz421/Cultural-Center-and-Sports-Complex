@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { formatDbDate, roundMoney } from "@/lib/utils";
+import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 import {
   computePaymentBreakdown,
-  getPaymentTypeMax,
-  getPaymentTypeMin,
-  isPaymentTypeAllowed,
-  isFixedPaymentAmount,
+  isValidPaymentType,
+  validatePaymentAmount,
+  paymentCoversDeposit,
   getPaymentTypeLabel,
+  getBilledTotals,
+  sumPaymentDiscounts,
+  computeDiscountPeso,
+  validateDiscountAmount,
 } from "@/lib/payment-utils";
 import {
   ensurePendingDeposit,
   recordDepositPayment,
+  mapDepositSnapshot,
 } from "@/lib/deposit-utils";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { getPackageBillingRate } from "@/lib/reservation-package-select";
@@ -28,9 +32,38 @@ function getBookingDeposit(bookings) {
 }
 
 const bookingDepositInclude = {
-  payments: { select: { amountPaid: true } },
-  deposit: { include: { status: true } },
+  payments: {
+    select: {
+      amountPaid: true,
+      discountAmount: true,
+      discountPercent: true,
+      baseAmount: true,
+      amountAfterDiscount: true,
+    },
+  },
+  deposit: {
+    include: {
+      status: true,
+      deductions: { orderBy: { recordedAt: "desc" } },
+    },
+  },
 };
+
+function collectBookingPayments(bookings) {
+  return (bookings || []).flatMap((booking) => booking.payments || []);
+}
+
+function billedBreakdownForReservation(originalBase, bookings, depositRecord = null) {
+  const payments = collectBookingPayments(bookings);
+  const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amountPaid || 0), 0);
+  const totalDiscount = sumPaymentDiscounts(payments);
+  return computePaymentBreakdown(
+    originalBase,
+    totalPaid,
+    depositRecord ?? getBookingDeposit(bookings),
+    { originalBase, totalDiscount }
+  );
+}
 
 const PACKAGE_RATE_SELECT = {
   packageId: true,
@@ -92,11 +125,6 @@ export async function GET(request) {
         .map((r) => {
           const client = clientMap[r.clientId];
           // Calculate total paid so far
-          const totalPaid = r.bookings.reduce(
-            (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
-            0
-          );
-          // Calculate total amount from reservation
           const numDays = 1 + r.additionalDates.length;
           const pkgRate = r.package
             ? getPackageBillingRate(r.package, r.timeSlotId, packageCatalog)
@@ -117,11 +145,12 @@ export async function GET(request) {
             calculatedBase > 0
               ? roundMoney(Math.max(storedBase, calculatedBase))
               : storedBase;
-          const breakdown = computePaymentBreakdown(
+          const breakdown = billedBreakdownForReservation(
             totalAmount,
-            totalPaid,
+            r.bookings,
             getBookingDeposit(r.bookings)
           );
+          const deposit = mapDepositSnapshot(getBookingDeposit(r.bookings));
 
           return {
             id: r.reservationId,
@@ -140,11 +169,15 @@ export async function GET(request) {
             packageName: r.package?.packageName,
             packageDayRate: r.package?.dayRate ? Number(r.package.dayRate) : null,
             packageNightRate: r.package?.nightRate ? Number(r.package.nightRate) : null,
+            originalAmount: breakdown.originalBase,
+            originalTotalPayable: breakdown.originalTotalPayable,
+            totalDiscount: breakdown.totalDiscount,
             totalAmount: breakdown.base,
             totalPaid: breakdown.paid,
             balance: breakdown.remainingBalance,
             balanceRemaining: breakdown.remainingBalance,
             totalPayable: breakdown.totalPayable,
+            deposit,
             hasBooking: r.bookings.length > 0,
             paymentStatus: breakdown.balanceSettled
               ? "BalanceSettled"
@@ -201,8 +234,18 @@ export async function GET(request) {
         };
       }
       if (reservationId && Number.isFinite(reservationId)) {
-        where.payment = { booking: { reservationId } };
+        where.OR = [
+          { payment: { booking: { reservationId } } },
+          { deposit: { booking: { reservationId } } },
+        ];
       }
+
+      const reservationInclude = {
+        include: {
+          venue: { select: { venue: true } },
+          timeSlot: { select: { startTime: true, endTime: true } },
+        },
+      };
 
       const transactions = await prisma.transaction.findMany({
         where: Object.keys(where).length > 0 ? where : undefined,
@@ -212,18 +255,21 @@ export async function GET(request) {
               status: { select: { status: true } },
               booking: {
                 include: {
-                  reservation: {
-                    include: {
-                      venue: { select: { venue: true } },
-                      timeSlot: { select: { startTime: true, endTime: true } },
-                    },
-                  },
+                  reservation: reservationInclude,
                 },
               },
             },
           },
           deposit: {
-            include: { status: { select: { status: true } } },
+            include: {
+              status: { select: { status: true } },
+              deductions: { orderBy: { recordedAt: "desc" } },
+              booking: {
+                include: {
+                  reservation: reservationInclude,
+                },
+              },
+            },
           },
         },
         orderBy: { paymentDate: "desc" },
@@ -232,7 +278,10 @@ export async function GET(request) {
       const clientIds = [
         ...new Set(
           transactions
-            .map((t) => t.payment?.booking?.reservation?.clientId)
+            .map((t) => (
+              t.payment?.booking?.reservation?.clientId
+              ?? t.deposit?.booking?.reservation?.clientId
+            ))
             .filter((id) => id != null)
         ),
       ];
@@ -251,7 +300,8 @@ export async function GET(request) {
       const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
       const mapped = transactions.map((t) => {
-        const reservation = t.payment?.booking?.reservation;
+        const reservation =
+          t.payment?.booking?.reservation || t.deposit?.booking?.reservation;
         const client = reservation ? clientMap[reservation.clientId] : null;
         const notes = reservation?.notes || "";
         const walkInMatch = notes.match(/Client:\s*([^,]+)/);
@@ -262,22 +312,38 @@ export async function GET(request) {
 
         const clientType =
           client?.clientRoleId === "PROV" ? "provincial" : "client";
+        const deposit = mapDepositSnapshot(t.deposit);
+        const isRelease = t.entryType === "deposit_release";
 
         return {
           transactionId: t.transactionId,
           paymentId: t.paymentId,
           depositId: t.depositId ?? null,
-          bookingId: t.payment?.bookingId ?? null,
+          bookingId: t.payment?.bookingId ?? t.deposit?.bookingId ?? null,
           reservationId: reservation?.reservationId ?? null,
           orNumber: t.receiptNumber || null,
-          amountPaid: roundMoney(t.payment?.amountPaid ?? 0),
-          paymentStatus: t.payment?.status?.status || "Partially Paid",
-          depositStatus: t.deposit?.status?.status ?? null,
-          depositRequiredAmount: t.deposit
-            ? roundMoney(t.deposit.requiredAmount)
+          entryType: t.entryType || "payment",
+          amountPaid: isRelease
+            ? roundMoney(t.releaseAmount ?? 0)
+            : roundMoney(t.payment?.amountPaid ?? 0),
+          paymentStatus: isRelease
+            ? "Pulled Out"
+            : (t.payment?.status?.status || "Partially Paid"),
+          baseAmount: t.payment?.baseAmount != null ? roundMoney(t.payment.baseAmount) : null,
+          discountAmount: t.payment ? roundMoney(t.payment.discountAmount || 0) : 0,
+          discountPercent: t.payment?.discountPercent != null
+            ? Number(t.payment.discountPercent)
             : null,
-          depositAmountPaid: t.deposit ? roundMoney(t.deposit.amountPaid) : null,
-          depositNotes: t.deposit?.notes ?? null,
+          amountAfterDiscount: t.payment?.amountAfterDiscount != null
+            ? roundMoney(t.payment.amountAfterDiscount)
+            : null,
+          depositStatus: deposit?.status ?? null,
+          depositRequiredAmount: deposit?.requiredAmount ?? null,
+          depositAmountPaid: deposit?.amountPaid ?? null,
+          depositAmountAfterDeductions: deposit?.amountAfterDeductions ?? null,
+          depositPulledOutAt: deposit?.pulledOutAt ?? null,
+          depositNotes: deposit?.notes ?? null,
+          depositDeductions: deposit?.deductions ?? [],
           clientName,
           clientType,
           activityName: reservation?.eventType || "",
@@ -292,7 +358,9 @@ export async function GET(request) {
       });
 
       const totalCollected = roundMoney(
-        mapped.reduce((sum, row) => sum + row.amountPaid, 0)
+        mapped.reduce((sum, row) => (
+          row.entryType === "deposit_release" ? sum : sum + row.amountPaid
+        ), 0)
       );
 
       return NextResponse.json({
@@ -367,19 +435,23 @@ export async function POST(request) {
       paymentType,
       performedBy,
       performedByName,
+      applyDiscount,
+      discountMode,
+      discountPeso,
+      discountPercent,
     } = body;
 
-    if (!clientName || !amountPaid) {
+    if (!clientName) {
       return NextResponse.json(
-        { error: "Client and payment amount are required" },
+        { error: "Client is required" },
         { status: 400 }
       );
     }
 
-    const amount = Number(amountPaid);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const amount = Number(amountPaid || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
       return NextResponse.json(
-        { error: "Payment amount must be a positive number" },
+        { error: "Payment amount must be a valid number" },
         { status: 400 }
       );
     }
@@ -392,13 +464,21 @@ export async function POST(request) {
     let notifyEventDate = activityDate || "";
     let notifyVenue = "";
     let depositRequiredAmount = 0;
-    let resolvedPaymentType =
-      paymentType === "deposit" ||
-      paymentType === "downpayment" ||
-      paymentType === "both" ||
-      paymentType === "balance"
-        ? paymentType
-        : "balance";
+    let paymentBreakdown = null;
+    let paymentBaseAmount = null;
+    let paymentDiscountAmount = 0;
+    let paymentDiscountPercent = null;
+    let paymentAmountAfterDiscount = null;
+    if (paymentType && !isValidPaymentType(paymentType)) {
+      return NextResponse.json(
+        { error: "Invalid payment type." },
+        { status: 400 }
+      );
+    }
+
+    let resolvedPaymentType = isValidPaymentType(paymentType)
+      ? paymentType
+      : "manual";
 
     // If recording against an existing reservation, validate the amount server-side.
     if (reservationId) {
@@ -454,85 +534,83 @@ export async function POST(request) {
           ? roundMoney(Math.max(storedBase, calculatedBase))
           : storedBase;
 
-      const totalPaid =
-        reservation.bookings?.reduce(
-          (sum, b) =>
-            sum + (b.payments || []).reduce((s, p) => s + Number(p.amountPaid), 0),
-          0
-        ) || 0;
-
-      const breakdown = computePaymentBreakdown(
+      const currentBreakdown = billedBreakdownForReservation(
         totalAmt,
-        totalPaid,
+        reservation.bookings,
         getBookingDeposit(reservation.bookings)
       );
+      const totalPaid = currentBreakdown.paid;
+
+      let discountAmount = 0;
+      let discountPercentValue = null;
+      if (applyDiscount) {
+        discountAmount = computeDiscountPeso(currentBreakdown.totalPayable, {
+          mode: discountMode === "percent" ? "percent" : "peso",
+          peso: discountPeso,
+          percent: discountPercent,
+        });
+        const discountCheck = validateDiscountAmount(
+          currentBreakdown.totalPayable,
+          totalPaid,
+          discountAmount
+        );
+        if (!discountCheck.ok) {
+          return NextResponse.json({ error: discountCheck.error }, { status: 400 });
+        }
+        if (discountMode === "percent") {
+          discountPercentValue = Number(discountPercent);
+        }
+      }
+
+      const billedAfterDiscount = getBilledTotals(
+        currentBreakdown.originalBase,
+        currentBreakdown.totalDiscount + discountAmount
+      );
+      const breakdown = computePaymentBreakdown(
+        billedAfterDiscount.base,
+        totalPaid,
+        getBookingDeposit(reservation.bookings),
+        {
+          originalBase: currentBreakdown.originalBase,
+          totalDiscount: currentBreakdown.totalDiscount + discountAmount,
+        }
+      );
       depositRequiredAmount = breakdown.requiredDeposit;
+      paymentBreakdown = breakdown;
+      paymentBaseAmount = currentBreakdown.totalPayable;
+      paymentDiscountAmount = discountAmount;
+      paymentDiscountPercent = discountPercentValue;
+      paymentAmountAfterDiscount = billedAfterDiscount.totalPayable;
       const remainingBalance = breakdown.remainingBalance;
+      const discountSettlesRemaining = discountAmount > 0 && remainingBalance <= 0;
 
-      const normalizedPaymentType =
-        paymentType === "deposit" ||
-        paymentType === "downpayment" ||
-        paymentType === "both" ||
-        paymentType === "balance"
-          ? paymentType
-          : "balance";
+      const normalizedPaymentType = isValidPaymentType(paymentType)
+        ? paymentType
+        : (discountSettlesRemaining ? "full" : "manual");
 
-      if (!isPaymentTypeAllowed(breakdown, normalizedPaymentType)) {
-        const label =
-          normalizedPaymentType === "deposit" ? "10% deposit"
-          : normalizedPaymentType === "downpayment" ? "50% down payment"
-          : normalizedPaymentType === "both" ? "50% down + 10% deposit"
-          : "remaining balance";
+      if (!discountSettlesRemaining && amount <= 0) {
         return NextResponse.json(
-          { error: `The ${label} has already been recorded or is not available yet.` },
+          { error: "Payment amount must be a positive number" },
           { status: 400 }
         );
       }
 
-      // The payment can never exceed the total remaining balance.
+      const validation = validatePaymentAmount(
+        breakdown,
+        normalizedPaymentType,
+        amount,
+        { discountSettlesRemaining }
+      );
+      if (!validation.ok) {
+        return NextResponse.json(
+          { error: validation.error },
+          { status: 400 }
+        );
+      }
+
       if (roundMoney(amount) > remainingBalance) {
         return NextResponse.json(
-          { error: `Amount cannot exceed the remaining balance of ${remainingBalance.toFixed(2)}` },
-          { status: 400 }
-        );
-      }
-
-      // The amount can never exceed the cap for the selected payment type.
-      const typeMax = getPaymentTypeMax(breakdown, normalizedPaymentType);
-      if (roundMoney(amount) > typeMax) {
-        const label =
-          normalizedPaymentType === "deposit" ? "the 10% deposit"
-          : normalizedPaymentType === "downpayment" ? "the 50% down payment"
-          : normalizedPaymentType === "both" ? "the 50% down + 10% deposit"
-          : "the remaining balance";
-        return NextResponse.json(
-          { error: `Amount cannot exceed ${typeMax.toFixed(2)} for ${label}` },
-          { status: 400 }
-        );
-      }
-
-      const typeMin = getPaymentTypeMin(breakdown, normalizedPaymentType);
-      if (
-        normalizedPaymentType === "balance" &&
-        typeMin > 0 &&
-        roundMoney(amount) < typeMin
-      ) {
-        return NextResponse.json(
-          {
-            error: `Minimum payment for remaining balance is ${typeMin.toFixed(2)}. Enter at least this amount (or pay the full remaining balance if it is lower than ₱500).`,
-          },
-          { status: 400 }
-        );
-      }
-
-      if (isFixedPaymentAmount(normalizedPaymentType) && roundMoney(amount) !== roundMoney(typeMax)) {
-        const label =
-          normalizedPaymentType === "deposit" ? "10% deposit"
-          : normalizedPaymentType === "downpayment" ? "50% down payment"
-          : normalizedPaymentType === "both" ? "50% down + 10% deposit"
-          : "remaining balance";
-        return NextResponse.json(
-          { error: `You must pay the full ${label} amount of ${typeMax.toFixed(2)}` },
+          { error: `Amount cannot exceed the remaining balance of ${formatPhp(remainingBalance)}` },
           { status: 400 }
         );
       }
@@ -540,10 +618,7 @@ export async function POST(request) {
       // Derive the stored status from the cumulative amount paid after this payment.
       if (clientType !== "provincial") {
         let depositAfter = getBookingDeposit(reservation.bookings);
-        if (
-          normalizedPaymentType === "deposit" ||
-          normalizedPaymentType === "both"
-        ) {
+        if (paymentCoversDeposit(breakdown, normalizedPaymentType, amount)) {
           depositAfter = {
             amountPaid: breakdown.requiredDeposit,
             requiredAmount: breakdown.requiredDeposit,
@@ -551,9 +626,13 @@ export async function POST(request) {
           };
         }
         const afterPayment = computePaymentBreakdown(
-          totalAmt,
+          billedAfterDiscount.base,
           totalPaid + amount,
-          depositAfter
+          depositAfter,
+          {
+            originalBase: currentBreakdown.originalBase,
+            totalDiscount: currentBreakdown.totalDiscount + discountAmount,
+          }
         );
         statusToUse = afterPayment.balanceSettled ? "Fully Paid" : "Partially Paid";
       }
@@ -633,12 +712,23 @@ export async function POST(request) {
     }
 
     // Create payment
+    if (!reservationId && amount <= 0) {
+      return NextResponse.json(
+        { error: "Payment amount must be a positive number" },
+        { status: 400 }
+      );
+    }
+
     const payment = await prisma.payment.create({
       data: {
         amountPaid: amount,
         paymentStatusId: paymentStatusRecord.statusId,
         bookingId: bookingId,
         staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+        baseAmount: paymentBaseAmount,
+        discountAmount: paymentDiscountAmount,
+        discountPercent: paymentDiscountPercent,
+        amountAfterDiscount: paymentAmountAfterDiscount,
       },
     });
 
@@ -657,28 +747,27 @@ export async function POST(request) {
 
     if (
       depositRequiredAmount > 0 &&
-      (resolvedPaymentType === "deposit" || resolvedPaymentType === "both")
+      paymentBreakdown &&
+      paymentCoversDeposit(paymentBreakdown, resolvedPaymentType, amount)
     ) {
       linkedDeposit = await recordDepositPayment(prisma, {
         bookingId,
         requiredAmount: depositRequiredAmount,
         paymentId: payment.paymentId,
         staffId: staffIdNum,
-        notes:
-          resolvedPaymentType === "both"
-            ? "Recorded with combined 50% down + 10% deposit payment"
-            : "Recorded as 10% deposit payment",
+        notes: `Recorded with ${getPaymentTypeLabel(resolvedPaymentType)}`,
       });
     }
 
     // Create transaction record (no OR number), linked to Deposit when applicable
     await prisma.transaction.create({
       data: {
-        receiptNumber: "", // OR numbers no longer used
+        receiptNumber: "",
         paymentDate: new Date(),
         recordedBy: performedByName || "LTOO",
         paymentId: payment.paymentId,
         depositId: linkedDeposit?.depositId ?? null,
+        entryType: "payment",
       },
     });
 
@@ -696,7 +785,9 @@ export async function POST(request) {
         targetName: clientName,
         performedById: performedBy || "LTOO",
         performedByName: performedByName || "Local Treasury Operations Officer",
-        details: `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
+        details: paymentDiscountAmount > 0
+          ? `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel} with ${formatPhp(paymentDiscountAmount)} discount. Status: ${statusToUse}`
+          : `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
       },
     });
 
