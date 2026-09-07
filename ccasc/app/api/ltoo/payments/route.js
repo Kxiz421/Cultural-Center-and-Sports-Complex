@@ -481,6 +481,9 @@ export async function POST(request) {
       ? paymentType
       : "manual";
 
+    let discountAmount = 0;
+    let discountPercentValue = null;
+
     // If recording against an existing reservation, validate the amount server-side.
     if (reservationId) {
       const reservation = await prisma.reservation.findFirst({
@@ -542,8 +545,6 @@ export async function POST(request) {
       );
       const totalPaid = currentBreakdown.paid;
 
-      let discountAmount = 0;
-      let discountPercentValue = null;
       if (applyDiscount) {
         const isFullDiscount = discountMode === "full";
         discountAmount = computeDiscountPeso(currentBreakdown.totalPayable, {
@@ -555,19 +556,18 @@ export async function POST(request) {
         const discountCheck = validateDiscountAmount(
           currentBreakdown.totalPayable,
           totalPaid,
-          discountAmount,
-          currentBreakdown.requiredDeposit,
-          { waiveDeposit: isFullDiscount }
+          discountAmount
         );
         if (!discountCheck.ok) {
           return NextResponse.json({ error: discountCheck.error }, { status: 400 });
         }
         if (isFullDiscount) {
           discountPercentValue = 100;
-          skipDepositHold = !currentBreakdown.depositMet;
         } else if (discountMode === "percent") {
           discountPercentValue = Number(discountPercent);
         }
+        // Discount applies to the full total (including deposit), so skip deposit hold
+        skipDepositHold = !currentBreakdown.depositMet;
       }
 
       const billedAfterDiscount = getBilledTotals(
@@ -596,7 +596,8 @@ export async function POST(request) {
         ? paymentType
         : (discountSettlesRemaining ? "full" : "manual");
 
-      if (!discountSettlesRemaining && amount <= 0) {
+      const isDiscountOnly = applyDiscount && discountAmount > 0 && amount <= 0;
+      if (!discountSettlesRemaining && !isDiscountOnly && amount <= 0) {
         return NextResponse.json(
           { error: "Payment amount must be a positive number" },
           { status: 400 }
@@ -607,7 +608,7 @@ export async function POST(request) {
         breakdown,
         normalizedPaymentType,
         amount,
-        { discountSettlesRemaining }
+        { discountSettlesRemaining: discountSettlesRemaining || isDiscountOnly }
       );
       if (!validation.ok) {
         return NextResponse.json(
@@ -720,12 +721,14 @@ export async function POST(request) {
     }
 
     // Create payment
-    if (!reservationId && amount <= 0) {
+    if (!reservationId && amount <= 0 && !(applyDiscount && discountAmount > 0)) {
       return NextResponse.json(
         { error: "Payment amount must be a positive number" },
         { status: 400 }
       );
     }
+
+    const isDiscountOnly = applyDiscount && discountAmount > 0 && amount <= 0;
 
     const payment = await prisma.payment.create({
       data: {
@@ -768,19 +771,21 @@ export async function POST(request) {
       });
     }
 
-    // Create transaction record (no OR number), linked to Deposit when applicable
-    await prisma.transaction.create({
-      data: {
-        receiptNumber: "",
-        paymentDate: new Date(),
-        recordedBy: performedByName || "LTOO",
-        paymentId: payment.paymentId,
-        depositId: linkedDeposit?.depositId ?? null,
-        entryType: "payment",
-      },
-    });
+    if (!isDiscountOnly) {
+      // Create transaction record (no OR number), linked to Deposit when applicable
+      await prisma.transaction.create({
+        data: {
+          receiptNumber: "",
+          paymentDate: new Date(),
+          recordedBy: performedByName || "LTOO",
+          paymentId: payment.paymentId,
+          depositId: linkedDeposit?.depositId ?? null,
+          entryType: "payment",
+        },
+      });
+    }
 
-    const paymentTypeLabel = getPaymentTypeLabel(resolvedPaymentType);
+    const paymentTypeLabel = isDiscountOnly ? "Discount" : getPaymentTypeLabel(resolvedPaymentType);
     const formattedAmount = Number(amount).toLocaleString("en-PH", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -789,18 +794,20 @@ export async function POST(request) {
     // Create audit log
     await prisma.auditLog.create({
       data: {
-        action: "PAYMENT_RECORDED",
+        action: isDiscountOnly ? "DISCOUNT_APPLIED" : "PAYMENT_RECORDED",
         targetUserId: `PAY-${payment.paymentId}`,
         targetName: clientName,
         performedById: performedBy || "LTOO",
         performedByName: performedByName || "Local Treasury Operations Officer",
-        details: paymentDiscountAmount > 0
+        details: isDiscountOnly
+          ? `Discount of ${formatPhp(discountAmount)} applied. New total after discount: ${formatPhp(paymentAmountAfterDiscount || 0)}. Status: ${statusToUse}`
+          : paymentDiscountAmount > 0
           ? `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel} with ${formatPhp(paymentDiscountAmount)} discount. Status: ${statusToUse}`
           : `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
       },
     });
 
-    // Notify the client about the recorded payment
+    // Notify the client about the recorded payment or discount
     if (notifyClientId) {
       const reservationBits = [
         notifyEventType ? `"${notifyEventType}"` : null,
@@ -813,8 +820,10 @@ export async function POST(request) {
 
       await createClientNotification({
         clientId: notifyClientId,
-        type: "payment",
-        message: `A payment of ₱${formattedAmount} was recorded for your reservation${reservationBits ? ` ${reservationBits}` : ""}. Payment type: ${paymentTypeLabel}.`,
+        type: isDiscountOnly ? "discount" : "payment",
+        message: isDiscountOnly
+          ? `A discount of ${formatPhp(discountAmount)} has been applied to your reservation${reservationBits ? ` ${reservationBits}` : ""}.`
+          : `A payment of ₱${formattedAmount} was recorded for your reservation${reservationBits ? ` ${reservationBits}` : ""}. Payment type: ${paymentTypeLabel}.`,
       });
     }
 
