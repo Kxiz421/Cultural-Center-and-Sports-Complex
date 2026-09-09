@@ -31,6 +31,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Wallet,
   Search,
   User,
@@ -182,6 +188,56 @@ function formatDateTime(value) {
 function hasPaymentHistory(status) {
   return status === "Fully Paid" ||
     ["DownPaymentPaid", "DepositPaid", "IncompletePayment"].includes(status);
+}
+
+/** Display event dates compactly — single date shown normally, multiple with a "+N" badge + tooltip */
+function EventDatesDisplay({ eventDate, eventDates, className, iconSize = 3 }) {
+  const dates = React.useMemo(() => {
+    if (eventDates?.length > 0) return eventDates;
+    return eventDate ? [eventDate] : [];
+  }, [eventDate, eventDates]);
+
+  if (dates.length === 0) return <span className="text-muted-foreground">—</span>;
+
+  const primary = dates[0];
+  const extraCount = dates.length - 1;
+
+  if (extraCount === 0) {
+    return (
+      <span className={`flex items-center gap-1 ${className || ""}`}>
+        <CalendarDays className={`size-${iconSize} text-muted-foreground shrink-0`} />
+        {primary}
+      </span>
+    );
+  }
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex items-center gap-1 cursor-default ${className || ""}`}>
+            <CalendarDays className={`size-${iconSize} text-muted-foreground shrink-0`} />
+            <span>{primary}</span>
+            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 font-normal leading-none">
+              +{extraCount}
+            </Badge>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" className="max-w-56">
+          <ul className="list-none space-y-0.5">
+            {dates.map((d, i) => (
+              <li key={d + i} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                {i === 0 && (
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Primary: </span>
+                )}
+                {d}
+              </li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export default function LTOOPaymentsPage() {
@@ -828,10 +884,11 @@ export default function LTOOPaymentsPage() {
                     <TableCell><Badge variant="outline" className="text-xs">{r.clientType === "provincial" ? "Provincial" : "Client"}</Badge></TableCell>
                     <TableCell className="text-sm">{r.eventType || "—"}</TableCell>
                     <TableCell className="text-sm whitespace-nowrap">
-                      <span className="flex items-center gap-1">
-                        <CalendarDays className="size-3 text-muted-foreground" />
-                        {r.eventDate || "—"}
-                      </span>
+                      <EventDatesDisplay
+                        eventDate={r.eventDate}
+                        eventDates={r.eventDates}
+                        iconSize={3}
+                      />
                     </TableCell>
                     <TableCell className="tabular-nums">
                       <span className="font-medium tabular-nums">{formatPhp(r.totalPaid)}</span>
@@ -909,10 +966,20 @@ export default function LTOOPaymentsPage() {
                   <p className="font-medium text-foreground leading-snug">
                     {selectedReservation.clientName} — {selectedReservation.eventType}
                   </p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                    <CalendarDays className="size-3 shrink-0" />
-                    {selectedReservation.eventDate || "—"}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    <EventDatesDisplay
+                      eventDate={selectedReservation.eventDate}
+                      eventDates={selectedReservation.eventDates}
+                      iconSize={3}
+                      className="text-xs text-muted-foreground"
+                    />
+                    {selectedReservation.venue && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Building2 className="size-3 shrink-0" />
+                        {selectedReservation.venue}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
@@ -1421,8 +1488,23 @@ export default function LTOOPaymentsPage() {
             </DialogTitle>
             <DialogDescription>
               {historyReservation?.clientName} — {historyReservation?.eventType}
-              {historyReservation?.eventDate ? ` · ${historyReservation.eventDate}` : ""}
             </DialogDescription>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+              {historyReservation && (
+                <EventDatesDisplay
+                  eventDate={historyReservation.eventDate}
+                  eventDates={historyReservation.eventDates}
+                  iconSize={3}
+                  className="text-xs text-muted-foreground"
+                />
+              )}
+              {historyReservation?.venue && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Building2 className="size-3 shrink-0" />
+                  {historyReservation.venue}
+                </span>
+              )}
+            </div>
           </DialogHeader>
 
           {historyReservation && historyBreakdown && (
