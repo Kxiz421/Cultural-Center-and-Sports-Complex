@@ -34,6 +34,7 @@ function getBookingDeposit(bookings) {
 const bookingDepositInclude = {
   payments: {
     select: {
+      paymentId: true,
       amountPaid: true,
       discountAmount: true,
       discountPercent: true,
@@ -151,6 +152,9 @@ export async function GET(request) {
             getBookingDeposit(r.bookings)
           );
           const deposit = mapDepositSnapshot(getBookingDeposit(r.bookings));
+          // Find the existing discount-only payment (amountPaid=0, discountAmount>0)
+          const allPayments = collectBookingPayments(r.bookings);
+          const discountPayment = allPayments.find((p) => Number(p.amountPaid) === 0 && Number(p.discountAmount) > 0);
 
           return {
             id: r.reservationId,
@@ -200,6 +204,8 @@ export async function GET(request) {
                 ? Number(rp.particular.inventory.unitCost)
                 : 0,
             })),
+            discountPaymentId: discountPayment?.paymentId ?? null,
+            discountPercent: discountPayment?.discountPercent ?? null,
           };
         });
 
@@ -836,4 +842,175 @@ export async function POST(request) {
     );
   }
 
+}
+export async function PATCH(request) {
+  try {
+    const body = await request.json();
+    const {
+      paymentId,
+      discountMode,
+      discountPeso,
+      discountPercent,
+      performedBy,
+      performedByName,
+    } = body;
+
+    if (!paymentId) {
+      return NextResponse.json(
+        { error: "paymentId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Find the existing discount payment with its full reservation context
+    const existingPayment = await prisma.payment.findUnique({
+      where: { paymentId },
+      include: {
+        booking: {
+          include: {
+            reservation: {
+              include: {
+                package: { select: PACKAGE_RATE_SELECT },
+                venue: { select: { venue: true } },
+                timeSlot: { select: { startTime: true, endTime: true } },
+                additionalDates: { select: { eventDate: true } },
+                reservedParticulars: {
+                  include: {
+                    particular: {
+                      select: { particularName: true, inventory: { select: { unitCost: true } } },
+                    },
+                  },
+                },
+                bookings: { include: bookingDepositInclude },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!existingPayment || !existingPayment.booking?.reservation) {
+      return NextResponse.json(
+        { error: "Payment or reservation not found" },
+        { status: 404 }
+      );
+    }
+
+    const reservation = existingPayment.booking.reservation;
+    const packageCatalog = await fetchPackageCatalog();
+
+    // Recompute totals
+    const numDays = 1 + (reservation.additionalDates?.length || 0);
+    const pkgRate = reservation.package
+      ? getPackageBillingRate(reservation.package, reservation.timeSlotId, packageCatalog)
+      : 0;
+    const pkgTotal = pkgRate ? pkgRate * numDays : 0;
+    const particularsTotal = (reservation.reservedParticulars || []).reduce((sum, rp) => {
+      let unitCost = rp.particular?.inventory?.unitCost
+        ? Number(rp.particular.inventory.unitCost)
+        : 0;
+      if (rp.particular?.particularName === "Basketball Game") {
+        return sum + (getBasketballPrice(rp.quantity) || unitCost);
+      }
+      return sum + unitCost * rp.quantity;
+    }, 0);
+    const calculatedBase = roundMoney(pkgTotal + particularsTotal);
+    const storedBase = reservation.totalAmount ? Number(reservation.totalAmount) : 0;
+    const totalAmt =
+      calculatedBase > 0
+        ? roundMoney(Math.max(storedBase, calculatedBase))
+        : storedBase;
+
+    const currentBreakdown = billedBreakdownForReservation(
+      totalAmt,
+      reservation.bookings,
+      getBookingDeposit(reservation.bookings)
+    );
+    const totalPaid = currentBreakdown.paid;
+
+    // Compute new discount
+    const isFullDiscount = discountMode === "full";
+    const newDiscountAmount = computeDiscountPeso(currentBreakdown.totalPayable, {
+      mode: isFullDiscount ? "full" : discountMode === "percent" ? "percent" : "peso",
+      peso: discountPeso,
+      percent: isFullDiscount ? 100 : discountPercent,
+      remainingBalance: currentBreakdown.remainingBalance,
+    });
+    const discountCheck = validateDiscountAmount(
+      currentBreakdown.totalPayable,
+      totalPaid,
+      newDiscountAmount
+    );
+    if (!discountCheck.ok) {
+      return NextResponse.json({ error: discountCheck.error }, { status: 400 });
+    }
+
+    let newDiscountPercent = null;
+    if (isFullDiscount) {
+      newDiscountPercent = 100;
+    } else if (discountMode === "percent") {
+      newDiscountPercent = Number(discountPercent);
+    }
+
+    // Replace old discount with new: subtract old discount amount, add new one
+    const oldDiscountAmount = Number(existingPayment.discountAmount || 0);
+    const billedAfterDiscount = getBilledTotals(
+      currentBreakdown.originalBase,
+      currentBreakdown.totalDiscount - oldDiscountAmount + newDiscountAmount
+    );
+
+    const breakdown = computePaymentBreakdown(
+      billedAfterDiscount.base,
+      totalPaid,
+      getBookingDeposit(reservation.bookings),
+      {
+        originalBase: currentBreakdown.originalBase,
+        totalDiscount: currentBreakdown.totalDiscount - oldDiscountAmount + newDiscountAmount,
+      }
+    );
+
+    // Update the existing discount-only payment
+    await prisma.payment.update({
+      where: { paymentId },
+      data: {
+        discountAmount: newDiscountAmount,
+        discountPercent: newDiscountPercent,
+        baseAmount: billedAfterDiscount.totalPayable,
+        amountAfterDiscount: billedAfterDiscount.totalPayable,
+      },
+    });
+
+    // Update booking status if fully settled
+    if (breakdown.balanceSettled) {
+      await prisma.booking.update({
+        where: { bookingId: existingPayment.bookingId },
+        data: { bookingStatusId: 2 },
+      });
+    }
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        action: "DISCOUNT_UPDATED",
+        targetUserId: `PAY-${paymentId}`,
+        targetName: "",
+        performedById: performedBy || "LTOO",
+        performedByName: performedByName || "Local Treasury Operations Officer",
+        details: `Discount updated from ${formatPhp(oldDiscountAmount)} to ${formatPhp(newDiscountAmount)}.`,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      paymentId,
+      discountAmount: newDiscountAmount,
+      discountPercent: newDiscountPercent,
+    });
+  } catch (error) {
+    console.error("Payments PATCH error:", error);
+    return NextResponse.json(
+      { error: "Failed to update discount" },
+      { status: 500 }
+    );
+  }
 }
