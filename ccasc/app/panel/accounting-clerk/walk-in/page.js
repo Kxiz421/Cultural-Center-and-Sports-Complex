@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import {
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -53,6 +53,7 @@ import {
 } from "@/components/reservation-virtual-package-panel";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
 import {
+  getMinEventDate,
   getMinEventDateKey,
   isEventDateTooSoon,
   validateAdvanceBookingDates,
@@ -68,6 +69,9 @@ const TIME_SLOTS = TIME_SLOT_OPTIONS.map((slot) => ({
   id: slot.id,
   name: slot.label,
 }));
+
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
 
 export default function WalkInReservationPage() {
   const minEventDateKey = getMinEventDateKey();
@@ -115,6 +119,9 @@ export default function WalkInReservationPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [eventDates, setEventDates] = React.useState([]);
   const [selectedDates, setSelectedDates] = React.useState(new Set());
+  const [currentMonth, setCurrentMonth] = React.useState(new Date());
+  const [availability, setAvailability] = React.useState({});
+  const [availLoading, setAvailLoading] = React.useState(false);
 
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
@@ -141,6 +148,49 @@ export default function WalkInReservationPage() {
     }
     loadData();
   }, []);
+
+// Fetch availability when venue or month changes
+  React.useEffect(() => {
+    if (!venueId) return;
+    const monthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+    setAvailLoading(true);
+    fetch(`/api/availability?venueId=${venueId}&month=${monthStr}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.dates) {
+          const map = {};
+          for (const d of data.dates) map[d.date] = d;
+          setAvailability(map);
+        }
+      })
+      .catch((err) => console.error("Failed to load availability:", err))
+      .finally(() => setAvailLoading(false));
+  }, [venueId, currentMonth]);
+
+  // Initialize date customizations when customize mode is turned on or dates change
+  React.useEffect(() => {
+    if (customizePerDate && selectedDates.size > 0) {
+      setDateCustomizations((prev) => {
+        const updated = { ...prev };
+        for (const date of selectedDates) {
+          if (!updated[date]) {
+            updated[date] = {
+              packageId: packageId || "0",
+              particularQuantities: { ...particularQuantities },
+              timeSlotId,
+              venueRentalSlot,
+            };
+          }
+        }
+        for (const date of Object.keys(updated)) {
+          if (!selectedDates.has(date)) {
+            delete updated[date];
+          }
+        }
+        return updated;
+      });
+    }
+  }, [customizePerDate, selectedDates]);
 
   // Search clients when query changes
   const handleSearchChange = (e) => {
@@ -393,6 +443,24 @@ export default function WalkInReservationPage() {
     }));
   };
 
+// Toggle date selection for calendar
+  const toggleDate = (dateStr) => {
+    if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) next.delete(dateStr);
+      else next.add(dateStr);
+      return next;
+    });
+  };
+
+  const prevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
   const toggleCustomizeMode = () => {
     if (!customizePerDate) {
       const initial = {};
@@ -417,7 +485,7 @@ export default function WalkInReservationPage() {
     // In per-date mode the global time slot/package selects are locked; the
     // slot is carried per date instead of the global form value.
     const hasPerDateSettings = customizePerDate && Object.keys(dateCustomizations).length > 0;
-    const effectiveEventDate = eventDate || [...selectedDates].sort()[0];
+    const effectiveEventDate = [...selectedDates].sort()[0];
     const effectiveTimeSlotId =
       timeSlotId ||
       (hasPerDateSettings
@@ -467,7 +535,10 @@ export default function WalkInReservationPage() {
   const handleSubmitReservation = async () => {
     if (submitting || submitLockRef.current) return;
 
-    const datesToCheck = [eventDate, ...selectedDates].filter(Boolean);
+    const sortedDates = [...selectedDates].sort();
+    const primaryDate = sortedDates[0];
+
+    const datesToCheck = [...sortedDates];
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
       toast.error(advanceCheck.error);
@@ -508,9 +579,6 @@ export default function WalkInReservationPage() {
       }
 
       // Build particulars and package for submit
-      const sortedDates = [...selectedDates].sort();
-      const primaryDate = eventDate || sortedDates[0];
-
       const hasPerDateSettings = customizePerDate && Object.keys(dateCustomizations).length > 0;
       // While per-date settings lock the time slot/package selects, the time slot
       // lives on each date's customization instead of the global form value.
@@ -711,6 +779,90 @@ export default function WalkInReservationPage() {
   });
   const total = sumReservationSummaryLines(summaryLines);
 
+// Render calendar grid for multi-date selection
+  const renderCalendar = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const minEventDate = getMinEventDate();
+
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(year, month, d);
+      const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      days.push({ date: d, key, dt });
+    }
+
+    const monthLabel = `${MONTHS[month]} ${year}`;
+    const selectedArr = [...selectedDates].sort();
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Button type="button" variant="ghost" size="sm" onClick={prevMonth}>
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="font-medium text-sm">{monthLabel}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={nextMonth}>
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+            <div key={d} className="text-muted-foreground py-1">{d}</div>
+          ))}
+          {days.map((day, i) => {
+            if (!day) return <div key={`e${i}`} />;
+            const isSelected = selectedDates.has(day.key);
+            const avail = availability[day.key];
+            const isTooSoon = day.dt < minEventDate || avail?.isTooSoon;
+            const isPast = avail?.isPast || day.dt < today;
+            const isAvailable = avail?.available && !isPast && !isTooSoon;
+            const isBlocked = avail?.blocked || isPast || isTooSoon;
+
+            return (
+              <button
+                key={day.key}
+                type="button"
+                disabled={!isAvailable}
+                onClick={() => toggleDate(day.key)}
+                className={`
+                  py-2 rounded-md text-sm transition-colors
+                  ${isSelected ? "bg-primary text-white font-semibold" : ""}
+                  ${isAvailable && !isSelected ? "hover:bg-primary/10 cursor-pointer" : ""}
+                  ${isBlocked ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
+                  ${!isBlocked && !isSelected ? "text-foreground" : ""}
+                `}
+                title={
+                  isTooSoon
+                    ? `Must be at least ${MIN_ADVANCE_BOOKING_DAYS} days in advance`
+                    : isBlocked
+                      ? avail?.reason || "Unavailable"
+                      : day.key
+                }
+              >
+                {day.date}
+              </button>
+            );
+          })}
+        </div>
+        {selectedArr.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {selectedArr.map((d) => (
+              <Badge key={d} variant="secondary" className="text-xs">
+                {d} <button onClick={() => toggleDate(d)} className="ml-1 hover:text-red-500">×</button>
+              </Badge>
+            ))}
+          </div>
+        )}
+        {availLoading && <p className="text-xs text-muted-foreground text-center">Loading availability...</p>}
+      </div>
+    );
+  };
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -919,27 +1071,40 @@ export default function WalkInReservationPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Event Date *</Label>
+              <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
-                Must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest:{" "}
-                <span className="font-medium">{minEventDateKey}</span>.
+                Events must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest date:{" "}
+                <span className="font-medium">{minEventDateKey}</span>. Blocked dates are unavailable.
               </p>
-              <Input
-                type="date"
-                value={eventDate}
-                min={minEventDateKey}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val && isEventDateTooSoon(val)) {
-                    toast.error(
-                      validateAdvanceBookingDates([val]).error ||
-                        `Earliest available date is ${minEventDateKey}.`
-                    );
-                    return;
-                  }
-                  setEventDate(val);
-                }}
-              />
+              {venueId ? renderCalendar() : (
+                <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
+              )}
+
+              {/* Customize Per Date Button - only shown when multiple dates selected */}
+              {selectedDates.size > 1 && (
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant={customizePerDate ? "default" : "outline"}
+                    size="sm"
+                    onClick={toggleCustomizeMode}
+                    className="flex items-center gap-2"
+                  >
+                    <Layers className="size-4" />
+                    {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
+                  </Button>
+                  {customizePerDate && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowCustomizeDialog(true)}
+                    >
+                      Edit Per-Date Details
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Time Slot *</Label>
@@ -1086,73 +1251,6 @@ export default function WalkInReservationPage() {
             </div>
             )}
             <div className="space-y-2">
-              <Label>Additional Dates</Label>
-              <p className="text-xs text-muted-foreground">
-                Add multiple dates for multi-day events. Earliest:{" "}
-                <span className="font-medium">{minEventDateKey}</span>.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  min={minEventDateKey}
-                  value={eventDates.length > 0 ? eventDates[eventDates.length - 1] : ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val || selectedDates.has(val) || val === eventDate) return;
-                    if (isEventDateTooSoon(val)) {
-                      toast.error(
-                        validateAdvanceBookingDates([val]).error ||
-                          `Earliest available date is ${minEventDateKey}.`
-                      );
-                      return;
-                    }
-                    setSelectedDates((prev) => new Set(prev).add(val));
-                    setEventDates((prev) => [...prev, val]);
-                    e.target.value = "";
-                  }}
-                  className="flex-1"
-                />
-                <Button type="button" variant="outline" size="sm" onClick={() => {
-                  // Date picker above — plus is visual only
-                }}>
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-              {selectedDates.size > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {[...selectedDates].sort().map((d) => (
-                    <Badge key={d} variant="secondary" className="text-xs">
-                      {d} <button onClick={() => {
-                        const next = new Set(selectedDates);
-                        next.delete(d);
-                        setSelectedDates(next);
-                        setEventDates((prev) => prev.filter((ed) => ed !== d));
-                      }} className="ml-1 hover:text-red-500">×</button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {selectedDates.size > 0 && (
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant={customizePerDate ? "default" : "outline"}
-                    size="sm"
-                    onClick={toggleCustomizeMode}
-                    className="flex items-center gap-2"
-                  >
-                    <Layers className="size-4" />
-                    {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
-                  </Button>
-                  {customizePerDate && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCustomizeDialog(true)}>
-                      Edit Per-Date Details
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
               <Label>Additional Notes</Label>
               <Input
                 placeholder="Any special requests..."
@@ -1199,8 +1297,15 @@ export default function WalkInReservationPage() {
               <span className="font-medium">{eventType || "&mdash;"}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span>Date</span>
-              <span className="font-medium">{eventDate || "&mdash;"}</span>
+              <span>Date(s)</span>
+              <span className="font-medium text-right">
+                {selectedDates.size > 0
+                  ? `${[...selectedDates].sort().join(", ")}`
+                  : "&mdash;"}
+                {selectedDates.size > 1 && (
+                  <span className="text-xs text-muted-foreground ml-1">({selectedDates.size} days)</span>
+                )}
+              </span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span>Time Slot</span>
