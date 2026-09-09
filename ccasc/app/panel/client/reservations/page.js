@@ -28,7 +28,7 @@ import {
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
-import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
+import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange, isWholeDaySlot } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
@@ -143,7 +143,17 @@ export default function ClientReservationsPage() {
 
   const handleTimeSlotChange = (value) => {
     setForm((prev) => {
-      const updates = { timeSlotId: value };
+      const isWholeDay = isWholeDaySlot(value);
+      const remapped = (currentPkgId) => {
+        if (!currentPkgId || currentPkgId === "0" || currentPkgId === "custom" || isVirtualPackageId(currentPkgId)) return currentPkgId;
+        const currentNum = Number(currentPkgId);
+        // Night → Day when switching to Whole Day: 3→1 (Standard), 4→2 (LED)
+        if (isWholeDay && (currentNum === 3 || currentNum === 4)) {
+          return String(currentNum - 2);
+        }
+        return currentPkgId;
+      };
+      const updates = { timeSlotId: value, packageId: remapped(prev.packageId) };
       if (prev.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
         updates.venueRentalSlot = resolveVenueRentalSlot(value, value);
       }
@@ -163,6 +173,15 @@ export default function ClientReservationsPage() {
 
     if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
       setDateCustomizations((prev) => {
+        const isWholeDay = isWholeDaySlot(value);
+        const remapped = (currentPkgId) => {
+          if (!currentPkgId || currentPkgId === "0" || currentPkgId === "custom" || isVirtualPackageId(currentPkgId)) return currentPkgId;
+          const currentNum = Number(currentPkgId);
+          if (isWholeDay && (currentNum === 3 || currentNum === 4)) {
+            return String(currentNum - 2);
+          }
+          return currentPkgId;
+        };
         const updated = { ...prev };
         for (const date of Object.keys(updated)) {
           const cust = updated[date];
@@ -176,6 +195,7 @@ export default function ClientReservationsPage() {
           updated[date] = {
             ...cust,
             timeSlotId: value,
+            packageId: remapped(cust.packageId),
             particularQuantities: synced.particularQuantities,
             venueRentalSlot:
               cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
@@ -758,7 +778,7 @@ export default function ClientReservationsPage() {
                   <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                     <SelectItem value="0">None</SelectItem>
                     <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                    <ReservationPackageSelectItems packages={packages} particulars={particulars} />
+                    <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={form.timeSlotId} />
                   </SelectContent>
                 </Select>
                 {customizePerDate && (
@@ -1041,7 +1061,7 @@ export default function ClientReservationsPage() {
                       <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                        <ReservationPackageSelectItems packages={packages} particulars={particulars} />
+                        <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || form.timeSlotId} />
                       </SelectContent>
                     </Select>
                   </div>

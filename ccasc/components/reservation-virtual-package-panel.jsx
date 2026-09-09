@@ -19,6 +19,8 @@ import {
   getBasketballEncodedQty,
   applyBasketballEncodedSelection,
   formatPackageRateHint,
+  getPackageSlotRate,
+  packageIncludesLedWall,
 } from "@/lib/reservation-package-select";
 import { TIME_SLOT, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
 
@@ -124,7 +126,51 @@ export function ReservationVirtualPackagePanel({
 export function ReservationPackageSelectItems({
   packages,
   particulars,
+  timeSlotId,
 }) {
+  // When Whole Day is selected, group complementary packages into combined options
+  if (timeSlotId && isWholeDaySlot(timeSlotId)) {
+    const active = packages.filter((p) => p.statusId === 1);
+    const standardPkgs = active.filter((p) => !packageIncludesLedWall(p));
+    const ledPkgs = active.filter((p) => packageIncludesLedWall(p));
+
+    // Pick the package with a day rate as the representative value (Standard Day or LED Wall Day)
+    const standardDay = standardPkgs.find((p) => getPackageSlotRate(p, TIME_SLOT.DAY, packages) > 0)
+      || standardPkgs[0];
+    const ledDay = ledPkgs.find((p) => getPackageSlotRate(p, TIME_SLOT.DAY, packages) > 0)
+      || ledPkgs[0];
+
+    const standardTotal = standardDay ? getPackageSlotRate(standardDay, timeSlotId, packages) : 0;
+    const ledTotal = ledDay ? getPackageSlotRate(ledDay, timeSlotId, packages) : 0;
+
+    return (
+      <>
+        {hasBasketballPackageOption(particulars) && (
+          <SelectItem value={VIRTUAL_PACKAGE_IDS.BASKETBALL}>Basketball Game</SelectItem>
+        )}
+        {hasVenueRentalPackageOption(particulars) && (
+          <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental</SelectItem>
+        )}
+        {standardDay && (
+          <SelectItem value={String(standardDay.packageId)}>
+            <span className="font-medium">Whole Day Package (without LED Wall)</span>
+            <span className="text-xs font-normal whitespace-normal text-muted-foreground ml-1">
+              — ₱{standardTotal.toLocaleString()}
+            </span>
+          </SelectItem>
+        )}
+        {ledDay && (
+          <SelectItem value={String(ledDay.packageId)}>
+            <span className="font-medium">Whole Day Package (with LED Wall)</span>
+            <span className="text-xs font-normal whitespace-normal text-muted-foreground ml-1">
+              — ₱{ledTotal.toLocaleString()}
+            </span>
+          </SelectItem>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {hasBasketballPackageOption(particulars) && (
@@ -143,9 +189,10 @@ export function ReservationPackageSelectItems({
               value={String(pkg.packageId)}
               itemText={pkg.packageName}
             >
+              {pkg.packageName}
               {rateHint ? (
                 <span className="text-xs font-normal whitespace-normal text-muted-foreground">
-                  {rateHint}
+                  {" "}— {rateHint}
                 </span>
               ) : null}
             </SelectItem>
