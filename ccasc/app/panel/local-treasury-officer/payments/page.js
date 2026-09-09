@@ -494,13 +494,36 @@ export default function LTOOPaymentsPage() {
     setPaymentType(next.paymentType);
     setAmountError("");
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
-    setDiscountEnabled(false);
-    setDiscountMode("peso");
-    setDiscountPeso("");
-    setDiscountPercent("");
     setConsumeAmount("");
     setConsumeReason("");
     setDepositPanelOpen(false);
+
+    // Pre-fill discount if one already exists on this reservation
+    const hasExistingDiscount = reservation.totalDiscount > 0;
+    if (hasExistingDiscount) {
+      setDiscountEnabled(true);
+      const existingPercent = reservation.discountPercent;
+      if (existingPercent && existingPercent > 0 && existingPercent < 100) {
+        setDiscountMode("percent");
+        setDiscountPercent(String(existingPercent));
+        setDiscountPeso("");
+      } else if (existingPercent === 100) {
+        setDiscountMode("full");
+        setDiscountPercent("100");
+        setDiscountPeso("");
+        setPaymentType("full");
+        setPaymentAmount("0.00");
+      } else {
+        setDiscountMode("peso");
+        setDiscountPeso(formatMoneyInput(reservation.totalDiscount));
+        setDiscountPercent("");
+      }
+    } else {
+      setDiscountEnabled(false);
+      setDiscountMode("peso");
+      setDiscountPeso("");
+      setDiscountPercent("");
+    }
     setRecordOpen(true);
   };
 
@@ -602,72 +625,140 @@ export default function LTOOPaymentsPage() {
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "0.00");
   };
 
-  const handleRecordPayment = async () => {
+  const handleRecordPayment = async (isUpdateDiscount = false) => {
     if (!selectedReservation) return;
 
-    const isDiscountOnly = discountOnlySubmission; // true when "Apply Discount" was clicked
-    const amount = isDiscountOnly ? 0 : roundMoney(paymentAmount || 0);
-    if (discountEnabled && !discountCheck.ok) {
-      toast.error(discountCheck.error || "Enter a valid discount.");
+    const isDiscountOnly = discountOnlySubmission;
+
+    // Payment with cash — validate and close after saving
+    if (!isDiscountOnly && !isUpdateDiscount) {
+      const amount = roundMoney(paymentAmount || 0);
+      if (discountEnabled && !discountCheck.ok) {
+        toast.error(discountCheck.error || "Enter a valid discount.");
+        return;
+      }
+
+      const current = breakdownFromReservation(
+        selectedReservation,
+        discountCheck.ok ? pendingDiscount : 0
+      );
+      const check = validatePaymentAmount(current, paymentType || "full", amount, {
+        discountSettlesRemaining: discountSettlesRemaining || false,
+      });
+      if (!check.ok) {
+        setAmountError(check.error);
+        toast.error(check.error);
+        return;
+      }
+
+      if (amount > current.remainingBalance) {
+        toast.error(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+        const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+
+        const res = await fetch("/api/ltoo/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectedBookingId: String(selectedReservation.reservationId),
+            paymentType: discountSettlesRemaining ? "full" : paymentType,
+            amountPaid: amount,
+            clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
+            clientName: selectedReservation.clientName,
+            activityName: selectedReservation.eventType || "",
+            performedBy,
+            performedByName,
+            applyDiscount: discountEnabled && pendingDiscount > 0,
+            discountMode,
+            discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
+            discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to record payment");
+        }
+
+        toast.success("Payment recorded successfully");
+        setRecordOpen(false);
+        setSelectedReservation(null);
+        setDiscountOnlySubmission(false);
+        await loadReservations();
+      } catch (err) {
+        toast.error(err.message || "Failed to record payment");
+      } finally {
+        setSaving(false);
+      }
       return;
     }
 
-    const current = breakdownFromReservation(
-      selectedReservation,
-      discountCheck.ok ? pendingDiscount : 0
-    );
-    const check = validatePaymentAmount(current, isDiscountOnly ? "full" : (paymentType || "full"), amount, {
-      discountSettlesRemaining: discountSettlesRemaining || isDiscountOnly,
-    });
-    if (!check.ok) {
-      setAmountError(check.error);
-      toast.error(check.error);
-      return;
-    }
-
-    if (!isDiscountOnly && amount > current.remainingBalance) {
-      toast.error(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
-      return;
-    }
-
+    // Discount-only or update-discount: stay open after saving
     setSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
 
-      const res = await fetch("/api/ltoo/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedBookingId: String(selectedReservation.reservationId),
-          paymentType: isDiscountOnly || discountSettlesRemaining
-            ? "full"
-            : paymentType,
-          amountPaid: isDiscountOnly ? 0 : amount,
-          clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
-          clientName: selectedReservation.clientName,
-          activityName: selectedReservation.eventType || "",
-          performedBy,
-          performedByName,
-          applyDiscount: discountEnabled && pendingDiscount > 0,
-          discountMode,
-          discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
-          discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
-        }),
-      });
+      if (isUpdateDiscount && selectedReservation.discountPaymentId) {
+        // Update existing discount via PATCH
+        const res = await fetch("/api/ltoo/payments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentId: selectedReservation.discountPaymentId,
+            discountMode,
+            discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
+            discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
+            performedBy,
+            performedByName,
+          }),
+        });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to record payment");
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to update discount");
+        }
+
+        toast.success("Discount updated successfully");
+      } else {
+        // New discount-only via POST
+        const res = await fetch("/api/ltoo/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectedBookingId: String(selectedReservation.reservationId),
+            paymentType: "full",
+            amountPaid: 0,
+            clientType: selectedReservation.clientType === "provincial" ? "provincial" : "client",
+            clientName: selectedReservation.clientName,
+            activityName: selectedReservation.eventType || "",
+            performedBy,
+            performedByName,
+            applyDiscount: true,
+            discountMode,
+            discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
+            discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to apply discount");
+        }
+
+        toast.success("Discount applied successfully");
       }
 
-      toast.success(isDiscountOnly ? "Discount applied successfully" : "Payment recorded successfully");
-      setRecordOpen(false);
-      setSelectedReservation(null);
       setDiscountOnlySubmission(false);
-      await loadReservations();
+      // Refresh data but keep dialog open
+      await refreshSelectedReservation();
     } catch (err) {
-      toast.error(err.message || "Failed to record payment");
+      toast.error(err.message || "Failed to apply discount");
     } finally {
       setSaving(false);
     }
@@ -1065,6 +1156,7 @@ export default function LTOOPaymentsPage() {
                   variant={discountEnabled ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
+                    if (selectedReservation?.totalDiscount > 0) return; // Locked — discount already exists
                     const next = !discountEnabled;
                     setDiscountEnabled(next);
                     if (!next) {
@@ -1074,9 +1166,12 @@ export default function LTOOPaymentsPage() {
                       syncAmountToBreakdown(selectedReservation, 0, paymentType);
                     }
                   }}
+                  disabled={selectedReservation?.totalDiscount > 0}
                 >
                   <Percent className="size-4 mr-1" />
-                  {discountEnabled ? "Remove discount" : "Add discount"}
+                  {discountEnabled
+                    ? (selectedReservation?.totalDiscount > 0 ? "Update discount" : "Remove discount")
+                    : "Add discount"}
                 </Button>
               </div>
               {discountEnabled && (
@@ -1226,12 +1321,18 @@ export default function LTOOPaymentsPage() {
                         size="sm"
                         variant="default"
                         onClick={() => {
-                          setDiscountOnlySubmission(true);
-                          setConfirmOpen(true);
+                          const isUpdate = selectedReservation.totalDiscount > 0;
+                          if (isUpdate) {
+                            setConfirmOpen(true);
+                            setDiscountOnlySubmission(true);
+                          } else {
+                            setDiscountOnlySubmission(true);
+                            setConfirmOpen(true);
+                          }
                         }}
                         disabled={saving || !discountCheck.ok}
                       >
-                        {saving ? "Saving..." : "Apply Discount"}
+                        {saving ? "Saving..." : (selectedReservation.totalDiscount > 0 ? "Update Discount" : "Apply Discount")}
                       </Button>
                     </div>
                   )}
@@ -1841,10 +1942,10 @@ export default function LTOOPaymentsPage() {
       <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) setDiscountOnlySubmission(false); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Wallet className="size-5" />{discountOnlySubmission ? "Apply Discount" : "Confirm Payment"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Wallet className="size-5" />{discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Apply Discount") : "Confirm Payment"}</DialogTitle>
             <DialogDescription>
               {discountOnlySubmission
-                ? `Apply discount to ${selectedReservation?.clientName}'s reservation`
+                ? `${selectedReservation?.totalDiscount > 0 ? "Update discount for" : "Apply discount to"} ${selectedReservation?.clientName}'s reservation`
                 : `Recording payment for ${selectedReservation?.clientName}`}
             </DialogDescription>
           </DialogHeader>
@@ -1913,8 +2014,8 @@ export default function LTOOPaymentsPage() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setConfirmOpen(false); setDiscountOnlySubmission(false); }}>Cancel</Button>
-            <Button onClick={() => { setConfirmOpen(false); handleRecordPayment(); }} disabled={saving}>
-              {saving ? "Saving..." : (discountOnlySubmission ? "Confirm Discount" : "Confirm")}
+            <Button onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>
+              {saving ? "Saving..." : (discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Confirm Discount") : "Confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
