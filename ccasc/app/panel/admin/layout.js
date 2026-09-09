@@ -46,7 +46,7 @@ function AdminAuthShell({ children }) {
     } catch {
       router.replace("/login");
       return;
-    }
+    } 
   }, [router]);
 
   if (!ready) {

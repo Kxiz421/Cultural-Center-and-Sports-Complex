@@ -1,0 +1,36 @@
+I need to refresh my Railway MySQL test clone from production. Do NOT change my .env (production must stay on the source DB).
+
+Project app folder:
+[APP_PATH]
+
+Production DB (source — export only):
+- Host: [SOURCE_HOST]:[SOURCE_PORT]
+- Database: [SOURCE_DATABASE]
+- Credentials: from DATABASE_URL in [APP_PATH]\.env
+
+Test clone DB (import target):
+- Host: [TARGET_HOST]:[TARGET_PORT]
+- Database: [TARGET_DATABASE]
+- Credentials: from Railway → clone MySQL service → Connect / MYSQL_PUBLIC_URL
+
+Backup folder:
+[BACKUP_DIR]
+
+Backup file to re-import (created from our production MySQL on 2026-08-30):
+# Full mysqldump of the live tramway production DB (schema + data) taken before the first clone to altaria.
+[BACKUP_DIR]\railway-clone-20260830-161538.sql
+
+New export filename pattern (when refreshing from production):
+[BACKUP_DIR]\railway-clone-YYYYMMDD-HHMMSS.sql
+
+Import script:
+[APP_PATH]\scripts\import-db-clone.mjs
+
+Steps:
+1. To refresh from production: export with mysqldump (--single-transaction --routines --triggers --set-gtid-purged=OFF) to [BACKUP_DIR]\railway-clone-YYYYMMDD-HHMMSS.sql
+2. Import: cd [APP_PATH] then node scripts\import-db-clone.mjs [BACKUP_DIR]\railway-clone-20260830-161538.sql "mysql://root:[TARGET_PASSWORD]@[TARGET_HOST]:[TARGET_PORT]/[TARGET_DATABASE]"
+   (Or use a newer dump file from step 1 instead of the 20260830 file.)
+3. Verify row counts on the clone (Reservation, Payment, Transaction).
+4. Confirm [APP_PATH]\.env was not modified.
+
+If public networking fails, use railway link + railway connect --tunnel-only on the clone service, then import via 127.0.0.1 and the tunnel port.
