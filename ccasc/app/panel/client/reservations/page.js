@@ -28,7 +28,7 @@ import {
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
-import { TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
+import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
@@ -405,7 +405,8 @@ export default function ClientReservationsPage() {
       return;
     }
 
-    if (!form.venueId || !form.eventType || !form.timeSlotId) {
+    if (!form.venueId || !form.eventType ||
+      (!form.timeSlotId && !(customizePerDate && Object.keys(dateCustomizations).length > 0))) {
       toast.error("Please fill in all required fields");
       submitLockRef.current = false;
       return;
@@ -417,7 +418,7 @@ export default function ClientReservationsPage() {
       return;
     }
 
-    if (isVirtualPackageId(form.packageId)) {
+    if (!customizePerDate && isVirtualPackageId(form.packageId)) {
       const entries = getVirtualPackageParticulars(
         form.packageId,
         particulars,
@@ -434,6 +435,19 @@ export default function ClientReservationsPage() {
 
     const sortedDates = [...selectedDates].sort();
     const primaryDate = sortedDates[0];
+
+    const hasPerDateSettings = customizePerDate && Object.keys(dateCustomizations).length > 0;
+    // While per-date settings lock the time slot/package selects, the time slot
+    // lives on each date's customization instead of the global form value.
+    let payloadTimeSlotId = form.timeSlotId;
+    if (hasPerDateSettings) {
+      const primaryCust = dateCustomizations[primaryDate];
+      payloadTimeSlotId =
+        primaryCust?.timeSlotId ||
+        Object.values(dateCustomizations).find((c) => c && c.timeSlotId)?.timeSlotId ||
+        form.timeSlotId ||
+        TIME_SLOT.DAY;
+    }
 
     const advanceCheck = validateAdvanceBookingDates(sortedDates);
     if (!advanceCheck.valid) {
@@ -537,7 +551,7 @@ export default function ClientReservationsPage() {
           eventType: form.eventType,
           eventDate: primaryDate,
           eventDates: sortedDates,
-          timeSlotId: form.timeSlotId,
+          timeSlotId: payloadTimeSlotId,
           packageId: parseReservationPackageId(selectedPackageId),
           clientId: parseInt(clientId, 10),
           notes: form.notes || null,

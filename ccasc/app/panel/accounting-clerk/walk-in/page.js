@@ -46,7 +46,7 @@ import {
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
-import { TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
+import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
@@ -400,13 +400,23 @@ export default function WalkInReservationPage() {
   };
 
   const handleGenerateOrder = () => {
-    if (!venueId || !eventDate || !timeSlotId || !eventType) {
+    // In per-date mode the global time slot/package selects are locked; the
+    // slot is carried per date instead of the global form value.
+    const hasPerDateSettings = customizePerDate && Object.keys(dateCustomizations).length > 0;
+    const effectiveEventDate = eventDate || [...selectedDates].sort()[0];
+    const effectiveTimeSlotId =
+      timeSlotId ||
+      (hasPerDateSettings
+        ? Object.values(dateCustomizations).find((c) => c && c.timeSlotId)?.timeSlotId
+        : "") ||
+      TIME_SLOT.DAY;
+    if (!venueId || !effectiveEventDate || !effectiveTimeSlotId || !eventType) {
       toast.error("Please fill in all required fields.");
       return;
     }
 
     // Validate 7-day advance booking
-    const datesToCheck = [eventDate, ...selectedDates].filter(Boolean);
+    const datesToCheck = [effectiveEventDate, ...selectedDates].filter(Boolean);
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
       toast.error(advanceCheck.error);
@@ -423,7 +433,7 @@ export default function WalkInReservationPage() {
       return;
     }
 
-    if (isVirtualPackageId(packageId)) {
+    if (!customizePerDate && isVirtualPackageId(packageId)) {
       const entries = getVirtualPackageParticulars(
         packageId,
         particulars,
@@ -486,6 +496,19 @@ export default function WalkInReservationPage() {
       // Build particulars and package for submit
       const sortedDates = [...selectedDates].sort();
       const primaryDate = eventDate || sortedDates[0];
+
+      const hasPerDateSettings = customizePerDate && Object.keys(dateCustomizations).length > 0;
+      // While per-date settings lock the time slot/package selects, the time slot
+      // lives on each date's customization instead of the global form value.
+      let payloadTimeSlotId = timeSlotId;
+      if (hasPerDateSettings) {
+        const primaryCust = dateCustomizations[primaryDate];
+        payloadTimeSlotId =
+          primaryCust?.timeSlotId ||
+          Object.values(dateCustomizations).find((c) => c && c.timeSlotId)?.timeSlotId ||
+          timeSlotId ||
+          TIME_SLOT.DAY;
+      }
 
       let selectedParticulars = [];
       let selectedPackageId = parseReservationPackageId(packageId);
@@ -578,7 +601,7 @@ export default function WalkInReservationPage() {
           eventType,
           eventDate: primaryDate,
           eventDates: [...new Set([primaryDate, ...sortedDates].filter(Boolean))].sort(),
-          timeSlotId: parseInt(timeSlotId, 10),
+          timeSlotId: parseInt(payloadTimeSlotId, 10),
           packageId: selectedPackageId,
           clientId: actualClientId,
           notes: notesStr,
