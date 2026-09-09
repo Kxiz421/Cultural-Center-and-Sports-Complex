@@ -46,7 +46,7 @@ import {
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
-import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange } from "@/lib/time-slots";
+import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange, isWholeDaySlot } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
@@ -187,6 +187,19 @@ export default function WalkInReservationPage() {
   const handleTimeSlotChange = (value) => {
     setTimeSlotId(value);
 
+    // Remap package when switching time slot to keep the selected value valid
+    const isWholeDay = isWholeDaySlot(value);
+    const remapped = (currentPkgId) => {
+      if (!currentPkgId || currentPkgId === "0" || currentPkgId === "custom" || isVirtualPackageId(currentPkgId)) return currentPkgId;
+      const currentNum = Number(currentPkgId);
+      if (isWholeDay && (currentNum === 3 || currentNum === 4)) {
+        // Night → Day: 3→1 (Standard), 4→2 (LED)
+        return String(currentNum - 2);
+      }
+      return currentPkgId;
+    };
+    setPackageId((prev) => remapped(prev));
+
     if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
       setVenueRentalSlot(resolveVenueRentalSlot(value, value));
     }
@@ -217,6 +230,7 @@ export default function WalkInReservationPage() {
           updated[date] = {
             ...cust,
             timeSlotId: value,
+            packageId: remapped(cust.packageId),
             particularQuantities: synced.particularQuantities,
             venueRentalSlot:
               cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
@@ -956,7 +970,7 @@ export default function WalkInReservationPage() {
                 <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                   <SelectItem value="0">None</SelectItem>
                   <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                  <ReservationPackageSelectItems packages={packages} particulars={particulars} />
+                  <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} />
                 </SelectContent>
               </Select>
               {customizePerDate && (
@@ -1355,7 +1369,7 @@ export default function WalkInReservationPage() {
                       <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
                         <SelectItem value="custom">Custom — Pick Items</SelectItem>
-                        <ReservationPackageSelectItems packages={packages} particulars={particulars} />
+                        <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} />
                       </SelectContent>
                     </Select>
                   </div>
