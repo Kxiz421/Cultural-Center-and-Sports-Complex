@@ -31,7 +31,9 @@ export default function CoordinatorReschedulingPage() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/coordinator/rescheduling");
+        const ut = typeof window !== "undefined" ? localStorage.getItem("userType") || "" : "";
+        const venueParam = ut === "program coordinator sports" ? "?venueId=2" : "";
+        const res = await fetch(`/api/coordinator/rescheduling${venueParam}`);
         const data = await res.json();
         if (!cancelled) setRequests(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -49,7 +51,9 @@ export default function CoordinatorReschedulingPage() {
 
   async function refreshRequests() {
     try {
-      const res = await fetch("/api/coordinator/rescheduling");
+      const ut = localStorage.getItem("userType") || "";
+      const venueParam = ut === "program coordinator sports" ? "?venueId=2" : "";
+      const res = await fetch(`/api/coordinator/rescheduling${venueParam}`);
       const data = await res.json();
       setRequests(Array.isArray(data) ? data : []);
     } catch (err) {

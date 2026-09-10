@@ -11,7 +11,6 @@ const TITLES = {
   "/panel/program-coordinator/calendar": "Facility Calendar",
   "/panel/program-coordinator/bookings": "Booking Confirmation",
   "/panel/program-coordinator/rescheduling": "Rescheduling",
-  "/panel/program-coordinator/amenities": "Amenities Management",
   "/panel/program-coordinator/notifications": "Notifications",
   "/panel/program-coordinator/reports": "Report Generation",
   "/panel/program-coordinator/reservations": "Reservations",

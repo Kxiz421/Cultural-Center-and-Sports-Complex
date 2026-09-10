@@ -9,12 +9,19 @@ import { createClientNotification } from "@/lib/coordinator-notifications";
 
 const CULTURAL_VENUE_IDS = [1];
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const venueId = searchParams.get("venueId");
+
+    const venueFilter = venueId === "2"
+      ? { in: [2] }
+      : { in: CULTURAL_VENUE_IDS };
+
     const requests = await prisma.rescheduleRequest.findMany({
       where: {
         reservation: {
-          venueId: { in: CULTURAL_VENUE_IDS },
+          venueId: venueFilter,
         },
       },
       include: {
