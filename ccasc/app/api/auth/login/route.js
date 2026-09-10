@@ -43,7 +43,7 @@ export async function POST(request) {
         let userType = staff.staffRole.roleName.toLowerCase();
         if (staff.staffRole.roleName === "Program Coordinator") {
           // staffOrgId 1 = Sports Complex, staffOrgId 2 = Cultural Center
-          userType = staff.staffOrgId === 2 ? "program coordinator" : "program coordinator";
+          userType = staff.staffOrgId === 1 ? "program coordinator sports" : "program coordinator cultural";
         }
 
         return NextResponse.json({

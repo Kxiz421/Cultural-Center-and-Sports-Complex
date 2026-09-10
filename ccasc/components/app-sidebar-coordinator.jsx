@@ -8,6 +8,7 @@ import {
   Package,
   FileBarChart,
   Bell,
+  Calendar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -62,7 +63,7 @@ const navMain = [
   },
 ];
 
-export function AppSidebarCoordinator(props) {
+export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props }) {
   const { unreadCount } = useUnreadNotificationCount("staff", {
     scope: "coordinator",
   });
@@ -90,7 +91,7 @@ export function AppSidebarCoordinator(props) {
               <span className="text-base font-semibold leading-tight">
                 South Cotabato Gymnasium
                 <span className="text-muted-foreground block text-xs font-normal">
-                  Cultural Center — Program Coordinator
+                  {venueType} — Program Coordinator
                 </span>
               </span>
             </SidebarMenuButton>
