@@ -39,11 +39,17 @@ export default function CoordinatorBookingsPage() {
   const [resubmitMessage, setResubmitMessage] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
 
+  function getVenueParam() {
+    if (typeof window === "undefined") return "";
+    const ut = localStorage.getItem("userType") || "";
+    return ut === "program coordinator sports" ? "&venueId=2" : "";
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/coordinator/bookings");
+        const res = await fetch(`/api/coordinator/bookings?${getVenueParam()}`);
         const data = await res.json();
         if (!cancelled) setReservations(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -62,7 +68,7 @@ export default function CoordinatorBookingsPage() {
   async function loadHistory() {
     setHistoryLoading(true);
     try {
-      const res = await fetch("/api/coordinator/bookings?history=true");
+      const res = await fetch(`/api/coordinator/bookings?history=true&${getVenueParam()}`);
       const data = await res.json();
       setHistoryReservations(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -81,7 +87,7 @@ export default function CoordinatorBookingsPage() {
 
   async function refreshBookings() {
     try {
-      const res = await fetch("/api/coordinator/bookings");
+      const res = await fetch(`/api/coordinator/bookings?${getVenueParam()}`);
       const data = await res.json();
       setReservations(Array.isArray(data) ? data : []);
     } catch (err) {

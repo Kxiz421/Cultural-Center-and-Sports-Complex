@@ -5,16 +5,26 @@ import { documentEventDateKey } from "@/lib/document-event-date";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 
 const CULTURAL_VENUE_IDS = [1];
+const SPORTS_VENUE_IDS = [2];
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const history = searchParams.get("history");
+    const venueId = searchParams.get("venueId");
 
-    // Get reservations for Cultural Center
+    // Determine which venue IDs to filter by
+    let venueFilter;
+    if (venueId === "2") {
+      venueFilter = { in: SPORTS_VENUE_IDS };
+    } else {
+      venueFilter = { in: CULTURAL_VENUE_IDS };
+    }
+
+    // Get reservations for the specified venue
     const reservations = await prisma.reservation.findMany({
       where: {
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: venueFilter,
         ...(history === "true"
           ? { reservationStatus: "Confirmed" }
           : { reservationStatus: { in: ["Pending"] } }),

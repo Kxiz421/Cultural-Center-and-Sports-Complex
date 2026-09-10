@@ -5,7 +5,6 @@ import {
   CalendarDays,
   ClipboardCheck,
   CalendarSync,
-  Package,
   FileBarChart,
   Bell,
   Calendar,
@@ -44,11 +43,6 @@ const navMain = [
     title: "Rescheduling",
     url: "/panel/program-coordinator/rescheduling",
     icon: CalendarSync,
-  },
-  {
-    title: "Amenities Management",
-    url: "/panel/program-coordinator/amenities",
-    icon: Package,
   },
   {
     title: "Notifications",

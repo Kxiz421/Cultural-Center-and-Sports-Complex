@@ -48,7 +48,7 @@ function getEventColor(status, type) {
   return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
 }
 
-function MonthGrid({ events, onEventClick }) {
+function MonthGrid({ events, onEventClick, venueLabel }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -116,7 +116,7 @@ function MonthGrid({ events, onEventClick }) {
             <CalendarDays className="size-5" />
           </div>
           <div>
-            <CardTitle className="text-lg">Cultural Center</CardTitle>
+            <CardTitle className="text-lg">{venueLabel || "Cultural Center"}</CardTitle>
             <CardDescription>
               {events.length} event{events.length !== 1 ? "s" : ""} scheduled
             </CardDescription>
@@ -227,15 +227,21 @@ export default function CoordinatorCalendarPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [venueLabel, setVenueLabel] = useState("Cultural Center");
 
   useEffect(() => {
+    const ut = localStorage.getItem("userType") || "";
+    const isSports = ut === "program coordinator sports";
+    setVenueLabel(isSports ? "Sports Complex" : "Cultural Center");
+
     let cancelled = false;
     async function load() {
       try {
         const res = await fetch("/api/calendar");
         const data = await res.json();
-        // Cultural Center events only (venueId 1 in the API)
-        if (!cancelled) setEvents(data.cultural || []);
+        if (!cancelled) {
+          setEvents(isSports ? (data.sports || []) : (data.cultural || []));
+        }
       } catch (err) {
         if (!cancelled) {
           console.error("Failed to load calendar:", err);
@@ -253,7 +259,8 @@ export default function CoordinatorCalendarPage() {
     try {
       const res = await fetch("/api/calendar");
       const data = await res.json();
-      setEvents(data.cultural || []);
+      const isSports = localStorage.getItem("userType") === "program coordinator sports";
+      setEvents(isSports ? (data.sports || []) : (data.cultural || []));
     } catch (err) {
       console.error("Failed to refresh calendar:", err);
     }
@@ -306,7 +313,7 @@ export default function CoordinatorCalendarPage() {
         </p>
       </div>
 
-      <MonthGrid events={events} onEventClick={setSelectedEvent} />
+      <MonthGrid events={events} onEventClick={setSelectedEvent} venueLabel={venueLabel} />
 
       {/* Event Detail Dialog */}
       <Dialog open={selectedEvent !== null} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
