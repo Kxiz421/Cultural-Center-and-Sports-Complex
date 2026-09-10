@@ -4,11 +4,15 @@ import { CULTURAL_CENTER_VENUE_IDS } from "@/lib/coordinator-notifications";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const venueId = searchParams.get("venueId");
+    const venueFilter = venueId === "2" ? [2] : CULTURAL_CENTER_VENUE_IDS;
+
     const pendingReservations = await prisma.reservation.findMany({
       where: {
-        venueId: { in: CULTURAL_CENTER_VENUE_IDS },
+        venueId: { in: venueFilter },
         reservationStatus: "Pending",
       },
       select: {
@@ -36,7 +40,7 @@ export async function GET() {
     const pendingReschedules = await prisma.rescheduleRequest.count({
       where: {
         status: "Pending",
-        reservation: { venueId: { in: CULTURAL_CENTER_VENUE_IDS } },
+        reservation: { venueId: { in: venueFilter } },
       },
     });
 

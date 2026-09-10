@@ -9,7 +9,9 @@ export function useCoordinatorPendingCounts() {
 
   const fetchCounts = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/coordinator/pending-counts");
+      const ut = typeof window !== "undefined" ? localStorage.getItem("userType") || "" : "";
+      const venueParam = ut === "program coordinator sports" ? "?venueId=2" : "";
+      const res = await fetch(`/api/coordinator/pending-counts${venueParam}`);
       const data = await res.json();
       if (res.ok) {
         setPendingBookings(data.pendingBookings ?? 0);
