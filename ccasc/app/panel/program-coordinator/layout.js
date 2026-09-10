@@ -14,6 +14,7 @@ const TITLES = {
   "/panel/program-coordinator/amenities": "Amenities Management",
   "/panel/program-coordinator/notifications": "Notifications",
   "/panel/program-coordinator/reports": "Report Generation",
+  "/panel/program-coordinator/reservations": "Reservations",
 };
 
 function CoordinatorAuthShell({ children }) {
@@ -21,13 +22,14 @@ function CoordinatorAuthShell({ children }) {
   const router = useRouter();
   const [ready, setReady] = React.useState(false);
   const [displayName, setDisplayName] = React.useState("");
+  const [venueType, setVenueType] = React.useState("");
 
   React.useEffect(() => {
     try {
       const userId = window.localStorage.getItem("user_id");
       const role = window.localStorage.getItem("role");
 
-      if (!userId || role !== "program coordinator") {
+      if (!userId || !role) {
         router.replace("/login");
         return;
       }
@@ -36,8 +38,13 @@ function CoordinatorAuthShell({ children }) {
       const last = window.localStorage.getItem("lastname") ?? "";
       const name = `${first} ${last}`.trim() || "Program Coordinator";
 
+      // Determine venue from userType stored at login
+      const userType = window.localStorage.getItem("userType") || "";
+      const venue = userType === "program coordinator sports" ? "Sports Complex" : "Cultural Center";
+
       requestAnimationFrame(() => {
         setDisplayName(name);
+        setVenueType(venue);
         setReady(true);
       });
     } catch {
@@ -58,14 +65,14 @@ function CoordinatorAuthShell({ children }) {
 
   return (
     <SidebarProvider>
-      <AppSidebarCoordinator />
+      <AppSidebarCoordinator venueType={venueType} />
       <SidebarInset>
         <SiteHeaderCCASC title={title} />
         <div className="border-b bg-muted/50 px-4 py-2.5 text-sm text-foreground lg:px-6">
           Signed in as{" "}
           <span className="font-medium text-foreground">{displayName}</span>
           {" · "}
-          <span className="text-foreground/75">Program Coordinator — Cultural Center</span>
+          <span className="text-foreground/75">Program Coordinator — {venueType}</span>
         </div>
         <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6">{children}</main>
       </SidebarInset>
