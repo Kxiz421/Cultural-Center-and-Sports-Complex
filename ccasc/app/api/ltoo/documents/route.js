@@ -107,6 +107,10 @@ export async function GET() {
     for (const doc of documents) {
       const reservation = doc.booking?.reservation;
       const client = reservation?.client;
+      
+      // Skip documents for Sports Complex — these go to the Program Coordinator, not LTOO
+      if (reservation?.venue?.venue?.toLowerCase().includes("sports complex")) continue;
+
       const isProvincial = client?.clientRole?.clientRoleId === "PROV";
 
       let clientName = "Client";
