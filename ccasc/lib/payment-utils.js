@@ -238,16 +238,16 @@ export function suggestNextPayment(breakdown) {
   if (breakdown.balanceSettled) {
     return { paymentType: "full", amount: 0 };
   }
-  if (!breakdown.depositMet) {
-    return {
-      paymentType: "deposit",
-      amount: breakdown.requiredDeposit,
-    };
-  }
   if (!breakdown.downPaymentMet) {
     return {
       paymentType: "downpayment",
       amount: breakdown.requiredDownPayment,
+    };
+  }
+  if (!breakdown.depositMet) {
+    return {
+      paymentType: "deposit",
+      amount: breakdown.requiredDeposit,
     };
   }
   return {
@@ -278,16 +278,16 @@ export function getPaymentTypeMax(breakdown, paymentType) {
 
 /**
  * Next unpaid installment used as the manual-input floor:
- * 10% deposit, then 50% down, then remaining-balance minimum.
+ * 50% down payment, then 10% deposit, then remaining-balance minimum.
  */
 export function getManualMinimum(breakdown) {
   const remaining = roundMoney(breakdown.remainingBalance);
   if (remaining <= 0) return 0;
-  if (!breakdown.depositMet) {
-    return roundMoney(Math.min(breakdown.requiredDeposit, remaining));
-  }
   if (!breakdown.downPaymentMet) {
     return roundMoney(Math.min(breakdown.requiredDownPayment, remaining));
+  }
+  if (!breakdown.depositMet) {
+    return roundMoney(Math.min(breakdown.requiredDeposit, remaining));
   }
   return roundMoney(Math.min(BALANCE_PAYMENT_MINIMUM, remaining));
 }
@@ -376,21 +376,21 @@ export function isFixedPaymentAmount(paymentType) {
   );
 }
 
-/** Apply a manual amount in order: 10% deposit, then 50% down, then remaining. */
+/** Apply a manual amount in order: 50% down payment, then 10% deposit, then remaining. */
 export function allocateManualPayment(breakdown, amount) {
   let leftover = roundMoney(amount);
   const allocation = { deposit: 0, downpayment: 0, balance: 0 };
-
-  if (!breakdown.depositMet && leftover > 0) {
-    const need = roundMoney(breakdown.requiredDeposit);
-    allocation.deposit = roundMoney(Math.min(leftover, need));
-    leftover = roundMoney(leftover - allocation.deposit);
-  }
 
   if (!breakdown.downPaymentMet && leftover > 0) {
     const need = roundMoney(breakdown.requiredDownPayment);
     allocation.downpayment = roundMoney(Math.min(leftover, need));
     leftover = roundMoney(leftover - allocation.downpayment);
+  }
+
+  if (!breakdown.depositMet && leftover > 0) {
+    const need = roundMoney(breakdown.requiredDeposit);
+    allocation.deposit = roundMoney(Math.min(leftover, need));
+    leftover = roundMoney(leftover - allocation.deposit);
   }
 
   if (leftover > 0) {
@@ -411,11 +411,11 @@ export function getManualPaymentError(breakdown, amount) {
 
   const min = getManualMinimum(breakdown);
   if (min > 0 && amt < min) {
-    if (!breakdown.depositMet) {
-      return `Manual payments must cover the 10% deposit first. Minimum is ${formatPhp(min)}.`;
-    }
     if (!breakdown.downPaymentMet) {
-      return `Manual payments must cover the 50% down payment next. Minimum is ${formatPhp(min)}.`;
+      return `Manual payments must cover the 50% down payment first. Minimum is ${formatPhp(min)}.`;
+    }
+    if (!breakdown.depositMet) {
+      return `Manual payments must cover the 10% deposit next. Minimum is ${formatPhp(min)}.`;
     }
     return `Minimum payment for remaining balance is ${formatPhp(min)}.`;
   }
@@ -431,9 +431,9 @@ export function getManualPaymentError(breakdown, amount) {
     allocation.downpayment > 0 &&
     allocation.downpayment < breakdown.requiredDownPayment
   ) {
-    const depositPart = breakdown.depositMet ? 0 : breakdown.requiredDeposit;
-    const fullDown = roundMoney(depositPart + breakdown.requiredDownPayment);
-    return `After the 10% deposit, the 50% down payment must be paid in full (${formatPhp(breakdown.requiredDownPayment)}). Pay exactly the deposit, or at least ${formatPhp(fullDown)}.`;
+    const downPart = breakdown.downPaymentMet ? 0 : breakdown.requiredDownPayment;
+    const fullDeposit = roundMoney(downPart + breakdown.requiredDeposit);
+    return `After the 50% down payment, the 10% deposit must be paid in full (${formatPhp(breakdown.requiredDeposit)}). Pay exactly the down payment, or at least ${formatPhp(fullDeposit)}.`;
   }
 
   if (breakdown.requirementsMet) {
@@ -563,7 +563,7 @@ export function getPaymentTypeHint(breakdown, paymentType) {
     return `Pays the remaining ${formatPhp(max)} and brings the reservation to 100%`;
   }
   if (paymentType === "manual") {
-    return `Applied in order: 10% deposit, then 50% down, then remaining balance. Minimum ${formatPhp(min)}.`;
+    return `Applied in order: 50% down payment, then 10% deposit, then remaining balance. Minimum ${formatPhp(min)}.`;
   }
   if (paymentType === "balance") {
     return `Minimum ${formatPhp(min)} · up to ${formatPhp(max)} remaining`;

@@ -37,10 +37,18 @@ export function sumChargeLineAmounts(chargeLines) {
 export function normalizeChargeLines(chargeLines) {
   if (!Array.isArray(chargeLines)) return [];
   return chargeLines
-    .map((line) => ({
-      date: line.date || null,
-      label: String(line.label || "").trim(),
-      amount: Number(line.amount) || 0,
-    }))
+    .map((line) => {
+      const facilityIdRaw = line.facilityId;
+      const facilityId =
+        facilityIdRaw != null && String(facilityIdRaw).trim() !== ""
+          ? String(facilityIdRaw)
+          : null;
+      return {
+        date: line.date || null,
+        label: String(line.label || "").trim(),
+        amount: Number(line.amount) || 0,
+        ...(facilityId ? { facilityId } : {}),
+      };
+    })
     .filter((line) => line.label && line.amount > 0);
 }

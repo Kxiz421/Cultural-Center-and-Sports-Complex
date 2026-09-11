@@ -30,6 +30,11 @@ const navMain = [
     icon: LayoutDashboard,
   },
   {
+    title: "Reservations",
+    url: "/panel/program-coordinator/reservations",
+    icon: Calendar,
+  },
+  {
     title: "Facility Calendar",
     url: "/panel/program-coordinator/calendar",
     icon: CalendarDays,
@@ -73,8 +78,12 @@ export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props 
     if (item.url === "/panel/program-coordinator/notifications") {
       return { ...item, showBadge: true, badgeCount: unreadCount };
     }
+    // Hide Reservations for Cultural Center
+    if (item.url === "/panel/program-coordinator/reservations") {
+      return venueType === "Sports Complex" ? item : null;
+    }
     return item;
-  });
+  }).filter(Boolean);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>

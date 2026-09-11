@@ -384,12 +384,14 @@ export default function LTOODocumentsPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="min-w-[8.5rem] text-muted-foreground">
-                              Billing Statement
-                            </span>
-                            <StatusBadge status={billingStatus} />
-                          </div>
+                          {!group.venue?.toLowerCase().includes("sports complex") && (
+                            <div className="flex items-center gap-2">
+                              <span className="min-w-[8.5rem] text-muted-foreground">
+                                Billing Statement
+                              </span>
+                              <StatusBadge status={billingStatus} />
+                            </div>
+                          )}
                           <div className="flex items-center gap-2">
                             <span className="min-w-[8.5rem] text-muted-foreground">
                               Official Receipt
@@ -443,7 +445,9 @@ export default function LTOODocumentsPage() {
               Reservation Documents
             </DialogTitle>
             <DialogDescription>
-              Review the Billing Statement and Official Receipt for this reservation.
+              {selectedGroup?.venue?.toLowerCase().includes("sports complex")
+                ? "Review the Official Receipt for this reservation."
+                : "Review the Billing Statement and Official Receipt for this reservation."}
             </DialogDescription>
           </DialogHeader>
           {selectedGroup && (
@@ -488,7 +492,9 @@ export default function LTOODocumentsPage() {
                     Event date: {formatEventDateLabel(dateGroup.eventDate)}
                   </p>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {renderDocumentCard(dateGroup.billingStatement, "Billing Statement")}
+                    {!selectedGroup.venue?.toLowerCase().includes("sports complex") && (
+                      renderDocumentCard(dateGroup.billingStatement, "Billing Statement")
+                    )}
                     {renderDocumentCard(dateGroup.officialReceipt, "Official Receipt")}
                   </div>
                 </div>

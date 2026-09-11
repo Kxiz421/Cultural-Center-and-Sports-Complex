@@ -15,10 +15,70 @@ import {
   validateAdvanceBooking,
   validateAdvanceBookingDates,
 } from "@/lib/reservation-advance-booking";
+import {
+  ACTIVE_STATUSES,
+  buildReservedFacilitiesByDate,
+  findFacilityConflicts,
+} from "@/lib/facility-reservation-availability";
 
 function parsePackageId(value) {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeFacilityIdList(ids) {
+  if (!Array.isArray(ids)) return [];
+  return [
+    ...new Set(
+      ids
+        .map((id) => parseInt(id, 10))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    ),
+  ];
+}
+
+/** Build { dateKey: facilityId[] } from body fields. */
+function resolveFacilityAssignments(body, allDateStrs) {
+  const { facilityAssignments, facilityIds } = body;
+  const assignments = {};
+
+  if (facilityAssignments && typeof facilityAssignments === "object") {
+    for (const [date, ids] of Object.entries(facilityAssignments)) {
+      const dateKey = parseSqlDate(date);
+      if (!dateKey) continue;
+      assignments[dateKey] = normalizeFacilityIdList(ids).map(String);
+    }
+  }
+
+  const globalIds = normalizeFacilityIdList(facilityIds).map(String);
+  if (globalIds.length > 0) {
+    for (const dateKey of allDateStrs) {
+      if (!assignments[dateKey]?.length) {
+        assignments[dateKey] = [...globalIds];
+      }
+    }
+  }
+
+  // Infer from charge lines with facilityId when no explicit assignments
+  if (Object.keys(assignments).length === 0 && Array.isArray(body.chargeLines)) {
+    for (const line of body.chargeLines) {
+      if (!line?.facilityId) continue;
+      const id = String(line.facilityId);
+      if (line.date) {
+        const dateKey = parseSqlDate(line.date);
+        if (!dateKey) continue;
+        if (!assignments[dateKey]) assignments[dateKey] = [];
+        if (!assignments[dateKey].includes(id)) assignments[dateKey].push(id);
+      } else {
+        for (const dateKey of allDateStrs) {
+          if (!assignments[dateKey]) assignments[dateKey] = [];
+          if (!assignments[dateKey].includes(id)) assignments[dateKey].push(id);
+        }
+      }
+    }
+  }
+
+  return assignments;
 }
 
 function addDays(date, days) {
@@ -196,46 +256,100 @@ export async function POST(request) {
       .filter(Boolean);
     const allDateStrs = [primaryDateStr, ...additionalDateStrs];
     const allDates = allDateStrs.map((d) => new Date(`${d}T00:00:00.000Z`));
+    const parsedVenueId = parseInt(venueId, 10);
+    const isSportsComplex = parsedVenueId === 2;
+    const facilityAssignments = resolveFacilityAssignments(body, allDateStrs);
+    const uniqueFacilityIds = [
+      ...new Set(Object.values(facilityAssignments).flat().map((id) => parseInt(id, 10))),
+    ].filter((id) => Number.isFinite(id) && id > 0);
 
-    // Conflict check
+    // Conflict check — Cultural Center blocks whole days; Sports Complex blocks by facility.
     const conflictingReservations = await prisma.reservation.findMany({
       where: {
-        venueId: parseInt(venueId, 10),
-        reservationStatus: { in: ["Pending", "Confirmed"] },
+        venueId: parsedVenueId,
+        reservationStatus: { in: ACTIVE_STATUSES },
         OR: [
           { eventDate: { in: allDates } },
           { additionalDates: { some: { eventDate: { in: allDates } } } },
         ],
       },
-      select: { eventDate: true, additionalDates: { select: { eventDate: true } } },
+      select: {
+        eventDate: true,
+        notes: true,
+        additionalDates: { select: { eventDate: true } },
+        schedules: { select: { facilityId: true } },
+      },
     });
 
     const calendarBlocks = await prisma.calendarBlock.findMany({
       where: {
-        venueId: parseInt(venueId, 10),
+        venueId: parsedVenueId,
         blockDate: { in: allDates },
       },
       select: { blockDate: true },
     });
 
-    const conflictDates = new Set();
-    for (const r of conflictingReservations) {
-      conflictDates.add(formatDbDate(r.eventDate));
-      for (const ad of r.additionalDates) conflictDates.add(formatDbDate(ad.eventDate));
-    }
-    for (const b of calendarBlocks) conflictDates.add(formatDbDate(b.blockDate));
+    const blockedByCalendar = new Set();
+    for (const b of calendarBlocks) blockedByCalendar.add(formatDbDate(b.blockDate));
 
-    if (conflictDates.size > 0) {
+    if (blockedByCalendar.size > 0) {
       return NextResponse.json({
-        error: `The following dates are already booked: ${[...conflictDates].join(", ")}`,
-        conflictDates: [...conflictDates],
+        error: `The following dates are unavailable: ${[...blockedByCalendar].join(", ")}`,
+        conflictDates: [...blockedByCalendar],
       }, { status: 409 });
+    }
+
+    if (isSportsComplex) {
+      if (uniqueFacilityIds.length === 0) {
+        return NextResponse.json(
+          { error: "Please select at least one facility." },
+          { status: 400 }
+        );
+      }
+
+      const reservedByDate = buildReservedFacilitiesByDate(conflictingReservations);
+      const facilityConflicts = findFacilityConflicts(reservedByDate, facilityAssignments);
+      if (facilityConflicts.length > 0) {
+        const conflictFacilities = await prisma.facility.findMany({
+          where: {
+            facilityId: {
+              in: [...new Set(facilityConflicts.map((c) => parseInt(c.facilityId, 10)))],
+            },
+          },
+          select: { facilityId: true, facilityName: true },
+        });
+        const nameById = Object.fromEntries(
+          conflictFacilities.map((f) => [String(f.facilityId), f.facilityName])
+        );
+        const detail = facilityConflicts
+          .map((c) => `${nameById[c.facilityId] || `facility #${c.facilityId}`} on ${c.date}`)
+          .join(", ");
+        return NextResponse.json({
+          error: `One or more selected facilities are already reserved: ${detail}`,
+          facilityConflicts,
+        }, { status: 409 });
+      }
+    } else {
+      const conflictDates = new Set();
+      for (const r of conflictingReservations) {
+        conflictDates.add(formatDbDate(r.eventDate));
+        for (const ad of r.additionalDates) conflictDates.add(formatDbDate(ad.eventDate));
+      }
+      // Only dates overlapping the request
+      const requested = new Set(allDateStrs);
+      const overlapping = [...conflictDates].filter((d) => requested.has(d));
+      if (overlapping.length > 0) {
+        return NextResponse.json({
+          error: `The following dates are already booked: ${overlapping.join(", ")}`,
+          conflictDates: overlapping,
+        }, { status: 409 });
+      }
     }
 
     const isWalkIn = notes && notes.startsWith("Walk-in client:");
     const parsedClientId = parseInt(clientId, 10);
     const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
-    const venueName = venueNames[parseInt(venueId, 10)] || "Unknown Venue";
+    const venueName = venueNames[parsedVenueId] || "Unknown Venue";
 
     // Calculate total
     let totalAmount = 0;
@@ -323,7 +437,7 @@ export async function POST(request) {
 
     const reservation = await prisma.reservation.create({
       data: {
-        venueId: parseInt(venueId, 10),
+        venueId: parsedVenueId,
         eventType,
         eventDate: event,
         timeSlotId: parsedTimeSlotId,
@@ -340,12 +454,16 @@ export async function POST(request) {
         reservedParticulars: particularsData.length > 0
           ? { create: particularsData }
           : undefined,
+        schedules: uniqueFacilityIds.length > 0
+          ? { create: uniqueFacilityIds.map((facilityId) => ({ facilityId })) }
+          : undefined,
       },
       include: {
         additionalDates: true,
         reservedParticulars: {
           include: { particular: { select: { particularName: true } } },
         },
+        schedules: true,
       },
     });
 

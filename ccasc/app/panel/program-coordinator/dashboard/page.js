@@ -23,11 +23,16 @@ function formatPhp(amount) {
 export default function CoordinatorDashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [venueLabel, setVenueLabel] = useState("Cultural Center");
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/dashboard/coordinator");
+        const ut = localStorage.getItem("userType") || "";
+        const isSports = ut === "program coordinator sports";
+        setVenueLabel(isSports ? "Sports Complex" : "Cultural Center");
+        const venueParam = isSports ? "?venueId=2" : "";
+        const res = await fetch(`/api/dashboard/coordinator${venueParam}`);
         const json = await res.json();
         setData(json);
       } catch (error) {
@@ -66,7 +71,7 @@ export default function CoordinatorDashboardPage() {
           Program Coordinator Dashboard
         </h2>
         <p className="text-muted-foreground text-sm">
-          Cultural Center — live data from database.
+          {venueLabel} — live data from database.
         </p>
       </div>
 

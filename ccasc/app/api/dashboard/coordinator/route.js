@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const venueId = searchParams.get("venueId");
+    const venueFilter = venueId === "2" ? [2] : [1];
+    const venueLabel = venueId === "2" ? "Sports Complex" : "Cultural Center";
+
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
-    // Cultural Center venue IDs (venueId 2 = South Cotabato Gymnasium and Cultural Center)
-    const CULTURAL_VENUE_IDS = [1];
-
-    // Today's payments for Cultural Center
+    // Today's payments for selected venue
     const todayTransactions = await prisma.transaction.findMany({
       where: {
         paymentDate: { gte: startOfDay },
         payment: {
           booking: {
-            reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
+            reservation: { venueId: { in: venueFilter } },
           },
         },
       },
@@ -32,7 +34,7 @@ export async function GET() {
     const allPayments = await prisma.payment.findMany({
       where: {
         booking: {
-          reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
+          reservation: { venueId: { in: venueFilter } },
         },
       },
       select: { amountPaid: true },
@@ -45,32 +47,32 @@ export async function GET() {
     const pendingReservations = await prisma.reservation.count({
       where: {
         reservationStatus: "Pending",
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: { in: venueFilter },
       },
     });
     const confirmedReservations = await prisma.reservation.count({
       where: {
         reservationStatus: "Confirmed",
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: { in: venueFilter },
       },
     });
     const ongoingReservations = await prisma.reservation.count({
       where: {
         eventStatus: "Ongoing",
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: { in: venueFilter },
       },
     });
     const completedReservations = await prisma.reservation.count({
       where: {
         eventStatus: "Completed",
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: { in: venueFilter },
       },
     });
 
     // Recent reservations for Cultural Center
     const recentReservations = await prisma.reservation.findMany({
       where: {
-        venueId: { in: CULTURAL_VENUE_IDS },
+        venueId: { in: venueFilter },
       },
       include: {
         venue: { select: { venue: true } },
@@ -118,7 +120,7 @@ export async function GET() {
         paymentDate: { gte: twelveMonthsAgo },
         payment: {
           booking: {
-            reservation: { venueId: { in: CULTURAL_VENUE_IDS } },
+            reservation: { venueId: { in: venueFilter } },
           },
         },
       },

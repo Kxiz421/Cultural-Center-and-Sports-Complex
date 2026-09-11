@@ -75,29 +75,33 @@ function isBlocking(status) {
   return status === "Pending" || status === "Verified";
 }
 
-function computePhase(documents) {
+function computePhase(documents, venueId = null) {
   const byType = latestStatusByType(documents);
   const billingStatus = byType[DOC_TYPE.BILLING_STATEMENT] || null;
   const receiptStatus = byType[DOC_TYPE.OFFICIAL_RECEIPT] || null;
   const leaseStatus = byType[DOC_TYPE.CONTRACT_OF_LEASE] || null;
   const certStatus = byType[DOC_TYPE.CERTIFICATION] || null;
 
+  const isSportsComplex = venueId === 2;
+
   const initialApproved =
-    isVerified(billingStatus) && isVerified(receiptStatus);
+     isVerified(billingStatus) && isVerified(receiptStatus);
 
   return {
-    billingStatus,
+    billingStatus: isSportsComplex ? null : billingStatus,
     receiptStatus,
-    leaseStatus,
-    certStatus,
-    initialApproved,
+    leaseStatus: isSportsComplex ? null : leaseStatus,
+    certStatus: isSportsComplex ? null : certStatus,
+    initialApproved: isSportsComplex ? false : initialApproved,
     canUploadInitial:
-      !isBlocking(billingStatus) || !isBlocking(receiptStatus),
-    canUploadFinal: initialApproved,
-    needsBilling: !isBlocking(billingStatus),
+      isSportsComplex
+        ? !isBlocking(receiptStatus)
+        : !isBlocking(billingStatus) || !isBlocking(receiptStatus),
+    canUploadFinal: isSportsComplex ? false : initialApproved,
+    needsBilling: isSportsComplex ? false : !isBlocking(billingStatus),
     needsReceipt: !isBlocking(receiptStatus),
-    needsLease: initialApproved && !isBlocking(leaseStatus),
-    needsCertification: initialApproved && !isBlocking(certStatus),
+    needsLease: isSportsComplex ? false : initialApproved && !isBlocking(leaseStatus),
+    needsCertification: isSportsComplex ? false : initialApproved && !isBlocking(certStatus),
   };
 }
 
@@ -122,11 +126,11 @@ function formatDocument(doc, primaryKey = null) {
   };
 }
 
-function computeDatePhases(documents, eventDates, primaryKey) {
+function computeDatePhases(documents, eventDates, primaryKey, venueId = null) {
   const datePhases = {};
   for (const dateKey of eventDates) {
     datePhases[dateKey] = computePhase(
-      documentsForEventDate(documents, dateKey, primaryKey)
+      documentsForEventDate(documents, dateKey, primaryKey), venueId
     );
   }
   return datePhases;
@@ -340,7 +344,7 @@ export async function POST(request) {
       eventDateKey = dated.eventDateKey;
       const allDocs = await getBookingDocuments(booking.bookingId);
       existing = documentsForEventDate(allDocs, eventDateKey, primaryDateKey);
-      phase = computePhase(existing);
+      phase = computePhase(existing, reservation?.venueId);
     }
 
     if (mode === "initial" || mode === "bs-or") {
@@ -424,7 +428,7 @@ export async function POST(request) {
         {
           success: true,
           documents: created.map((doc) => formatDocument(doc, primaryDateKey)),
-          phase: computePhase([...created, ...existing]),
+          phase: computePhase([...created, ...existing], reservation.venueId),
           eventDate: eventDateKey,
           eventDates,
         },
@@ -524,7 +528,7 @@ export async function POST(request) {
         {
           success: true,
           documents: created.map((doc) => formatDocument(doc, primaryDateKey)),
-          phase: computePhase([...created, ...existing]),
+          phase: computePhase([...created, ...existing], reservation.venueId),
           eventDate: eventDateKey,
           eventDates,
         },
@@ -609,7 +613,7 @@ export async function POST(request) {
         success: true,
         document: formatDocument(created[0], primaryDateKey),
         documents: created.map((doc) => formatDocument(doc, primaryDateKey)),
-        phase: computePhase([...created, ...existing]),
+        phase: computePhase([...created, ...existing], reservation.venueId),
         eventDate: eventDateKey,
         eventDates,
       },
@@ -768,6 +772,7 @@ export async function GET(request) {
           where: { reservationId },
           select: {
             eventDate: true,
+            venueId: true,
             additionalDates: { select: { eventDate: true } },
           },
         });
@@ -801,8 +806,8 @@ export async function GET(request) {
 
       return NextResponse.json({
         documents: scopedFormatted,
-        phase: computePhase(scopedDocs),
-        datePhases: computeDatePhases(bookingDocs, eventDates, primaryKey),
+        phase: computePhase(scopedDocs, reservation?.venueId),
+        datePhases: computeDatePhases(bookingDocs, eventDates, primaryKey, reservation?.venueId),
         eventDates,
         eventDate: selectedDate.eventDateKey || null,
         reservationId,

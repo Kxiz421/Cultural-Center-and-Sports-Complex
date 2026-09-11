@@ -1035,18 +1035,8 @@ export default function WalkInReservationPage() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Reservation Setup */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Reservation Details</CardTitle>
-            <CardDescription>
-              Select venue, date, and time slot.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <Separator className="my-6" />
+            {/* Reservation Details inside Client Info Card */}
             <div className="space-y-2">
               <Label>Venue *</Label>
               <Select value={venueId} onValueChange={setVenueId}>
