@@ -504,7 +504,7 @@ export default function CoordinatorBookingsPage() {
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <AlertTriangle className="size-3" />
                   {selectedRes.venue?.toLowerCase().includes("sports complex")
-                    ? "Confirm only if the physical copy of the Official Receipt is verified."
+                    ? "Confirm only after the Official Receipt has been verified."
                     : "Confirm only if physical copies of certification and contract of lease are verified."}
                 </p>
                 <div className="flex gap-2">
@@ -517,6 +517,12 @@ export default function CoordinatorBookingsPage() {
                   </Button>
                   <Button
                     className="flex-1"
+                    disabled={
+                      selectedRes.venue?.toLowerCase().includes("sports complex") &&
+                      !(selectedRes.documents || []).some(
+                        (d) => d.type === "Official Receipt" && d.status === "Verified"
+                      )
+                    }
                     onClick={() => handleConfirm(selectedRes.id.replace("RES-", ""))}
                   >
                     <CheckCircle2 className="mr-2 size-4" />
