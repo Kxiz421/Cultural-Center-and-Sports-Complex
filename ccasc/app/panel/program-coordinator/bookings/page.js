@@ -503,7 +503,9 @@ export default function CoordinatorBookingsPage() {
               <div className="flex flex-col gap-2 pt-2 border-t">
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <AlertTriangle className="size-3" />
-                  Confirm only if physical copies of certification and contract of lease are verified.
+                  {selectedRes.venue?.toLowerCase().includes("sports complex")
+                    ? "Confirm only if the physical copy of the Official Receipt is verified."
+                    : "Confirm only if physical copies of certification and contract of lease are verified."}
                 </p>
                 <div className="flex gap-2">
                   <Button

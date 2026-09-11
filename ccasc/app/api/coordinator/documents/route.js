@@ -7,14 +7,20 @@ import { documentEventDateKey } from "@/lib/document-event-date";
 export const dynamic = "force-dynamic";
 
 
-// Program Coordinator sees only Contract of Lease (2) and Certification (3)
-const COORDINATOR_DOCUMENT_TYPES = [2, 3];
+// Program Coordinator sees:
+// - Cultural Center (venueId=1): Contract of Lease (2) and Certification (3)
+// - Sports Complex (venueId=2): Official Receipt (5)
+// We fetch all coordinator-relevant types and filter by venue below
+const COORDINATOR_RELEVANT_TYPES = [2, 3, 5];
+
+const CULTURAL_TYPES = [2, 3];
+const SPORTS_TYPES = [5];
 
 export async function GET() {
   try {
     const documents = await prisma.document.findMany({
       where: {
-        documentTypeId: { in: COORDINATOR_DOCUMENT_TYPES },
+        documentTypeId: { in: COORDINATOR_RELEVANT_TYPES },
       },
       include: {
         booking: {
@@ -44,7 +50,17 @@ export async function GET() {
       orderBy: { submittedAt: "desc" },
     });
 
-    const mapped = documents.map((d) => {
+    const mapped = documents
+      .filter((d) => {
+        const venue = d.booking?.reservation?.venue?.venue?.toLowerCase() || "";
+        const isSports = venue.includes("sports complex");
+        const typeId = d.documentTypeId;
+        // Sports Complex: only show Official Receipt (5)
+        if (isSports) return SPORTS_TYPES.includes(typeId);
+        // Cultural Center: only show Contract of Lease (2) and Certification (3)
+        return CULTURAL_TYPES.includes(typeId);
+      })
+      .map((d) => {
       const client = d.booking?.reservation?.client;
       const isProvincial = client?.clientRole?.clientRoleId === "PROV";
 
