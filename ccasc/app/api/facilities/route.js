@@ -20,15 +20,15 @@ export async function GET() {
       facilityId: f.facilityId,
       name: f.facilityName,
       description: f.description,
-      site: f.venue.venue,
-      venueId: f.venue.venueId,
+      site: f.venue?.venue || "Unknown",
+      venueId: f.venue?.venueId ?? f.venueId,
       rateId: f.rateId,
       statusId: f.statusId,
-      rateHourly: Number(f.rate.dayRate),
-      rateDaily: Number(f.rate.nightRate),
+      rateHourly: Number(f.rate?.dayRate ?? 0),
+      rateDaily: Number(f.rate?.nightRate ?? 0),
       capacity: f.capacity || 0,
-      availability: f.status.statusName,
-      images: f.images.map(i => i.image)
+      availability: f.status?.statusName || "Unknown",
+      images: (f.images || []).map(i => i.image)
     })));
   } catch (error) {
     console.error("Failed to fetch facilities:", error);

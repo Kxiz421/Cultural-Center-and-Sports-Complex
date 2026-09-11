@@ -74,8 +74,8 @@ import {
 import { isDepositRecordMet, sanitizeDeductionReason } from "@/lib/deposit-utils";
 
 const PAYMENT_RADIO_OPTIONS = [
-  { value: "deposit", title: "10% Deposit" },
   { value: "downpayment", title: "50% Down Payment" },
+  { value: "deposit", title: "10% Deposit" },
   { value: "both_plus", title: "60% (Down + Deposit) + additional" },
   { value: "full", title: "100% Full Payment" },
   { value: "balance", title: "Remaining Balance" },
@@ -1461,17 +1461,17 @@ export default function LTOOPaymentsPage() {
                       <span className="font-medium">Minimum: </span>
                       <span className="tabular-nums font-semibold">{formatPhp(paymentTypeMin)}</span>
                       <span className="text-amber-800/80">
-                        {!currentBreakdown?.depositMet
-                          ? " (10% deposit first)"
-                          : !currentBreakdown?.downPaymentMet
-                            ? " (50% down payment next)"
+                        {!currentBreakdown?.downPaymentMet
+                          ? " (50% down payment first)"
+                          : !currentBreakdown?.depositMet
+                            ? " (10% deposit next)"
                             : paymentTypeMin < BALANCE_PAYMENT_MINIMUM
                               ? " (full remaining balance)"
                               : ` (₱${BALANCE_PAYMENT_MINIMUM.toLocaleString()} remaining-balance minimum)`}
                       </span>
                     </p>
                     <p className="mt-0.5 text-amber-800/80">
-                      Applied in order: unpaid 10% deposit, then unpaid 50% down, then remaining balance.
+                      Applied in order: unpaid 50% down payment, then unpaid 10% deposit, then remaining balance.
                       Maximum {formatPhp(paymentTypeMax)}. Partial down payment after the deposit is not allowed.
                     </p>
                     {manualAllocation && (

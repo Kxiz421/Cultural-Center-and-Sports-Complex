@@ -33,35 +33,41 @@ export async function GET(request) {
       allDates.push(dt);
     }
 
-    // Fetch conflicting reservations (Pending or Confirmed) for this venue
+    // Fetch conflicting reservations (Pending or Confirmed) for this venue.
+    // Sports Complex (venueId=2) books by facility, so other reservations do not
+    // block the whole calendar day — facility conflicts are checked separately.
+    const parsedVenueId = parseInt(venueId, 10);
+    const isSportsComplex = parsedVenueId === 2;
     const excludeId = excludeReservationId
       ? parseInt(excludeReservationId, 10)
       : null;
 
-    const conflictingReservations = await prisma.reservation.findMany({
-      where: {
-        venueId: parseInt(venueId, 10),
-        reservationStatus: { in: ["Pending", "Confirmed"] },
-        ...(excludeId ? { reservationId: { not: excludeId } } : {}),
-        OR: [
-          { eventDate: { gte: startDate, lte: endDate } },
-          {
-            additionalDates: {
-              some: { eventDate: { gte: startDate, lte: endDate } },
-            },
+    const conflictingReservations = isSportsComplex
+      ? []
+      : await prisma.reservation.findMany({
+          where: {
+            venueId: parsedVenueId,
+            reservationStatus: { in: ["Pending", "Confirmed"] },
+            ...(excludeId ? { reservationId: { not: excludeId } } : {}),
+            OR: [
+              { eventDate: { gte: startDate, lte: endDate } },
+              {
+                additionalDates: {
+                  some: { eventDate: { gte: startDate, lte: endDate } },
+                },
+              },
+            ],
           },
-        ],
-      },
-      select: {
-        eventDate: true,
-        additionalDates: { select: { eventDate: true } },
-      },
-    });
+          select: {
+            eventDate: true,
+            additionalDates: { select: { eventDate: true } },
+          },
+        });
 
     // Fetch calendar blocks for this venue in the month
     const calendarBlocks = await prisma.calendarBlock.findMany({
       where: {
-        venueId: parseInt(venueId, 10),
+        venueId: parsedVenueId,
         blockDate: { gte: startDate, lte: endDate },
       },
       select: { blockDate: true, title: true },

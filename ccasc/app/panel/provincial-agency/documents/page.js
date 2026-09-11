@@ -40,7 +40,6 @@ import {
 import { toast } from "sonner";
 import {
   formatEventDateLabel,
-  phaseSubmittedCount,
 } from "@/lib/document-event-date";
 
 const VALID_IMAGE_TYPES = [
@@ -53,17 +52,9 @@ const VALID_IMAGE_TYPES = [
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const EMPTY_PHASE = {
-  billingStatus: null,
   receiptStatus: null,
-  leaseStatus: null,
-  certStatus: null,
-  initialApproved: false,
   canUploadInitial: true,
-  canUploadFinal: false,
-  needsBilling: true,
   needsReceipt: true,
-  needsLease: false,
-  needsCertification: false,
 };
 
 function validateImageFile(file, label) {
@@ -104,7 +95,6 @@ function docStatus(doc) {
 
 export default function ProvincialDocumentsPage() {
   const [documents, setDocuments] = React.useState([]);
-  const [datePhases, setDatePhases] = React.useState({});
   const [selectedEventDate, setSelectedEventDate] = React.useState("");
   const [phase, setPhase] = React.useState(EMPTY_PHASE);
   const [bookingsLoading, setBookingsLoading] = React.useState(true);
@@ -113,6 +103,7 @@ export default function ProvincialDocumentsPage() {
   const [bookings, setBookings] = React.useState([]);
   const [selectedReservationId, setSelectedReservationId] = React.useState("");
   const [viewDoc, setViewDoc] = React.useState(null);
+  const [isFullyPaid, setIsFullyPaid] = React.useState(false);
 
   const [billingFile, setBillingFile] = React.useState(null);
   const [receiptFile, setReceiptFile] = React.useState(null);
@@ -135,6 +126,11 @@ export default function ProvincialDocumentsPage() {
     [bookings, selectedReservationId]
   );
 
+  const isSportsComplex =
+    selectedBooking?.venue
+      ?.toLowerCase()
+      .includes("sports complex") ?? false;
+
   const eventDates = React.useMemo(() => {
     if (!selectedBooking) return [];
     const dates = selectedBooking.eventDates?.length
@@ -154,14 +150,28 @@ export default function ProvincialDocumentsPage() {
   );
 
   const showInitialForm =
-    !phase.initialApproved && (phase.needsBilling || phase.needsReceipt);
-  const requireBothInitial = phase.needsBilling && phase.needsReceipt;
+    isSportsComplex
+      ? !phase.receiptStatus && phase.needsReceipt && isFullyPaid
+      : !phase.initialApproved && (phase.needsBilling || phase.needsReceipt);
+  const requireBothInitial = isSportsComplex ? false : phase.needsBilling && phase.needsReceipt;
   const showFinalForm =
-    phase.initialApproved &&
-    (phase.needsCertification || phase.needsLease);
-  const requireBothFinal = phase.needsCertification && phase.needsLease;
+    isSportsComplex
+      ? false
+      : phase.initialApproved && (phase.needsCertification || phase.needsLease);
+  const requireBothFinal =
+    isSportsComplex
+      ? false
+      : phase.needsCertification && phase.needsLease;
 
   const declinedResubmitOptions = React.useMemo(() => {
+    if (isSportsComplex) {
+      // Sports Complex: only receipt
+      if (phase.receiptStatus === "Declined") {
+        return [{ id: "5", name: "Official Receipt" }];
+      }
+      return [];
+    }
+    // Cultural Center: all document types
     const options = [];
     if (phase.billingStatus === "Declined") {
       options.push({ id: "1", name: "Billing Statement" });
@@ -178,7 +188,7 @@ export default function ProvincialDocumentsPage() {
       }
     }
     return options;
-  }, [phase]);
+  }, [phase, isSportsComplex]);
 
   React.useEffect(() => {
     async function fetchBookings() {
@@ -210,6 +220,7 @@ export default function ProvincialDocumentsPage() {
       if (!reservationId) {
         setDocuments([]);
         setPhase(EMPTY_PHASE);
+        setIsFullyPaid(false);
         return;
       }
       setDocumentsLoading(true);
@@ -226,36 +237,44 @@ export default function ProvincialDocumentsPage() {
           throw new Error(data.error || "Failed to load documents");
         }
 
+        // Determine if the reservation is fully paid
+        const booking = bookings.find((b) => String(b.id) === String(reservationId));
+        const fullyPaid = booking?.computedStatus === "Fully Paid" || booking?.balanceSettled === true;
+        setIsFullyPaid(fullyPaid);
+
+        // Determine venue type
+        const venueName = booking?.venue || "";
+        const sportsComplex = venueName.toLowerCase().includes("sports complex");
+
         if (Array.isArray(data)) {
           setDocuments(data);
-          setDatePhases({});
           setPhase(EMPTY_PHASE);
         } else {
           setDocuments(data.documents || []);
-          setDatePhases(data.datePhases || {});
-          setPhase({ ...EMPTY_PHASE, ...(data.phase || {}) });
+          if (sportsComplex) {
+            // Sports Complex: only receipt
+            setPhase({ ...EMPTY_PHASE, receiptStatus: data.phase?.receiptStatus || null, needsReceipt: data.phase?.needsReceipt !== false });
+          } else {
+            // Cultural Center: full phase
+            setPhase({ ...EMPTY_PHASE, ...(data.phase || {}) });
+          }
         }
       } catch (err) {
         console.error(err);
         toast.error(err.message || "Failed to load documents");
         setDocuments([]);
         setPhase(EMPTY_PHASE);
+        setIsFullyPaid(false);
       } finally {
         setDocumentsLoading(false);
       }
     },
-    []
+    [bookings]
   );
 
   React.useEffect(() => {
     loadDocumentsForReservation(selectedReservationId);
   }, [selectedReservationId, loadDocumentsForReservation]);
-
-  React.useEffect(() => {
-    if (selectedEventDate && datePhases[selectedEventDate]) {
-      setPhase({ ...EMPTY_PHASE, ...datePhases[selectedEventDate] });
-    }
-  }, [selectedEventDate, datePhases]);
 
   const resetInitialFiles = () => {
     setBillingFile(null);
@@ -298,8 +317,14 @@ export default function ProvincialDocumentsPage() {
     }
     if (!showInitialForm) {
       toast.error(
-        "Billing Statement and Official Receipt are not available for upload on this booking."
+        isSportsComplex
+          ? "Official Receipt is not available for upload on this booking."
+          : "Billing Statement and Official Receipt are not available for upload on this booking."
       );
+      return;
+    }
+    if (isSportsComplex && !isFullyPaid) {
+      toast.error("Receipt can only be uploaded after the reservation is fully paid.");
       return;
     }
 
@@ -344,9 +369,11 @@ export default function ProvincialDocumentsPage() {
       }
 
       toast.success(
-        requireBothInitial
-          ? "Billing Statement and Official Receipt submitted for LTOO review."
-          : "Document submitted for LTOO review."
+        isSportsComplex
+          ? "Official Receipt submitted for LTOO review."
+          : requireBothInitial
+            ? "Billing Statement and Official Receipt submitted for LTOO review."
+            : "Document submitted for LTOO review."
       );
       resetInitialFiles();
       await loadDocumentsForReservation(selectedReservationId);
@@ -359,6 +386,7 @@ export default function ProvincialDocumentsPage() {
 
   const handleUploadFinal = async (e) => {
     e.preventDefault();
+    if (isSportsComplex) return;
     if (!selectedReservationId) {
       toast.error("Please select a booking/reservation first.");
       return;
@@ -514,9 +542,7 @@ export default function ProvincialDocumentsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Documents</h2>
         <p className="text-muted-foreground text-sm">
-          Select a booking to view and submit documents for your provincial agency reservation. Billing Statement
-          and Official Receipt come first; Certification and Contract of Lease
-          unlock after LTOO approval.
+          Select a booking to view and submit documents. {isSportsComplex ? "Only the Official Receipt is required for Sports Complex reservations, and can only be uploaded after the reservation is fully paid." : "Billing Statement and Official Receipt come first for Cultural Center; Certification and Contract of Lease unlock after LTOO approval."}
         </p>
       </div>
 
@@ -594,12 +620,16 @@ export default function ProvincialDocumentsPage() {
                 <CardTitle>Select Event Date</CardTitle>
                 <CardDescription>
                   This reservation has multiple dates. Choose a date to submit
-                  its own set of four documents.
+                  the Official Receipt.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 {eventDates.map((date) => {
-                  const count = phaseSubmittedCount(datePhases[date] || {});
+                  const receiptSubmitted = documents.some(
+                    (d) =>
+                      d.type === "Official Receipt" &&
+                      d.forEventDate === date
+                  );
                   return (
                     <Button
                       key={date}
@@ -614,9 +644,9 @@ export default function ProvincialDocumentsPage() {
                       className="h-auto flex-col items-start gap-1 px-3 py-2"
                     >
                       <span>{formatEventDateLabel(date)}</span>
-                      <span className="text-[11px] opacity-80">
-                        {count}/4 documents
-                      </span>
+                      {receiptSubmitted && (
+                        <CheckCircle className="size-3 text-green-500" />
+                      )}
                     </Button>
                   );
                 })}
@@ -635,207 +665,271 @@ export default function ProvincialDocumentsPage() {
             <CardHeader>
               <CardTitle>Document Progress</CardTitle>
               <CardDescription>
-                Step 1: Billing Statement + Official Receipt (LTOO). Step 2
-                unlocks after both are verified.
+                {isSportsComplex
+                  ? "Submit the Official Receipt after the reservation is fully paid."
+                  : "Step 1: Billing Statement + Official Receipt (LTOO). Step 2 unlocks after both are verified."}
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-2 sm:grid-cols-2">
-              {statusPill("Billing Statement", phase.billingStatus)}
+            <CardContent className="grid gap-2 sm:grid-cols-1">
+              {!isSportsComplex && statusPill("Billing Statement", phase.billingStatus)}
               {statusPill("Official Receipt", phase.receiptStatus)}
-              {statusPill("Certification", phase.certStatus)}
-              {statusPill("Contract of Lease", phase.leaseStatus)}
+              {!isSportsComplex && statusPill("Certification", phase.certStatus)}
+              {!isSportsComplex && statusPill("Contract of Lease", phase.leaseStatus)}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Step 1 — Billing Statement & Official Receipt
-              </CardTitle>
-              <CardDescription>
-                {requireBothInitial
-                  ? "Upload both images together. They are reviewed by the Local Treasury Operations Officer."
-                  : "Upload the remaining required document(s) for LTOO review."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!showInitialForm ? (
-                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                  {phase.initialApproved
-                    ? "Both documents are verified. You can proceed to Step 2."
-                    : "These documents are already pending review for this booking."}
-                </div>
-              ) : (
-                <form onSubmit={handleUploadInitial} className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {phase.needsBilling && (
-                      <div className="space-y-2">
-                        <Label htmlFor="billing-file">Billing Statement</Label>
-                        <Input
-                          id="billing-file"
-                          type="file"
-                          accept="image/jpeg,image/png,image/gif,image/webp"
-                          onChange={(e) =>
-                            onPickFile(
-                              e,
-                              setBillingFile,
-                              setBillingPreview,
-                              "Billing Statement"
-                            )
-                          }
-                        />
-                        {billingPreview && (
-                          <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                            <img
-                              src={billingPreview}
-                              alt="Billing Statement preview"
-                              className="h-full w-full object-contain"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {phase.needsReceipt && (
-                      <div className="space-y-2">
-                        <Label htmlFor="receipt-file">Official Receipt</Label>
-                        <Input
-                          id="receipt-file"
-                          type="file"
-                          accept="image/jpeg,image/png,image/gif,image/webp"
-                          onChange={(e) =>
-                            onPickFile(
-                              e,
-                              setReceiptFile,
-                              setReceiptPreview,
-                              "Official Receipt"
-                            )
-                          }
-                        />
-                        {receiptPreview && (
-                          <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                            <img
-                              src={receiptPreview}
-                              alt="Official Receipt preview"
-                              className="h-full w-full object-contain"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+          {isSportsComplex ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Upload Official Receipt</CardTitle>
+                <CardDescription>
+                  {showInitialForm
+                    ? "Upload the Official Receipt for LTOO verification."
+                    : isFullyPaid
+                      ? "Official Receipt already submitted or pending review."
+                      : "Receipt upload is only available after the reservation is fully paid."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!showInitialForm ? (
+                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground flex items-start gap-2">
+                    <Lock className="size-4 mt-0.5 shrink-0" />
+                    {!isFullyPaid
+                      ? "The reservation must be fully paid before the Official Receipt can be uploaded."
+                      : "Official Receipt is already submitted or pending review."}
                   </div>
-                  <Button type="submit" disabled={initialSubmitDisabled}>
-                    <Upload className="mr-2 size-4" />
-                    {uploading
-                      ? "Uploading..."
-                      : requireBothInitial
-                        ? "Upload Both Documents"
-                        : "Upload Document"}
-                  </Button>
-                </form>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {!phase.initialApproved && (
-                  <Lock className="size-4 text-muted-foreground" />
+                ) : (
+                  <form onSubmit={handleUploadInitial} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-1">
+                      {phase.needsReceipt && (
+                        <div className="space-y-2">
+                          <Label htmlFor="receipt-file">Official Receipt</Label>
+                          <Input
+                            id="receipt-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={(e) =>
+                              onPickFile(
+                                e,
+                                setReceiptFile,
+                                setReceiptPreview,
+                                "Official Receipt"
+                              )
+                            }
+                          />
+                          {receiptPreview && (
+                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
+                              <img
+                                src={receiptPreview}
+                                alt="Official Receipt preview"
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={initialSubmitDisabled}>
+                      <Upload className="mr-2 size-4" />
+                      {uploading
+                        ? "Uploading..."
+                        : "Upload Official Receipt"}
+                    </Button>
+                  </form>
                 )}
-                Step 2 — Certification & Contract of Lease
-              </CardTitle>
-              <CardDescription>
-                Available after LTOO verifies both Billing Statement and
-                Official Receipt.
-                {requireBothFinal ? " Upload both together." : ""}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!phase.initialApproved ? (
-                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground flex items-start gap-2">
-                  <Lock className="size-4 mt-0.5 shrink-0" />
-                  Locked until LTOO approves Billing Statement and Official
-                  Receipt for this booking.
-                </div>
-              ) : !showFinalForm ? (
-                <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                  Certification and Contract of Lease are already pending review
-                  or verified for this booking.
-                </div>
-              ) : (
-                <form onSubmit={handleUploadFinal} className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {phase.needsCertification && (
-                      <div className="space-y-2">
-                        <Label htmlFor="cert-file">Certification</Label>
-                        <Input
-                          id="cert-file"
-                          type="file"
-                          accept="image/jpeg,image/png,image/gif,image/webp"
-                          onChange={(e) =>
-                            onPickFile(
-                              e,
-                              setCertFile,
-                              setCertPreview,
-                              "Certification"
-                            )
-                          }
-                        />
-                        {certPreview && (
-                          <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                            <img
-                              src={certPreview}
-                              alt="Certification preview"
-                              className="h-full w-full object-contain"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {phase.needsLease && (
-                      <div className="space-y-2">
-                        <Label htmlFor="lease-file">Contract of Lease</Label>
-                        <Input
-                          id="lease-file"
-                          type="file"
-                          accept="image/jpeg,image/png,image/gif,image/webp"
-                          onChange={(e) =>
-                            onPickFile(
-                              e,
-                              setLeaseFile,
-                              setLeasePreview,
-                              "Contract of Lease"
-                            )
-                          }
-                        />
-                        {leasePreview && (
-                          <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                            <img
-                              src={leasePreview}
-                              alt="Contract of Lease preview"
-                              className="h-full w-full object-contain"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Step 1 — Billing Statement & Official Receipt
+                </CardTitle>
+                <CardDescription>
+                  {requireBothInitial
+                    ? "Upload both images together. They are reviewed by the Local Treasury Operations Officer."
+                    : "Upload the remaining required document(s) for LTOO review."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!showInitialForm ? (
+                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                    {phase.initialApproved
+                      ? "Both documents are verified. You can proceed to Step 2."
+                      : "These documents are already pending review for this booking."}
                   </div>
-                  <Button type="submit" disabled={finalSubmitDisabled}>
-                    <Upload className="mr-2 size-4" />
-                    {uploading
-                      ? "Uploading..."
-                      : requireBothFinal
-                        ? "Upload Both Documents"
-                        : "Upload Document"}
-                  </Button>
-                </form>
-              )}
-            </CardContent>
-          </Card>
+                ) : (
+                  <form onSubmit={handleUploadInitial} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {phase.needsBilling && (
+                        <div className="space-y-2">
+                          <Label htmlFor="billing-file">Billing Statement</Label>
+                          <Input
+                            id="billing-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={(e) =>
+                              onPickFile(
+                                e,
+                                setBillingFile,
+                                setBillingPreview,
+                                "Billing Statement"
+                              )
+                            }
+                          />
+                          {billingPreview && (
+                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
+                              <img
+                                src={billingPreview}
+                                alt="Billing Statement preview"
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {phase.needsReceipt && (
+                        <div className="space-y-2">
+                          <Label htmlFor="receipt-file">Official Receipt</Label>
+                          <Input
+                            id="receipt-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={(e) =>
+                              onPickFile(
+                                e,
+                                setReceiptFile,
+                                setReceiptPreview,
+                                "Official Receipt"
+                              )
+                            }
+                          />
+                          {receiptPreview && (
+                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
+                              <img
+                                src={receiptPreview}
+                                alt="Official Receipt preview"
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={initialSubmitDisabled}>
+                      <Upload className="mr-2 size-4" />
+                      {uploading
+                        ? "Uploading..."
+                        : requireBothInitial
+                          ? "Upload Both Documents"
+                          : "Upload Document"}
+                    </Button>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          {declinedResubmitOptions.length > 0 &&
-            !showInitialForm &&
-            !showFinalForm && (
+          {!isSportsComplex && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {!phase.initialApproved && (
+                    <Lock className="size-4 text-muted-foreground" />
+                  )}
+                  Step 2 — Certification & Contract of Lease
+                </CardTitle>
+                <CardDescription>
+                  Available after LTOO verifies both Billing Statement and
+                  Official Receipt.
+                  {requireBothFinal ? " Upload both together." : ""}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!phase.initialApproved ? (
+                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground flex items-start gap-2">
+                    <Lock className="size-4 mt-0.5 shrink-0" />
+                    Locked until LTOO approves Billing Statement and Official
+                    Receipt for this booking.
+                  </div>
+                ) : !showFinalForm ? (
+                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                    Certification and Contract of Lease are already pending review
+                    or verified for this booking.
+                  </div>
+                ) : (
+                  <form onSubmit={handleUploadFinal} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {phase.needsCertification && (
+                        <div className="space-y-2">
+                          <Label htmlFor="cert-file">Certification</Label>
+                          <Input
+                            id="cert-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={(e) =>
+                              onPickFile(
+                                e,
+                                setCertFile,
+                                setCertPreview,
+                                "Certification"
+                              )
+                            }
+                          />
+                          {certPreview && (
+                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
+                              <img
+                                src={certPreview}
+                                alt="Certification preview"
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {phase.needsLease && (
+                        <div className="space-y-2">
+                          <Label htmlFor="lease-file">Contract of Lease</Label>
+                          <Input
+                            id="lease-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            onChange={(e) =>
+                              onPickFile(
+                                e,
+                                setLeaseFile,
+                                setLeasePreview,
+                                "Contract of Lease"
+                              )
+                            }
+                          />
+                          {leasePreview && (
+                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
+                              <img
+                                src={leasePreview}
+                                alt="Contract of Lease preview"
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={finalSubmitDisabled}>
+                      <Upload className="mr-2 size-4" />
+                      {uploading
+                        ? "Uploading..."
+                        : requireBothFinal
+                          ? "Upload Both Documents"
+                          : "Upload Document"}
+                    </Button>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {declinedResubmitOptions.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Resubmit Declined Document</CardTitle>
