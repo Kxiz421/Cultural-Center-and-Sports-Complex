@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export async function GET() {
   try {
@@ -77,10 +78,10 @@ export async function GET() {
       return new Date(a.createdAt) - new Date(b.createdAt);
     });
 
-    return NextResponse.json(users);
+    return noCacheJson(users);
   } catch (error) {
     console.error("Failed to fetch users:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch users" },
       { status: 500 }
     );

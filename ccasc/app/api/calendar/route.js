@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function GET(request) {
@@ -10,6 +11,9 @@ export async function GET(request) {
     const venueId = searchParams.get("venueId");
     const ownEventsOnly = rawClientId !== null;
     const mineClientId = parseInt(String(rawClientId || "").replace(/^CLT-/i, ""), 10);
+
+    // Current time for filtering out ended events (time-specific)
+    const now = new Date();
 
     // Fetch reservations without client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
@@ -64,6 +68,22 @@ export async function GET(request) {
     // Format DATE columns as YYYY-MM-DD (UTC calendar day)
     const formatLocalDate = formatDbDate;
 
+    // Helper: check if a reservation date+time has already ended
+    function isEventEnded(eventDate, endTime) {
+      if (!eventDate || !endTime) return false;
+      const eventDateStr = formatLocalDate(eventDate);
+      if (!eventDateStr) return false;
+      // Parse end time as HH:MM (handle both HH:MM:SS and HH:MM formats)
+      const endParts = endTime.split(":");
+      if (endParts.length < 2) return false;
+      const endHour = parseInt(endParts[0], 10);
+      const endMin = parseInt(endParts[1], 10);
+      if (Number.isNaN(endHour) || Number.isNaN(endMin)) return false;
+      // Construct a local datetime for the event end
+      const endDateTime = new Date(eventDateStr + "T" + String(endHour).padStart(2, "0") + ":" + String(endMin).padStart(2, "0") + ":00");
+      return endDateTime <= now;
+    }
+
     // One calendar event per reserved day (primary + additional dates)
     const events = reservations
       .filter((r) => clientMap[r.clientId] !== undefined)
@@ -78,7 +98,12 @@ export async function GET(request) {
         ].filter(Boolean);
         const uniqueDates = [...new Set(allDates)];
 
-        return uniqueDates.map((dateKey, idx) => ({
+        // Filter out dates where the event has already ended (time-specific)
+        const activeDates = uniqueDates.filter((dateKey) => !isEventEnded(dateKey, r.timeSlot.endTime));
+
+        if (activeDates.length === 0) return [];
+
+        return activeDates.map((dateKey, idx) => ({
           id: `RES-${r.reservationId}-${dateKey}`,
           reservationId: r.reservationId,
           clientId: r.clientId,
@@ -94,7 +119,7 @@ export async function GET(request) {
           packageName: r.package?.packageName || null,
           bookingStatus,
           isPrimary: idx === 0,
-          eventDates: uniqueDates,
+          eventDates: activeDates,
         }));
       });
 
@@ -122,13 +147,13 @@ export async function GET(request) {
     const culturalBlocks = blockEvents.filter((e) => e.venueId === 1);
     const sportsBlocks = blockEvents.filter((e) => e.venueId === 2);
 
-    return NextResponse.json({
+    return noCacheJson({
       cultural: [...culturalEvents, ...culturalBlocks],
       sports: [...sportsEvents, ...sportsBlocks],
     });
   } catch (error) {
     console.error("Calendar API error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch calendar data" },
       { status: 500 }
     );

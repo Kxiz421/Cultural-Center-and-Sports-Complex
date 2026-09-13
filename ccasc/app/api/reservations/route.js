@@ -20,6 +20,7 @@ import {
   buildReservedFacilitiesByDate,
   findFacilityConflicts,
 } from "@/lib/facility-reservation-availability";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 function parsePackageId(value) {
   const parsed = parseInt(value, 10);
@@ -214,10 +215,10 @@ export async function GET(request) {
         };
       });
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch reservations:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch reservations" },
       { status: 500 }
     );

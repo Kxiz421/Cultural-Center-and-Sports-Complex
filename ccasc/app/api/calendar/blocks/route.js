@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function GET() {
@@ -28,10 +29,10 @@ export async function GET() {
       notes: b.notes,
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch calendar blocks:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch calendar blocks" },
       { status: 500 }
     );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export async function GET() {
   try {
@@ -107,7 +108,7 @@ export async function GET() {
 
     const monthlyRevenue = Object.values(monthlyMap).reverse();
 
-    return NextResponse.json({
+    return noCacheJson({
       summary: {
         total: totalReservations,
         partiallyPaid,
@@ -122,7 +123,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Failed to fetch accounting dashboard data:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch dashboard data" },
       { status: 500 }
     );

@@ -35,6 +35,7 @@ import {
 export default function ResubmitPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [organizations, setOrganizations] = useState([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [selectedIsOther, setSelectedIsOther] = useState(false);
@@ -84,16 +85,19 @@ export default function ResubmitPage() {
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
     if (!validTypes.includes(file.type)) {
       toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
+      e.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size too large. Maximum is 5MB.");
+      e.target.value = "";
       return;
     }
 
     setIdProofFile(file);
     setIdProofPreview(URL.createObjectURL(file));
+    setUploading(true);
 
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
@@ -108,9 +112,17 @@ export default function ResubmitPage() {
         setIdProofData(data.url);
       } else {
         toast.error(data.error || "Failed to upload image");
+        setIdProofFile(null);
+        setIdProofPreview(null);
+        e.target.value = "";
       }
     } catch (error) {
       toast.error("Failed to upload image");
+      setIdProofFile(null);
+      setIdProofPreview(null);
+      e.target.value = "";
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -262,10 +274,20 @@ export default function ResubmitPage() {
                   type="button"
                   variant="outline"
                   className="gap-2"
+                  disabled={uploading}
                   onClick={() => document.getElementById("idProof").click()}
                 >
-                  <Upload className="size-4" />
-                  {idProofFile ? "Change file" : "Upload image"}
+                  {uploading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="size-4" />
+                      {idProofFile ? "Change file" : "Upload image"}
+                    </>
+                  )}
                 </Button>
                 <input
                   id="idProof"
@@ -299,12 +321,17 @@ export default function ResubmitPage() {
               type="button"
               className="w-full"
               onClick={handleConfirm}
-              disabled={loading}
+              disabled={loading || uploading}
             >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
                   Submitting...
+                </>
+              ) : uploading ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Uploading image...
                 </>
               ) : (
                 "Submit for Review"

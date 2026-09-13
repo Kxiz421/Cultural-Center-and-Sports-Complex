@@ -11,9 +11,12 @@ export default function SportsComplexCalendarPage() {
   React.useEffect(() => {
     async function fetchSportsEvents() {
       try {
-        const res = await fetch('/api/calendar?venue=sports');
-        const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
+        const clientId = localStorage.getItem("user_id")?.replace("CLT-", "") || "";
+        const res = await fetch("/api/calendar?clientId=" + encodeURIComponent(clientId));
+                const data = await res.json();
+                // Show only Sports Complex events (venueId === 2)
+                const sportsEvents = (data.sports || []).filter(function(e) { return e.type === "event" || e.type === "block"; });
+                setEvents(sportsEvents);
       } catch (err) {
         console.error("Failed to load sports events:", err);
       } finally {

@@ -27,6 +27,7 @@ import {
 export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [organizations, setOrganizations] = useState([]);
@@ -84,19 +85,22 @@ export default function RegisterPage() {
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
     if (!validTypes.includes(file.type)) {
       toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
+      e.target.value = "";
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size too large. Maximum is 5MB.");
+      e.target.value = "";
       return;
     }
 
     setIdProofFile(file);
     setIdProofPreview(URL.createObjectURL(file));
+    setUploading(true);
 
-    // Upload the file to get base64
+    // Upload the file to get public URL
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
 
@@ -110,9 +114,17 @@ export default function RegisterPage() {
         setIdProofData(data.url);
       } else {
         toast.error(data.error || "Failed to upload image");
+        setIdProofFile(null);
+        setIdProofPreview(null);
+        e.target.value = "";
       }
     } catch (error) {
       toast.error("Failed to upload image");
+      setIdProofFile(null);
+      setIdProofPreview(null);
+      e.target.value = "";
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -142,6 +154,12 @@ export default function RegisterPage() {
 
     if (!formData.organizationId && !formData.otherOrganization) {
       toast.error("Please select or enter your organization.");
+      return;
+    }
+
+    // Validate ID proof is uploaded
+    if (!idProofData) {
+      toast.error("Please upload your Certificate of Employment (ID).");
       return;
     }
 
@@ -456,10 +474,20 @@ export default function RegisterPage() {
                     type="button"
                     variant="outline"
                     className="gap-2"
+                    disabled={uploading}
                     onClick={() => document.getElementById("idProof").click()}
                   >
-                    <Upload className="size-4" />
-                    {idProofFile ? "Change file" : "Upload image"}
+                    {uploading ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="size-4" />
+                        {idProofFile ? "Change file" : "Upload image"}
+                      </>
+                    )}
                   </Button>
                   <input
                     id="idProof"
@@ -490,7 +518,7 @@ export default function RegisterPage() {
               </div>
             </CardContent>
             <div className="px-6 pb-6">
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading || uploading}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />

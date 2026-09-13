@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const CULTURAL_VENUE_IDS = [1];
 
@@ -26,10 +27,10 @@ export async function GET() {
       category: item.status.statusName,
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch inventory:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch inventory" },
       { status: 500 }
     );

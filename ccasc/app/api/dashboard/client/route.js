@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export async function GET(request) {
   try {
@@ -7,7 +8,7 @@ export async function GET(request) {
     const clientId = searchParams.get("clientId");
 
     if (!clientId) {
-      return NextResponse.json(
+      return noCacheJson(
         { error: "clientId is required" },
         { status: 400 }
       );
@@ -55,7 +56,7 @@ export async function GET(request) {
       take: 5,
     });
 
-    return NextResponse.json({
+    return noCacheJson({
       stats: {
         totalReservations,
         pendingReservations,
@@ -73,7 +74,7 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("Failed to fetch client dashboard data:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch dashboard data" },
       { status: 500 }
     );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function GET() {
       0
     );
 
-    return NextResponse.json({
+    return noCacheJson({
       totalPayments,
       pendingNotifications,
       totalDocuments,
@@ -42,7 +43,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Dashboard error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to load dashboard data" },
       { status: 500 }
     );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function POST(request) {
@@ -34,14 +35,14 @@ export async function GET() {
       orderBy: { rateId: "asc" }
     });
 
-    return NextResponse.json(rates.map(r => ({
+    return noCacheJson(rates.map(r => ({
       rateId: r.rateId,
       dayRate: Number(r.dayRate),
       nightRate: Number(r.nightRate),
     })));
   } catch (error) {
     console.error("Failed to fetch rates:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch rates" },
       { status: 500 }
     );

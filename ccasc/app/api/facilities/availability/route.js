@@ -5,6 +5,7 @@ import {
   ACTIVE_STATUSES,
   buildReservedFacilitiesByDate,
 } from "@/lib/facility-reservation-availability";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 /**
  * GET /api/facilities/availability?venueId=2&dates=2026-09-20,2026-09-21
@@ -18,7 +19,7 @@ export async function GET(request) {
     const excludeReservationId = searchParams.get("excludeReservationId");
 
     if (!venueId || !datesParam) {
-      return NextResponse.json(
+      return noCacheJson(
         { error: "venueId and dates are required" },
         { status: 400 }
       );
@@ -34,7 +35,7 @@ export async function GET(request) {
     ];
 
     if (dateKeys.length === 0) {
-      return NextResponse.json({ reservedByDate: {}, dates: [] });
+      return noCacheJson({ reservedByDate: {}, dates: [] });
     }
 
     const dateObjects = dateKeys.map((d) => new Date(`${d}T00:00:00.000Z`));
@@ -68,13 +69,13 @@ export async function GET(request) {
       filtered[date] = reservedByDate[date] || [];
     }
 
-    return NextResponse.json({
+    return noCacheJson({
       dates: dateKeys,
       reservedByDate: filtered,
     });
   } catch (error) {
     console.error("Facility availability fetch error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to check facility availability" },
       { status: 500 }
     );

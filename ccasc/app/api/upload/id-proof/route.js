@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 
 export async function POST(request) {
   try {
@@ -31,13 +33,26 @@ export async function POST(request) {
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const base64 = buffer.toString("base64");
-    const mimeType = file.type;
-    const dataUri = `data:${mimeType};base64,${base64}`;
+
+    // Create unique filename
+    const timestamp = Date.now();
+    const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const filename = `${timestamp}-${originalName}`;
+
+    // Ensure uploads/id-proofs directory exists
+    const uploadDir = path.join(process.cwd(), "public", "uploads", "id-proofs");
+    await mkdir(uploadDir, { recursive: true });
+
+    // Write file to disk
+    const filePath = path.join(uploadDir, filename);
+    await writeFile(filePath, buffer);
+
+    // Return the public URL (small string, fits easily in JSON body)
+    const publicUrl = `/uploads/id-proofs/${filename}`;
 
     return NextResponse.json({
-      url: dataUri,
-      filename: file.name,
+      url: publicUrl,
+      filename,
     });
   } catch (error) {
     console.error("Failed to upload file:", error);

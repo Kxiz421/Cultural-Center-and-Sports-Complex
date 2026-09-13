@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +159,7 @@ export async function GET(request) {
       orderBy: { firstName: "asc" },
     });
 
-    return NextResponse.json({
+    return noCacheJson({
       period,
       venue,
       year,
@@ -170,7 +171,7 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("Admin reports GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to generate report" },
       { status: 500 }
     );

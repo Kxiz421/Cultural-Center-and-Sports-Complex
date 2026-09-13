@@ -5,6 +5,7 @@ import {
   getMinEventDate,
   ADVANCE_BOOKING_REASON,
 } from "@/lib/reservation-advance-booking";
+import { noCacheJson } from "@/lib/api-cache-control";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,7 +15,7 @@ export async function GET(request) {
     const excludeReservationId = searchParams.get("excludeReservationId");
 
     if (!venueId || !month) {
-      return NextResponse.json(
+      return noCacheJson(
         { error: "venueId and month are required" },
         { status: 400 }
       );
@@ -115,10 +116,10 @@ export async function GET(request) {
       };
     });
 
-    return NextResponse.json({ dates, month });
+    return noCacheJson({ dates, month });
   } catch (error) {
     console.error("Availability fetch error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to check availability" },
       { status: 500 }
     );
