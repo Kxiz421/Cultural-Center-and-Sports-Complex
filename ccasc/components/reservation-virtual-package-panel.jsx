@@ -129,6 +129,43 @@ export function ReservationPackageSelectItems({
   timeSlotId,
   sessionType,
 }) {
+  // When a session type is provided, filter accordingly (no Whole Day grouping)
+  if (sessionType) {
+    const filteredPackages = packages.filter((p) => {
+      if (p.statusId !== 1) return false;
+      const target = sessionType === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT;
+      return String(p.timeSlotId ?? "") === target;
+    });
+    const slot = sessionType === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT;
+    return (
+      <>
+        {sessionType === "morning" && hasVenueRentalPackageOption(particulars) && (
+          <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental — Day</SelectItem>
+        )}
+        {sessionType === "night" && hasVenueRentalPackageOption(particulars) && (
+          <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental — Night</SelectItem>
+        )}
+        {filteredPackages.map((pkg) => {
+          const rate = getPackageSlotRate(pkg, slot, packages);
+          return (
+            <SelectItem
+              key={pkg.packageId}
+              value={String(pkg.packageId)}
+              itemText={pkg.packageName}
+            >
+              {pkg.packageName}
+              {rate > 0 && (
+                <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+                  {" "}— ₱{rate.toLocaleString()}
+                </span>
+              )}
+            </SelectItem>
+          );
+        })}
+      </>
+    );
+  }
+
   // When Whole Day is selected, group complementary packages into combined options
   if (timeSlotId && isWholeDaySlot(timeSlotId)) {
     const active = packages.filter((p) => p.statusId === 1);

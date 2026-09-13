@@ -175,10 +175,20 @@ export default function WalkInReservationPage() {
         for (const date of selectedDates) {
           if (!updated[date]) {
             updated[date] = {
-              packageId: packageId || "0",
-              particularQuantities: { ...particularQuantities },
-              timeSlotId,
-              venueRentalSlot,
+              morning: {
+                enabled: true,
+                packageId: packageId || "0",
+                particularQuantities: { ...particularQuantities },
+                timeSlotId: TIME_SLOT.DAY,
+                venueRentalSlot: venueRentalSlot || "",
+              },
+              night: {
+                enabled: false,
+                packageId: "0",
+                particularQuantities: {},
+                timeSlotId: TIME_SLOT.NIGHT,
+                venueRentalSlot: "",
+              },
             };
           }
         }
@@ -269,23 +279,43 @@ export default function WalkInReservationPage() {
       setDateCustomizations((prev) => {
         const updated = { ...prev };
         for (const date of Object.keys(updated)) {
-          const cust = updated[date];
-          const synced = syncVirtualPackageStateForTimeSlot(
-            cust.packageId,
+          const morningCust = updated[date]?.morning || {};
+          const morningSynced = syncVirtualPackageStateForTimeSlot(
+            morningCust.packageId,
             particulars,
-            cust.particularQuantities,
-            cust.venueRentalSlot,
+            morningCust.particularQuantities || {},
+            morningCust.venueRentalSlot,
+            value
+          );
+          const nightCust = updated[date]?.night || {};
+          const nightSynced = syncVirtualPackageStateForTimeSlot(
+            nightCust.packageId,
+            particulars,
+            nightCust.particularQuantities || {},
+            nightCust.venueRentalSlot,
             value
           );
           updated[date] = {
-            ...cust,
-            timeSlotId: value,
-            packageId: remapped(cust.packageId),
-            particularQuantities: synced.particularQuantities,
-            venueRentalSlot:
-              cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
-                ? synced.venueRentalSlot
-                : cust.venueRentalSlot,
+            morning: {
+              ...morningCust,
+              timeSlotId: value,
+              packageId: remapped(morningCust.packageId),
+              particularQuantities: morningSynced.particularQuantities,
+              venueRentalSlot:
+                morningCust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                  ? morningSynced.venueRentalSlot
+                  : morningCust.venueRentalSlot,
+            },
+            night: {
+              ...nightCust,
+              timeSlotId: value,
+              packageId: remapped(nightCust.packageId),
+              particularQuantities: nightSynced.particularQuantities,
+              venueRentalSlot:
+                nightCust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                  ? nightSynced.venueRentalSlot
+                  : nightCust.venueRentalSlot,
+            },
           };
         }
         return updated;
@@ -406,7 +436,48 @@ export default function WalkInReservationPage() {
     }
   };
 
-  // Per-date customization handlers
+  // Per-date customization handlers — morning/night sessions
+  const handleDateSessionPackageSelect = (date, session, pkgId) => {
+    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
+    let nextTimeSlotId =
+      dateCustomizations[date]?.[session]?.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT);
+
+    if (selectedPkg && isRegularPackageId(pkgId)) {
+      nextTimeSlotId = timeSlotAfterPackageChange(
+        nextTimeSlotId,
+        selectedPkg.timeSlotId
+      );
+    } else if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+      nextTimeSlotId =
+        dateCustomizations[date]?.[session]?.venueRentalSlot ||
+        venueRentalSlot ||
+        timeSlotId ||
+        TIME_SLOT.DAY;
+    }
+
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          enabled: true,
+          packageId: pkgId,
+          timeSlotId: nextTimeSlotId,
+          venueRentalSlot:
+            pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+              ? prev[date]?.[session]?.venueRentalSlot || venueRentalSlot || nextTimeSlotId
+              : "",
+          particularQuantities:
+            isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
+              ? {}
+              : (prev[date]?.[session]?.particularQuantities || {}),
+        },
+      },
+    }));
+  };
+
+  // Legacy single-package per date handler (backward compatibility)
   const handleDatePackageSelect = (date, pkgId) => {
     const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
     let nextTimeSlotId =
@@ -443,6 +514,42 @@ export default function WalkInReservationPage() {
     }));
   };
 
+  const handleDateSessionVirtualParticularQuantitiesChange = (date, session, pq) => {
+    const cust = dateCustomizations[date]?.[session] || {};
+    const slot = deriveTimeSlotFromVirtualPackage(
+      cust.packageId,
+      particulars,
+      pq,
+      cust.venueRentalSlot,
+      cust.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT)
+    );
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          particularQuantities: pq,
+          timeSlotId: slot || prev[date]?.[session]?.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT),
+        },
+      },
+    }));
+  };
+
+  const handleDateSessionVenueRentalSlotChange = (date, session, val) => {
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          venueRentalSlot: val,
+          timeSlotId: val,
+        },
+      },
+    }));
+  };
+
 // Toggle date selection for calendar
   const toggleDate = (dateStr) => {
     if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
@@ -466,10 +573,20 @@ export default function WalkInReservationPage() {
       const initial = {};
       for (const date of selectedDates) {
         initial[date] = {
-          packageId: packageId || "0",
-          particularQuantities: { ...particularQuantities },
-          timeSlotId,
-          venueRentalSlot,
+          morning: {
+            enabled: true,
+            packageId: packageId || "0",
+            particularQuantities: { ...particularQuantities },
+            timeSlotId: TIME_SLOT.DAY,
+            venueRentalSlot: venueRentalSlot || "",
+          },
+          night: {
+            enabled: false,
+            packageId: "0",
+            particularQuantities: {},
+            timeSlotId: TIME_SLOT.NIGHT,
+            venueRentalSlot: "",
+          },
         };
       }
       setDateCustomizations(initial);
@@ -598,14 +715,15 @@ export default function WalkInReservationPage() {
       if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
         const aggregatedParticulars = {};
         const basketballDayCounts = {};
-        for (const [, cust] of Object.entries(dateCustomizations)) {
-          if (isVirtualPackageId(cust.packageId)) {
+        const collectSession = (session) => {
+          if (!session || !session.enabled) return;
+          if (isVirtualPackageId(session.packageId)) {
             const entries = getVirtualPackageParticulars(
-              cust.packageId,
+              session.packageId,
               particulars,
-              cust.particularQuantities,
-              cust.timeSlotId || timeSlotId,
-              cust.venueRentalSlot
+              session.particularQuantities,
+              session.timeSlotId || timeSlotId,
+              session.venueRentalSlot
             );
             for (const entry of entries) {
               if (isConsolidatedBasketballEntry(particulars, entry)) {
@@ -618,15 +736,25 @@ export default function WalkInReservationPage() {
               }
             }
           } else if (
-            cust.packageId === "0" ||
-            cust.packageId === "custom" ||
-            !cust.packageId
+            session.packageId === "0" ||
+            session.packageId === "custom" ||
+            !session.packageId
           ) {
-            for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
+            for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
               if (qty > 0) {
                 aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
               }
             }
+          }
+        };
+        for (const [, cust] of Object.entries(dateCustomizations)) {
+          // Support both old flat model and new morning/night model
+          if (cust.morning || cust.night) {
+            collectSession(cust.morning);
+            collectSession(cust.night);
+          } else {
+            // Legacy flat model
+            collectSession(cust);
           }
         }
         selectedParticulars = Object.entries(aggregatedParticulars)
@@ -637,7 +765,13 @@ export default function WalkInReservationPage() {
             ...(basketballDayCounts[id] ? { days: basketballDayCounts[id] } : {}),
           }));
         const firstCust = dateCustomizations[sortedDates[0]];
-        if (firstCust && isRegularPackageId(firstCust.packageId)) {
+        const firstMorningPkg = firstCust?.morning?.packageId;
+        const firstNightPkg = firstCust?.night?.packageId;
+        if (firstMorningPkg && isRegularPackageId(firstMorningPkg)) {
+          selectedPackageId = parseReservationPackageId(firstMorningPkg);
+        } else if (firstNightPkg && isRegularPackageId(firstNightPkg)) {
+          selectedPackageId = parseReservationPackageId(firstNightPkg);
+        } else if (firstCust && isRegularPackageId(firstCust.packageId)) {
           selectedPackageId = parseReservationPackageId(firstCust.packageId);
         } else {
           selectedPackageId = null;
@@ -1514,18 +1648,38 @@ export default function WalkInReservationPage() {
               Customize Per Date
             </DialogTitle>
             <DialogDescription>
-              Set different packages and particulars for each selected date.
+              Set different packages and particulars for each selected date. Each date can have a Morning and Night session.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {[...selectedDates].sort().map((date) => {
-              const cust = dateCustomizations[date] || { packageId: "0", particularQuantities: {} };
+              const cust = dateCustomizations[date] || { morning: { enabled: true, packageId: "0", particularQuantities: {} }, night: { enabled: false, packageId: "0", particularQuantities: {} } };
               return (
                 <div key={date} className="rounded-lg border p-4">
                   <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                     <Calendar className="size-4 text-muted-foreground" />
                     {date}
                   </h4>
+                  {dateCustomizations[date]?.morning || dateCustomizations[date]?.night ? (
+                    <>
+                      {renderSessionControls(cust, "morning", "Morning Session", TIME_SLOT.DAY)}
+                      {renderSessionControls(cust, "night", "Night Session", TIME_SLOT.NIGHT)}
+                    </>
+                  ) : (
+                    /* Legacy single-package view - render original controls */
+                    <div className="space-y-2 mb-3">
+                      <Label className="text-xs">Package for {date}</Label>
+                      <Select value={cust.packageId} onValueChange={(v) => handleDatePackageSelect(date, v)}>
+                        <SelectTrigger className="w-full min-w-0">
+                          <SelectValue placeholder="Select package" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
+                          <SelectItem value="0">None</SelectItem>
+                          <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} />
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-2 mb-3">
                     <Label className="text-xs">Package for {date}</Label>
                     <Select value={cust.packageId} onValueChange={(v) => handleDatePackageSelect(date, v)}>
