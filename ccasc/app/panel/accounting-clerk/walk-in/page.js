@@ -1654,6 +1654,41 @@ export default function WalkInReservationPage() {
           <div className="space-y-6 py-4">
             {[...selectedDates].sort().map((date) => {
               const cust = dateCustomizations[date] || { morning: { enabled: true, packageId: "0", particularQuantities: {} }, night: { enabled: false, packageId: "0", particularQuantities: {} } };
+              const renderSessionControls = (session, sessionKey, sessionLabel, timeSlotForSession) => {
+                const s = cust[sessionKey] || { enabled: false, packageId: "0", particularQuantities: {} };
+                const sessionTimeLabel = sessionKey === "morning" ? "8:00 AM - 5:00 PM" : "5:00 PM - 10:00 PM";
+                return (
+                  <div className="border-t pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-sm font-medium flex items-center gap-2">
+                        {sessionKey === "morning" ? <span>&#9728;&#65039;</span> : <span>&#127769;&#65039;</span>}
+                        {sessionLabel} <span className="text-xs text-muted-foreground font-normal">({sessionTimeLabel})</span>
+                      </h5>
+                      <label className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                        <input type="checkbox" checked={s.enabled}
+                          onChange={(e) => setDateCustomizations((prev) => ({ ...prev, [date]: { ...prev[date], [sessionKey]: { ...(prev[date]?.[sessionKey] || {}), enabled: e.target.checked } } }))}
+                          className="size-3.5" /> Enable
+                      </label>
+                    </div>
+                    {s.enabled && (
+                      <div className="space-y-3 pl-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs">{sessionLabel} Package</Label>
+                          <Select value={s.packageId} onValueChange={(v) => handleDateSessionPackageSelect(date, sessionKey, v)}>
+                            <SelectTrigger className="w-full min-w-0">
+                              <SelectValue placeholder="Select package" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
+                              <SelectItem value="0">None</SelectItem>
+                              <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotForSession} sessionType={sessionKey} />
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
               return (
                 <div key={date} className="rounded-lg border p-4">
                   <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
@@ -1680,184 +1715,6 @@ export default function WalkInReservationPage() {
                       </Select>
                     </div>
                   )}
-                  <div className="space-y-2 mb-3">
-                    <Label className="text-xs">Package for {date}</Label>
-                    <Select value={cust.packageId} onValueChange={(v) => handleDatePackageSelect(date, v)}>
-                      <SelectTrigger className="w-full min-w-0">
-                        <SelectValue placeholder="Select package" />
-                      </SelectTrigger>
-                      <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
-                        <SelectItem value="0">None</SelectItem>
-                        <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} />
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
-                    <>
-                      <ReservationVirtualPackagePanel
-                        packageId={cust.packageId}
-                        particulars={particulars}
-                        particularQuantities={cust.particularQuantities || {}}
-                        onParticularQuantitiesChange={(pq) =>
-                          handleDateVirtualParticularQuantitiesChange(date, pq)
-                        }
-                        timeSlotId={cust.timeSlotId || timeSlotId}
-                        venueRentalSlot={cust.venueRentalSlot}
-                        onVenueRentalSlotChange={(val) =>
-                          handleDateVenueRentalSlotChange(date, val)
-                        }
-                        compact
-                      />
-                      <Separator className="my-2" />
-                      <div className="space-y-1">
-                        <Label className="text-xs">Additional Services / Particulars</Label>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          {filterCustomParticulars(particulars).map((p) => {
-                            const qty = readParticularQuantity(
-                              cust.particularQuantities,
-                              p.particularId
-                            );
-                            const cost = p.unitCost ? Number(p.unitCost) : 0;
-                            const maxQty = p.totalQuantity || 999;
-                            return (
-                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                  {cost > 0 && (
-                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
-                                  )}
-                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
-                                </div>
-                                <ParticularQuantityStepper
-                                  value={qty}
-                                  max={maxQty}
-                                  buttonClassName="size-7"
-                                  onChange={(val) =>
-                                    handleDateVirtualParticularQuantitiesChange(date, {
-                                      ...(cust.particularQuantities || {}),
-                                      [String(p.particularId)]: val,
-                                    })
-                                  }
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
-                  ) : isVirtualPackageId(cust.packageId) ? (
-                    <ReservationVirtualPackagePanel
-                      packageId={cust.packageId}
-                      particulars={particulars}
-                      particularQuantities={cust.particularQuantities || {}}
-                      onParticularQuantitiesChange={(pq) =>
-                        handleDateVirtualParticularQuantitiesChange(date, pq)
-                      }
-                      timeSlotId={cust.timeSlotId || timeSlotId}
-                      venueRentalSlot={cust.venueRentalSlot}
-                      onVenueRentalSlotChange={(val) =>
-                        handleDateVenueRentalSlotChange(date, val)
-                      }
-                      compact
-                    />
-                  ) : isRegularPackageId(cust.packageId) ? (
-                    <div className="space-y-2">
-                      <Label className="text-xs">Package Inclusions for {date}</Label>
-                      <div className="border rounded-lg p-3 bg-muted/20">
-                        {(() => {
-                          const pkg = packages.find(p => String(p.packageId) === cust.packageId);
-                          if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
-                            return <p className="text-xs text-muted-foreground">No inclusions for this package.</p>;
-                          }
-                          return (
-                            <div className="grid gap-1 md:grid-cols-2">
-                              {pkg.inclusions.map((inc, idx) => (
-                                <div key={idx} className="flex items-center justify-between rounded-md border p-2">
-                                  <p className="text-xs font-medium truncate">{inc.itemName}</p>
-                                  <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs">Particulars for {date}</Label>
-                        {Object.keys(cust.particularQuantities || {}).length > 0 && (
-                          <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground"
-                            onClick={() => {
-                              setDateCustomizations((prev) => ({
-                                ...prev,
-                                [date]: { ...prev[date], particularQuantities: {} },
-                              }));
-                            }}
-                          >
-                            <RotateCcw className="size-3 mr-1" />
-                            Restore to Default
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {filterCustomParticulars(particulars).map((p) => {
-                          const qty = readParticularQuantity(
-                            cust.particularQuantities,
-                            p.particularId
-                          );
-                          const cost = p.unitCost ? Number(p.unitCost) : 0;
-                          const maxQty = p.totalQuantity || 999;
-                          const isAircon = p.particularName === "Aircon Compressor";
-                          const airconTiers = [
-                            { qty: 4, label: "100–1K pax", price: 3200 },
-                            { qty: 6, label: "1K–3K pax", price: 4800 },
-                            { qty: 8, label: "4K–6K pax", price: 6400 },
-                            { qty: 10, label: "7K–10K pax", price: 8000 },
-                          ];
-                          return (
-                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                {cost > 0 && !isAircon && (
-                                  <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
-                                )}
-                                {isAircon && (
-                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                                    {airconTiers.map((t) => (
-                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
-                                    ))}
-                                  </div>
-                                )}
-                                {!isAircon && (
-                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
-                                )}
-                              </div>
-                              <ParticularQuantityStepper
-                                value={qty}
-                                max={maxQty}
-                                buttonClassName="size-6"
-                                inputClassName="w-12 h-7 text-xs"
-                                onChange={(val) =>
-                                  setDateCustomizations((prev) => ({
-                                    ...prev,
-                                    [date]: {
-                                      ...prev[date],
-                                      particularQuantities: {
-                                        ...(prev[date]?.particularQuantities || {}),
-                                        [String(p.particularId)]: val,
-                                      },
-                                    },
-                                  }))
-                                }
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -1870,3 +1727,8 @@ export default function WalkInReservationPage() {
     </div>
   );
 }
+
+                  
+                        
+                    
+                    
