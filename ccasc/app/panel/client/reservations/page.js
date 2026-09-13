@@ -128,10 +128,20 @@ export default function ClientReservationsPage() {
         for (const date of selectedDates) {
           if (!updated[date]) {
             updated[date] = {
-              packageId: form.packageId || "0",
-              particularQuantities: { ...particularQuantities },
-              timeSlotId: form.timeSlotId,
-              venueRentalSlot: form.venueRentalSlot,
+              morning: {
+                enabled: true,
+                packageId: form.packageId || "0",
+                particularQuantities: { ...particularQuantities },
+                timeSlotId: TIME_SLOT.DAY,
+                venueRentalSlot: form.venueRentalSlot || "",
+              },
+              night: {
+                enabled: false,
+                packageId: "0",
+                particularQuantities: {},
+                timeSlotId: TIME_SLOT.NIGHT,
+                venueRentalSlot: "",
+              },
             };
           }
         }
@@ -194,23 +204,58 @@ export default function ClientReservationsPage() {
         const updated = { ...prev };
         for (const date of Object.keys(updated)) {
           const cust = updated[date];
-          const synced = syncVirtualPackageStateForTimeSlot(
-            cust.packageId,
-            particulars,
-            cust.particularQuantities,
-            cust.venueRentalSlot,
-            value
-          );
-          updated[date] = {
-            ...cust,
-            timeSlotId: value,
-            packageId: remapped(cust.packageId),
-            particularQuantities: synced.particularQuantities,
-            venueRentalSlot:
-              cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
-                ? synced.venueRentalSlot
-                : cust.venueRentalSlot,
-          };
+          // Update both morning and night sessions if they exist
+          if (cust.morning || cust.night) {
+            const morningSynced = syncVirtualPackageStateForTimeSlot(
+              cust.morning?.packageId,
+              particulars,
+              cust.morning?.particularQuantities || {},
+              cust.morning?.venueRentalSlot,
+              value
+            );
+            const nightSynced = syncVirtualPackageStateForTimeSlot(
+              cust.night?.packageId,
+              particulars,
+              cust.night?.particularQuantities || {},
+              cust.night?.venueRentalSlot,
+              value
+            );
+            updated[date] = {
+              morning: {
+                ...(cust.morning || {}),
+                timeSlotId: value,
+                packageId: remapped(cust.morning?.packageId),
+                particularQuantities: morningSynced.particularQuantities,
+                venueRentalSlot: cust.morning?.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? morningSynced.venueRentalSlot : cust.morning?.venueRentalSlot,
+              },
+              night: {
+                ...(cust.night || {}),
+                timeSlotId: value,
+                packageId: remapped(cust.night?.packageId),
+                particularQuantities: nightSynced.particularQuantities,
+                venueRentalSlot: cust.night?.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? nightSynced.venueRentalSlot : cust.night?.venueRentalSlot,
+              },
+            };
+          } else {
+            // Legacy flat model
+            const syncd = syncVirtualPackageStateForTimeSlot(
+              cust.packageId,
+              particulars,
+              cust.particularQuantities,
+              cust.venueRentalSlot,
+              value
+            );
+            updated[date] = {
+              ...cust,
+              timeSlotId: value,
+              packageId: remapped(cust.packageId),
+              particularQuantities: syncd.particularQuantities,
+              venueRentalSlot:
+                cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+                  ? syncd.venueRentalSlot
+                  : cust.venueRentalSlot,
+            };
+          }
         }
         return updated;
       });
@@ -387,16 +432,103 @@ export default function ClientReservationsPage() {
     }));
   };
 
+  // Per-date customization handlers — morning/night sessions
+  const handleDateSessionPackageSelect = (date, session, pkgId) => {
+    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
+    let nextTimeSlotId =
+      dateCustomizations[date]?.[session]?.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT);
+
+    if (selectedPkg && isRegularPackageId(pkgId)) {
+      nextTimeSlotId = timeSlotAfterPackageChange(
+        nextTimeSlotId,
+        selectedPkg.timeSlotId
+      );
+    } else if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+      nextTimeSlotId =
+        dateCustomizations[date]?.[session]?.venueRentalSlot ||
+        form.venueRentalSlot ||
+        form.timeSlotId ||
+        TIME_SLOT.DAY;
+    }
+
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          enabled: true,
+          packageId: pkgId,
+          timeSlotId: nextTimeSlotId,
+          venueRentalSlot:
+            pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL
+              ? prev[date]?.[session]?.venueRentalSlot || form.venueRentalSlot || nextTimeSlotId
+              : "",
+          particularQuantities:
+            isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
+              ? {}
+              : (prev[date]?.[session]?.particularQuantities || {}),
+        },
+      },
+    }));
+  };
+
+  const handleDateSessionVirtualParticularQuantitiesChange = (date, session, pq) => {
+    const cust = dateCustomizations[date]?.[session] || {};
+    const slot = deriveTimeSlotFromVirtualPackage(
+      cust.packageId,
+      particulars,
+      pq,
+      cust.venueRentalSlot,
+      cust.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT)
+    );
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          particularQuantities: pq,
+          timeSlotId: slot || prev[date]?.[session]?.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT),
+        },
+      },
+    }));
+  };
+
+  const handleDateSessionVenueRentalSlotChange = (date, session, val) => {
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          venueRentalSlot: val,
+          timeSlotId: val,
+        },
+      },
+    }));
+  };
+
   const toggleCustomizeMode = () => {
     if (!customizePerDate) {
       // Turning on: initialize customizations from current global values
       const initial = {};
       for (const date of selectedDates) {
         initial[date] = {
-          packageId: form.packageId || "0",
-          particularQuantities: { ...particularQuantities },
-          timeSlotId: form.timeSlotId,
-          venueRentalSlot: form.venueRentalSlot,
+          morning: {
+            enabled: true,
+            packageId: form.packageId || "0",
+            particularQuantities: { ...particularQuantities },
+            timeSlotId: TIME_SLOT.DAY,
+            venueRentalSlot: form.venueRentalSlot || "",
+          },
+          night: {
+            enabled: false,
+            packageId: "0",
+            particularQuantities: {},
+            timeSlotId: TIME_SLOT.NIGHT,
+            venueRentalSlot: "",
+          },
         };
       }
       setDateCustomizations(initial);
@@ -491,14 +623,15 @@ export default function ClientReservationsPage() {
     if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
       const aggregatedParticulars = {};
       const basketballDayCounts = {};
-      for (const [, cust] of Object.entries(dateCustomizations)) {
-        if (isVirtualPackageId(cust.packageId)) {
+      const collectSession = (session) => {
+        if (!session || !session.enabled) return;
+        if (isVirtualPackageId(session.packageId)) {
           const entries = getVirtualPackageParticulars(
-            cust.packageId,
+            session.packageId,
             particulars,
-            cust.particularQuantities,
-            cust.timeSlotId || form.timeSlotId,
-            cust.venueRentalSlot
+            session.particularQuantities,
+            session.timeSlotId || form.timeSlotId,
+            session.venueRentalSlot
           );
           for (const entry of entries) {
             if (isConsolidatedBasketballEntry(particulars, entry)) {
@@ -511,15 +644,23 @@ export default function ClientReservationsPage() {
             }
           }
         } else if (
-          cust.packageId === "0" ||
-          cust.packageId === "custom" ||
-          !cust.packageId
+          session.packageId === "0" ||
+          session.packageId === "custom" ||
+          !session.packageId
         ) {
-          for (const [partId, qty] of Object.entries(cust.particularQuantities)) {
+          for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
             if (qty > 0) {
               aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + qty;
             }
           }
+        }
+      };
+      for (const [, cust] of Object.entries(dateCustomizations)) {
+        if (cust.morning || cust.night) {
+          collectSession(cust.morning);
+          collectSession(cust.night);
+        } else {
+          collectSession(cust);
         }
       }
       selectedParticulars = Object.entries(aggregatedParticulars)
@@ -530,9 +671,15 @@ export default function ClientReservationsPage() {
           ...(basketballDayCounts[id] ? { days: basketballDayCounts[id] } : {}),
         }));
       
-      // Use the first date's package as the primary package
+      // Use the first date's morning or night package as the primary package
       const firstCust = dateCustomizations[primaryDate];
-      if (firstCust && isRegularPackageId(firstCust.packageId)) {
+      const firstMorningPkg = firstCust?.morning?.packageId;
+      const firstNightPkg = firstCust?.night?.packageId;
+      if (firstMorningPkg && isRegularPackageId(firstMorningPkg)) {
+        selectedPackageId = firstMorningPkg;
+      } else if (firstNightPkg && isRegularPackageId(firstNightPkg)) {
+        selectedPackageId = firstNightPkg;
+      } else if (firstCust && isRegularPackageId(firstCust.packageId)) {
         selectedPackageId = firstCust.packageId;
       } else {
         selectedPackageId = null;
@@ -1175,18 +1322,60 @@ export default function ClientReservationsPage() {
               Customize Per Date
             </DialogTitle>
             <DialogDescription>
-              Set different packages and particulars for each selected date. Changes apply only to the specific date.
+              Set different packages and particulars for each selected date. Each date can have a Morning and Night session.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {[...selectedDates].sort().map((date) => {
-              const cust = dateCustomizations[date] || { packageId: "0", particularQuantities: {} };
+              const cust = dateCustomizations[date] || { morning: { enabled: true, packageId: "0", particularQuantities: {} }, night: { enabled: false, packageId: "0", particularQuantities: {} } };
+              const renderSessionControls = (session, sessionKey, sessionLabel, timeSlotForSession) => {
+                const s = cust[sessionKey] || { enabled: false, packageId: "0", particularQuantities: {} };
+                const sessionTimeLabel = sessionKey === "morning" ? "8:00 AM - 5:00 PM" : "5:00 PM - 10:00 PM";
+                return (
+                  <div className="border-t pt-3 mt-3 first:border-t-0 first:pt-0 first:mt-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-sm font-medium flex items-center gap-2">
+                        {sessionKey === "morning" ? <span>&#9728;&#65039;</span> : <span>&#127769;&#65039;</span>}
+                        {sessionLabel} <span className="text-xs text-muted-foreground font-normal">({sessionTimeLabel})</span>
+                      </h5>
+                      <label className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                        <input type="checkbox" checked={s.enabled}
+                          onChange={(e) => setDateCustomizations((prev) => ({ ...prev, [date]: { ...prev[date], [sessionKey]: { ...(prev[date]?.[sessionKey] || {}), enabled: e.target.checked } } }))}
+                          className="size-3.5" /> Enable
+                      </label>
+                    </div>
+                    {s.enabled && (
+                      <div className="space-y-3 pl-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs">{sessionLabel} Package</Label>
+                          <Select value={s.packageId} onValueChange={(v) => handleDateSessionPackageSelect(date, sessionKey, v)}>
+                            <SelectTrigger className="w-full min-w-0">
+                              <SelectValue placeholder="Select package" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
+                              <SelectItem value="0">None</SelectItem>
+                              <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotForSession} sessionType={sessionKey} />
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
               return (
                 <div key={date} className="rounded-lg border p-4">
                   <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                     <Calendar className="size-4 text-muted-foreground" />
                     {date}
                   </h4>
+                  {dateCustomizations[date]?.morning || dateCustomizations[date]?.night ? (
+                    <>
+                      {renderSessionControls(cust, "morning", "Morning Session", TIME_SLOT.DAY)}
+                      {renderSessionControls(cust, "night", "Night Session", TIME_SLOT.NIGHT)}
+                    </>
+                  ) : (
+                    /* Legacy single-package view - render original controls */
 
                   {/* Package for this date */}
                   <div className="space-y-2 mb-3">
