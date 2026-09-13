@@ -22,7 +22,7 @@ import {
   getPackageSlotRate,
   packageIncludesLedWall,
 } from "@/lib/reservation-package-select";
-import { TIME_SLOT, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
+import { TIME_SLOT, isDaySlot, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
 
 export function ReservationVirtualPackagePanel({
   packageId,
@@ -127,6 +127,7 @@ export function ReservationPackageSelectItems({
   packages,
   particulars,
   timeSlotId,
+  sessionType,
 }) {
   // When Whole Day is selected, group complementary packages into combined options
   if (timeSlotId && isWholeDaySlot(timeSlotId)) {
