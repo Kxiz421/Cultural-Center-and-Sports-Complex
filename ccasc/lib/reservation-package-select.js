@@ -338,17 +338,99 @@ export function buildReservationSummaryLines({
 
   if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
     for (const [date, cust] of Object.entries(dateCustomizations)) {
-      if (isVirtualPackageId(cust.packageId)) {
-        const info = getVirtualPackageDisplayInfo(
-          cust.packageId,
-          particulars,
-          cust.particularQuantities,
-          cust.timeSlotId || timeSlotId,
-          cust.venueRentalSlot
-        );
-        if (info) lines.push({ date, label: info.label, amount: info.amount });
-        // For Venue Rental, also include custom particular lines
-        if (cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+      // Support both old flat model and new morning/night session model
+      if (cust.morning || cust.night) {
+        // New morning/night session model per date
+        const processSession = (session, sessionLabel) => {
+          if (!session || !session.enabled) return;
+          const pkgId = session.packageId || "0";
+          if (isVirtualPackageId(pkgId)) {
+            const info = getVirtualPackageDisplayInfo(
+              pkgId,
+              particulars,
+              session.particularQuantities || {},
+              session.timeSlotId || timeSlotId,
+              session.venueRentalSlot
+            );
+            if (info) lines.push({ date, label: `${sessionLabel} — ${info.label}`, amount: info.amount });
+            if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+              for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
+                if (qty > 0) {
+                  const part = particulars.find((p) => String(p.particularId) === String(partId));
+                  if (!part) continue;
+                  const { label, amount } = formatFormParticularLine(part.particularName, qty, part.unitCost);
+                  lines.push({ date, label: `${sessionLabel} — ${label}`, amount });
+                }
+              }
+            }
+          } else if (isRegularPackageId(pkgId)) {
+            const pkg = packages.find((p) => String(p.packageId) === pkgId);
+            if (pkg) {
+              const slot = session.timeSlotId || timeSlotId;
+              const rate = getPackageBillingRate(pkg, slot, packages);
+              lines.push({
+                date,
+                label: `${sessionLabel} — ${packageSummaryLabel(pkg, slot, packages)}`,
+                amount: rate,
+              });
+            }
+          } else if (pkgId === "0" || pkgId === "custom" || !pkgId) {
+            for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
+              if (qty > 0) {
+                const part = particulars.find((p) => String(p.particularId) === String(partId));
+                if (!part) continue;
+                const { label, amount } = formatFormParticularLine(part.particularName, qty, part.unitCost);
+                lines.push({ date, label: `${sessionLabel} — ${label}`, amount });
+              }
+            }
+          }
+        };
+        processSession(cust.morning, "Morning");
+        processSession(cust.night, "Night");
+      } else {
+        // Legacy flat model (single package per date)
+        if (isVirtualPackageId(cust.packageId)) {
+          const info = getVirtualPackageDisplayInfo(
+            cust.packageId,
+            particulars,
+            cust.particularQuantities,
+            cust.timeSlotId || timeSlotId,
+            cust.venueRentalSlot
+          );
+          if (info) lines.push({ date, label: info.label, amount: info.amount });
+          // For Venue Rental, also include custom particular lines
+          if (cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
+            for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
+              if (qty > 0) {
+                const part = particulars.find(
+                  (p) => String(p.particularId) === String(partId)
+                );
+                if (!part) continue;
+                const { label, amount } = formatFormParticularLine(
+                  part.particularName,
+                  qty,
+                  part.unitCost
+                );
+                lines.push({ date, label, amount });
+              }
+            }
+          }
+        } else if (isRegularPackageId(cust.packageId)) {
+          const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
+          if (pkg) {
+            const slot = cust.timeSlotId || timeSlotId;
+            const rate = getPackageBillingRate(pkg, slot, packages);
+            lines.push({
+              date,
+              label: packageSummaryLabel(pkg, slot, packages),
+              amount: rate,
+            });
+          }
+        } else if (
+          cust.packageId === "0" ||
+          cust.packageId === "custom" ||
+          !cust.packageId
+        ) {
           for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
             if (qty > 0) {
               const part = particulars.find(
@@ -362,36 +444,6 @@ export function buildReservationSummaryLines({
               );
               lines.push({ date, label, amount });
             }
-          }
-        }
-      } else if (isRegularPackageId(cust.packageId)) {
-        const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
-        if (pkg) {
-          const slot = cust.timeSlotId || timeSlotId;
-          const rate = getPackageBillingRate(pkg, slot, packages);
-          lines.push({
-            date,
-            label: packageSummaryLabel(pkg, slot, packages),
-            amount: rate,
-          });
-        }
-      } else if (
-        cust.packageId === "0" ||
-        cust.packageId === "custom" ||
-        !cust.packageId
-      ) {
-        for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
-          if (qty > 0) {
-            const part = particulars.find(
-              (p) => String(p.particularId) === String(partId)
-            );
-            if (!part) continue;
-            const { label, amount } = formatFormParticularLine(
-              part.particularName,
-              qty,
-              part.unitCost
-            );
-            lines.push({ date, label, amount });
           }
         }
       }
