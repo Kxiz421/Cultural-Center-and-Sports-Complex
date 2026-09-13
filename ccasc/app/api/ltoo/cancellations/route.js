@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const bookings = await prisma.booking.findMany({
       where: {
-        bookingStatusId: 2, // Booked/Confirmed
+        bookingStatusId: { in: [1, 2, 3] }, // 1=Confirmed, 2=Cancelled, 3=Pending
       },
       include: {
         reservation: {
@@ -83,7 +83,10 @@ export async function GET() {
           ? `${b.reservation.timeSlot.startTime} - ${b.reservation.timeSlot.endTime}`
           : "",
         paymentStatus,
+        bookingStatusId: b.bookingStatusId,
         bookingStatus: b.status?.status || "Confirmed",
+        packageName: b.reservation?.package?.packageName,
+        reservationId: b.reservationId,
         daysUntilEvent,
         canCancel,
         isWithin30Days,
@@ -148,10 +151,10 @@ export async function POST(request) {
       }
     }
 
-    // Update booking status to Cancelled (statusId 3)
+    // Update booking status to Cancelled (statusId 2)
     await prisma.booking.update({
       where: { bookingId: parseInt(bookingId) },
-      data: { bookingStatusId: 3 },
+      data: { bookingStatusId: 2 },
     });
 
     // Update reservation status to Cancelled

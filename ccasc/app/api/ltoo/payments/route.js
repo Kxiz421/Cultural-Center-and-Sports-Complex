@@ -168,6 +168,7 @@ export async function GET(request) {
               r.eventDate ? formatDbDate(r.eventDate) : null,
               ...r.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
             ].filter(Boolean),
+            eventStatus: r.eventStatus || "Upcoming",
             venue: r.venue?.venue,
             timeSlot: r.timeSlot ? `${r.timeSlot.startTime} - ${r.timeSlot.endTime}` : "",
             packageName: r.package?.packageName,

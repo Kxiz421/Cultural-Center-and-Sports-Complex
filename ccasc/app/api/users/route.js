@@ -70,13 +70,11 @@ export async function GET() {
       })),
     ];
 
-    // Sort by role priority, then by name
+    // Sort by role priority, then by creation date (newest last)
     users.sort((a, b) => {
       const prio = a.rolePriority - b.rolePriority;
       if (prio !== 0) return prio;
-      return `${a.lastName}, ${a.firstName}`.localeCompare(
-        `${b.lastName}, ${b.firstName}`
-      );
+      return new Date(a.createdAt) - new Date(b.createdAt);
     });
 
     return NextResponse.json(users);

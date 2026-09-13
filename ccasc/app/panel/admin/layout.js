@@ -16,6 +16,7 @@ const TITLES = {
   "/panel/admin/packages": "Packages Management",
   "/panel/admin/amenities": "Amenities Overview",
   "/panel/admin/announcements": "Announcements",
+  "/panel/admin/reports": "Sales Reports",
 };
 
 function AdminAuthShell({ children }) {

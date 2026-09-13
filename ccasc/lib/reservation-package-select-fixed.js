@@ -1,4 +1,4 @@
-import {
+﻿import {
   BASKETBALL_NAME,
   BASKETBALL_OPTIONS,
   getBasketballPrice,
@@ -347,23 +347,6 @@ export function buildReservationSummaryLines({
           cust.venueRentalSlot
         );
         if (info) lines.push({ date, label: info.label, amount: info.amount });
-        // For Venue Rental, also include custom particular lines
-        if (cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-          for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
-            if (qty > 0) {
-              const part = particulars.find(
-                (p) => String(p.particularId) === String(partId)
-              );
-              if (!part) continue;
-              const { label, amount } = formatFormParticularLine(
-                part.particularName,
-                qty,
-                part.unitCost
-              );
-              lines.push({ date, label, amount });
-            }
-          }
-        }
       } else if (isRegularPackageId(cust.packageId)) {
         const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
         if (pkg) {
@@ -409,21 +392,6 @@ export function buildReservationSummaryLines({
         label: numDays > 1 ? `${info.label} × ${numDays} day(s)` : info.label,
         amount: info.amount * numDays,
       });
-    }
-    // For Venue Rental, also include custom particular lines
-    if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-      for (const [partId, qty] of Object.entries(particularQuantities || {})) {
-        if (qty > 0) {
-          const part = particulars.find((p) => String(p.particularId) === partId);
-          if (!part) continue;
-          const { label, amount } = formatFormParticularLine(
-            part.particularName,
-            qty,
-            part.unitCost
-          );
-          lines.push({ label: numDays > 1 ? `${label} × ${numDays} day(s)` : label, amount: amount * numDays });
-        }
-      }
     }
   } else if (isRegularPackageId(packageId)) {
     const pkg = packages.find((p) => String(p.packageId) === packageId);
@@ -503,18 +471,10 @@ export function getVirtualPackageParticulars(
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
-    const venueEntries = getVenueRentalParticularsForSlot(particulars, slot).map((vr) => ({
+    return getVenueRentalParticularsForSlot(particulars, slot).map((vr) => ({
       particularId: vr.particularId,
       quantity: 1,
     }));
-    // Also include custom particular entries
-    const customEntries = Object.entries(particularQuantities || {})
-      .filter(([, qty]) => qty > 0)
-      .map(([partId, qty]) => ({
-        particularId: parseInt(partId, 10),
-        quantity: qty,
-      }));
-    return [...venueEntries, ...customEntries];
   }
 
   return [];
@@ -627,3 +587,4 @@ export function hasVenueRentalPackageOption(particulars) {
 }
 
 export { BASKETBALL_OPTIONS };
+

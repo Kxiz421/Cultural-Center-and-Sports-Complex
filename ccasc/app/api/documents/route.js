@@ -9,7 +9,9 @@ import {
 } from "@/lib/document-event-date";
 import {
   isCulturalCenterVenue,
+  isSportsComplexVenue,
   notifyCulturalCenterCoordinators,
+  notifySportsComplexCoordinators,
 } from "@/lib/coordinator-notifications";
 
 const DOC_TYPE = {
@@ -243,6 +245,18 @@ async function notifyDocumentRecipients({
   );
   if (hasCoordinatorDocs && isCulturalCenterVenue(reservation.venueId)) {
     await notifyCulturalCenterCoordinators({
+      clientId,
+      type: "document",
+      message: `New ${message}`,
+    });
+  }
+
+  // For Sports Complex, notify coordinators when an Official Receipt is uploaded
+  const hasReceipt = documentTypes.some((name) =>
+    /official receipt/i.test(name)
+  );
+  if (hasReceipt && isSportsComplexVenue(reservation.venueId)) {
+    await notifySportsComplexCoordinators({
       clientId,
       type: "document",
       message: `New ${message}`,
