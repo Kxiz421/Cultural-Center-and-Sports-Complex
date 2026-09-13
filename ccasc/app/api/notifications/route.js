@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isCoordinatorInboxNotification } from "@/lib/panel-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 // Send notification
@@ -55,7 +56,7 @@ export async function GET(request) {
             isRead: false,
           },
         });
-        return NextResponse.json({ unreadCount });
+        return noCacheJson({ unreadCount });
       }
       if (staffId) {
         if (scope === "coordinator") {
@@ -66,7 +67,7 @@ export async function GET(request) {
             },
             select: { type: true, message: true },
           });
-          return NextResponse.json({
+          return noCacheJson({
             unreadCount: unread.filter(isCoordinatorInboxNotification).length,
           });
         }
@@ -76,7 +77,7 @@ export async function GET(request) {
             isRead: false,
           },
         });
-        return NextResponse.json({ unreadCount });
+        return noCacheJson({ unreadCount });
       }
     }
 
@@ -99,10 +100,10 @@ export async function GET(request) {
       sentAt: n.sentAt.toISOString(),
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Notification fetch error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch notifications" },
       { status: 500 }
     );

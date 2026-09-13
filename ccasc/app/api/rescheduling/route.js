@@ -15,6 +15,7 @@ import {
   isCulturalCenterVenue,
   notifyCulturalCenterCoordinators,
 } from "@/lib/coordinator-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 function normalizeDateChanges(body, reservation) {
   const primaryKey = formatDbDate(reservation.eventDate);
@@ -280,7 +281,7 @@ export async function GET(request) {
         clientId: parseInt(String(clientId).replace(/^CLT-/, ""), 10),
       };
     } else {
-      return NextResponse.json(
+      return noCacheJson(
         { error: "Reservation ID or client ID required" },
         { status: 400 }
       );
@@ -315,10 +316,10 @@ export async function GET(request) {
       createdAt: r.createdAt.toISOString(),
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Reschedule fetch error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch rescheduling requests" },
       { status: 500 }
     );

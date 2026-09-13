@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -94,10 +95,10 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(mapped);
+    return noCacheJson(mapped);
   } catch (error) {
     console.error("Cancellations GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to load bookings" },
       { status: 500 }
     );

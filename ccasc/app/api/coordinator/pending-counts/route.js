@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { CULTURAL_CENTER_VENUE_IDS } from "@/lib/coordinator-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +45,13 @@ export async function GET(request) {
       },
     });
 
-    return NextResponse.json({
+    return noCacheJson({
       pendingBookings,
       pendingReschedules,
     });
   } catch (error) {
     console.error("Coordinator pending counts error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch pending counts" },
       { status: 500 }
     );

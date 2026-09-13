@@ -387,8 +387,8 @@ export default function FacilitiesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Facility</TableHead>
-                <TableHead>Rate / hr</TableHead>
-                <TableHead>Rate / day</TableHead>
+                <TableHead>Day Rate</TableHead>
+                <TableHead>Night Rate</TableHead>
                 <TableHead>Capacity</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -576,7 +576,7 @@ export default function FacilitiesPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="add-rate-hr">Rate / hour (₱)</Label>
+                  <Label htmlFor="add-rate-hr">Day Rate (₱)</Label>
                   <Input
                     id="add-rate-hr"
                     type="number"
@@ -590,7 +590,7 @@ export default function FacilitiesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="add-rate-day">Rate / day (₱)</Label>
+                  <Label htmlFor="add-rate-day">Night Rate (₱)</Label>
                   <Input
                     id="add-rate-day"
                     type="number"
@@ -878,7 +878,7 @@ export default function FacilitiesPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-rate-hr">Rate / hour (₱)</Label>
+                  <Label htmlFor="edit-rate-hr">Day Rate (₱)</Label>
                   <Input
                     id="edit-rate-hr"
                     type="number"
@@ -891,7 +891,7 @@ export default function FacilitiesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-rate-day">Rate / day (₱)</Label>
+                  <Label htmlFor="edit-rate-day">Night Rate (₱)</Label>
                   <Input
                     id="edit-rate-day"
                     type="number"
@@ -1024,13 +1024,13 @@ export default function FacilitiesPage() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Rate / hr:</span>
+                <span className="text-muted-foreground">Day Rate:</span>
                 <span className="font-medium text-right">
                   ₱{parseFloat(editForm.rateHourly || 0).toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Rate / day:</span>
+                <span className="text-muted-foreground">Night Rate:</span>
                 <span className="font-medium text-right">
                   ₱{parseFloat(editForm.rateDaily || 0).toLocaleString()}
                 </span>

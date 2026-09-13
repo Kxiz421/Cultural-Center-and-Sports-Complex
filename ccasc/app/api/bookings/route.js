@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function GET(request) {
@@ -126,10 +127,10 @@ export async function GET(request) {
       })),
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch bookings:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch bookings" },
       { status: 500 }
     );

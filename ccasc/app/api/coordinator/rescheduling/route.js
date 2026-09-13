@@ -6,6 +6,7 @@ import {
   formatRescheduleDateChanges,
 } from "@/lib/reschedule-utils";
 import { createClientNotification } from "@/lib/coordinator-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const CULTURAL_VENUE_IDS = [1];
 
@@ -75,10 +76,10 @@ export async function GET(request) {
       };
     });
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch reschedule requests:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch reschedule requests" },
       { status: 500 }
     );

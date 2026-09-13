@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function GET(request) {
@@ -8,7 +9,7 @@ export async function GET(request) {
     const query = searchParams.get("q");
 
     if (!query || query.trim().length < 2) {
-      return NextResponse.json([]);
+      return noCacheJson([]);
     }
 
     const searchTerm = query.trim();
@@ -47,10 +48,10 @@ export async function GET(request) {
       contact: c.contactNumber,
     }));
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Client search error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to search clients" },
       { status: 500 }
     );

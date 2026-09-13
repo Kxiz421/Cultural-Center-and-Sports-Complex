@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
 import { createClientNotification } from "@/lib/coordinator-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const CULTURAL_VENUE_IDS = [1];
 const SPORTS_VENUE_IDS = [2];
@@ -114,10 +115,10 @@ export async function GET(request) {
       };
     });
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Failed to fetch bookings:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch bookings" },
       { status: 500 }
     );

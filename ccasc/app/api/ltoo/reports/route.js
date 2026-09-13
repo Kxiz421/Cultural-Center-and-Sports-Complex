@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ export async function GET(request) {
       )
       .reduce((sum, p) => sum + Number(p.amountPaid), 0);
 
-    return NextResponse.json({
+    return noCacheJson({
       clientPayments,
       provincialPayments,
       totalClientRevenue,
@@ -140,7 +141,7 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("Reports GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to generate report" },
       { status: 500 }
     );

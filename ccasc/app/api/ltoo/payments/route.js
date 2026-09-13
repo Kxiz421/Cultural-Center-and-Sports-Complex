@@ -21,6 +21,7 @@ import {
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { getPackageBillingRate } from "@/lib/reservation-package-select";
 import { getBasketballPrice } from "@/lib/particular-options";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -210,7 +211,7 @@ export async function GET(request) {
           };
         });
 
-      return NextResponse.json(mapped);
+      return noCacheJson(mapped);
     }
 
     if (searchParams.get("history") === "true") {
@@ -370,7 +371,7 @@ export async function GET(request) {
         ), 0)
       );
 
-      return NextResponse.json({
+      return noCacheJson({
         transactions: mapped,
         summary: {
           count: mapped.length,
@@ -416,10 +417,10 @@ export async function GET(request) {
       createdAt: p.transactions?.[0]?.paymentDate || p.booking?.confirmationDate,
     }));
 
-    return NextResponse.json(mapped);
+    return noCacheJson(mapped);
   } catch (error) {
     console.error("Payments GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to load payments" },
       { status: 500 }
     );

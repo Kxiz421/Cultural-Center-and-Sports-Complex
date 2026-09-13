@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET(request) {
         orderBy: { sentAt: "desc" },
         take: 100,
       });
-      return NextResponse.json(notifications);
+      return noCacheJson(notifications);
     }
 
     // Return bookings with completed payments that can be notified
@@ -79,10 +80,10 @@ export async function GET(request) {
     // Only show bookings with completed payments
     const filtered = mapped.filter((b) => b.paymentCompleted);
 
-    return NextResponse.json(filtered);
+    return noCacheJson(filtered);
   } catch (error) {
     console.error("Notifications GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to load notifications data" },
       { status: 500 }
     );

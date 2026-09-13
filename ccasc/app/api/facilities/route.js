@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
       }
     });
 
-    return NextResponse.json(facilities.map(f => ({
+    return noCacheJson(facilities.map(f => ({
       id: `FAC-${f.facilityId}`,
       facilityId: f.facilityId,
       name: f.facilityName,
@@ -24,15 +25,17 @@ export async function GET() {
       venueId: f.venue?.venueId ?? f.venueId,
       rateId: f.rateId,
       statusId: f.statusId,
-      rateHourly: Number(f.rate?.dayRate ?? 0),
-      rateDaily: Number(f.rate?.nightRate ?? 0),
+      rateHourly: Number(f.rate?.dayRate ?? 0),    // legacy: day rate
+      rateDaily: Number(f.rate?.nightRate ?? 0),    // legacy: night rate
+      rateDay: Number(f.rate?.dayRate ?? 0),        // day-time rate (8AM-5PM)
+      rateNight: Number(f.rate?.nightRate ?? 0),    // night-time rate (5PM-11PM)
       capacity: f.capacity || 0,
       availability: f.status?.statusName || "Unknown",
       images: (f.images || []).map(i => i.image)
     })));
   } catch (error) {
     console.error("Failed to fetch facilities:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch facilities" },
       { status: 500 }
     );
@@ -77,6 +80,8 @@ export async function POST(request) {
       statusId: facility.statusId,
       rateHourly: Number(facility.rate.dayRate),
       rateDaily: Number(facility.rate.nightRate),
+      rateDay: Number(facility.rate.dayRate),
+      rateNight: Number(facility.rate.nightRate),
       capacity: facility.capacity || 0,
       availability: facility.status.statusName,
       images: []
@@ -178,6 +183,8 @@ export async function PUT(request) {
       statusId: updated.statusId,
       rateHourly: Number(updated.rate.dayRate),
       rateDaily: Number(updated.rate.nightRate),
+      rateDay: Number(updated.rate.dayRate),
+      rateNight: Number(updated.rate.nightRate),
       availability: updated.status.statusName,
       images: updated.images.map(i => i.image)
     });
@@ -225,6 +232,8 @@ export async function PATCH(request) {
       statusId: facility.statusId,
       rateHourly: Number(facility.rate.dayRate),
       rateDaily: Number(facility.rate.nightRate),
+      rateDay: Number(facility.rate.dayRate),
+      rateNight: Number(facility.rate.nightRate),
       availability: facility.status.statusName,
       images: facility.images.map(i => i.image)
     });

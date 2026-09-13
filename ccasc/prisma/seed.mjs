@@ -228,11 +228,12 @@ async function main() {
 
   // ===== FACILITY RATES =====
   const rates = await Promise.all([
-    prisma.facilityRate.create({ data: { dayRate: 20000, nightRate: 25000 } }),
-    prisma.facilityRate.create({ data: { dayRate: 1500, nightRate: 2000 } }),
-    prisma.facilityRate.create({ data: { dayRate: 20000, nightRate: 25000 } }),
-    prisma.facilityRate.create({ data: { dayRate: 1000, nightRate: 1500 } }),
-    prisma.facilityRate.create({ data: { dayRate: 3000, nightRate: 3000 } }),
+    prisma.facilityRate.create({ data: { dayRate: 20000, nightRate: 25000 } }),  // rateId=1
+    prisma.facilityRate.create({ data: { dayRate: 1500, nightRate: 2000 } }),    // rateId=2
+    prisma.facilityRate.create({ data: { dayRate: 20000, nightRate: 25000 } }),  // rateId=3
+    prisma.facilityRate.create({ data: { dayRate: 1000, nightRate: 1500 } }),    // rateId=4
+    prisma.facilityRate.create({ data: { dayRate: 3000, nightRate: 3000 } }),    // rateId=5
+    prisma.facilityRate.create({ data: { dayRate: 2000, nightRate: 3000 } }),    // rateId=6 – Boxing Ring
   ]);
   console.log(`✓ Created ${rates.length} facility rates`);
 
@@ -249,7 +250,7 @@ async function main() {
       data: {
         facilityName: 'Basketball Court',
         description: 'Court for basketball games with shot clock support',
-        rateId: 2, statusId: 2, venueId: 1,
+        rateId: 2, statusId: 2, venueId: 2, // MOVED to Sports Complex
       },
     }),
     prisma.facility.create({
@@ -272,7 +273,14 @@ async function main() {
         description: 'Used for jogging or sprints',
         rateId: 5, statusId: 1, venueId: 2,
       },
-    }),hi
+    }),
+    prisma.facility.create({
+      data: {
+        facilityName: 'Boxing Ring',
+        description: 'Professional boxing ring with ropes and padded corners for boxing matches and training',
+        rateId: 6, statusId: 1, venueId: 2,
+      },
+    }),
   ]);
   console.log(`✓ Created ${facilities.length} facilities`);
 

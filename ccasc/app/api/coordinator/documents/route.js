@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export const dynamic = "force-dynamic";
 
@@ -97,10 +98,10 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(mapped);
+    return noCacheJson(mapped);
   } catch (error) {
     console.error("Coordinator documents GET error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to load documents" },
       { status: 500 }
     );

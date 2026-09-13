@@ -11,9 +11,12 @@ export default function CulturalCalendarPage() {
   React.useEffect(() => {
     async function fetchCulturalEvents() {
       try {
-        const res = await fetch('/api/calendar?venue=cultural');
-        const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
+        const clientId = localStorage.getItem("user_id")?.replace("CLT-", "") || "";
+        const res = await fetch("/api/calendar?clientId=" + encodeURIComponent(clientId));
+                const data = await res.json();
+                // Show only Cultural Center events (venueId === 1)
+                const culturalEvents = (data.cultural || []).filter(function(e) { return e.type === "event" || e.type === "block"; });
+                setEvents(culturalEvents);
       } catch (err) {
         console.error("Failed to load cultural events:", err);
       } finally {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 export async function GET() {
   try {
@@ -7,10 +8,10 @@ export async function GET() {
       orderBy: { organizationName: "asc" },
     });
 
-    return NextResponse.json(organizations);
+    return noCacheJson(organizations);
   } catch (error) {
     console.error("Failed to fetch client organizations:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch organizations" },
       { status: 500 }
     );

@@ -62,11 +62,18 @@ const TIME_SLOTS = TIME_SLOT_OPTIONS.map((slot) => ({
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-/** Prefer admin "Rate / day" (`rateDaily`); fall back to hourly if day rate is unset. */
-function getFacilityDayRate(facility) {
-  const dayRate = Number(facility?.rateDaily ?? 0);
-  if (dayRate > 0) return dayRate;
-  return Number(facility?.rateHourly ?? 0);
+/**
+ * Get the correct facility rate based on the selected time slot.
+ * @param {object} facility - facility object with rateDay/rateNight fields
+ * @param {string|number} timeSlotId - "1"=Day, "2"=Night, "3"=Whole Day
+ */
+function getFacilityRateBySlot(facility, timeSlotId) {
+  const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
+  const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  const slot = String(timeSlotId || "1");
+  if (slot === "2") return nightRate > 0 ? nightRate : dayRate;       // Night
+  if (slot === "3") return dayRate + nightRate;                        // Whole Day = Day + Night
+  return dayRate > 0 ? dayRate : nightRate;                            // Day (default)
 }
 
 function normalizeFacilityIds(value) {
@@ -83,6 +90,7 @@ function buildFacilitySummaryLines({
   selectedDatesCount,
   customizePerDate,
   dateCustomizations,
+  timeSlotId,       // NEW: use slot-aware pricing
 }) {
   const lines = [];
   const numDays = Math.max(1, selectedDatesCount || 1);
@@ -93,10 +101,11 @@ function buildFacilitySummaryLines({
       for (const id of ids) {
         const facility = facilities.find((f) => String(f.facilityId) === String(id));
         if (!facility) continue;
+        const slot = cust.timeSlotId || timeSlotId || "1";
         lines.push({
           date,
           label: facility.name,
-          amount: getFacilityDayRate(facility),
+          amount: getFacilityRateBySlot(facility, slot),
           facilityId: String(facility.facilityId),
         });
       }
@@ -107,7 +116,7 @@ function buildFacilitySummaryLines({
   for (const id of selectedFacilityIds) {
     const facility = facilities.find((f) => String(f.facilityId) === String(id));
     if (!facility) continue;
-    const rate = getFacilityDayRate(facility);
+    const rate = getFacilityRateBySlot(facility, timeSlotId);
     lines.push({
       label: numDays > 1 ? `${facility.name} × ${numDays} day(s)` : facility.name,
       amount: rate * numDays,
@@ -148,7 +157,7 @@ export default function CoordinatorReservationsPage() {
   const [packages, setPackages] = React.useState([]);
   const [packagesLoading, setPackagesLoading] = React.useState(true);
 
-  // Facilities (Sports Complex venueId=2) — multi-select by day rate
+  // Facilities (Sports Complex venueId=2) — multi-select by time-slot rate
   const [facilities, setFacilities] = React.useState([]);
   const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(true);
@@ -213,6 +222,8 @@ export default function CoordinatorReservationsPage() {
             name: item.itemName || item.name,
             rateHourly: 0,
             rateDaily: Number(item.unitCost || 0),
+            rateDay: Number(item.unitCost || 0),
+            rateNight: Number(item.unitCost || 0),
             venueId: item.venueId,
             availability: item.status || "Available"
           }));
@@ -915,6 +926,7 @@ export default function CoordinatorReservationsPage() {
     selectedDatesCount: selectedDates.size,
     customizePerDate,
     dateCustomizations,
+    timeSlotId,       // pass timeSlotId for slot-aware pricing
   });
   const total = sumReservationSummaryLines(summaryLines);
 
@@ -1237,7 +1249,7 @@ export default function CoordinatorReservationsPage() {
             <div className="space-y-2">
               <Label>Facilities</Label>
               <p className="text-xs text-muted-foreground">
-                Select one or more facilities. Prices shown are day rates.
+                Select one or more facilities. Prices shown reflect the selected time slot ({TIME_SLOTS.find(t => String(t.id) === timeSlotId)?.name || "Day"}).
                 {selectedDates.size > 0
                   ? " Facilities already reserved on a selected date cannot be chosen."
                   : " Select dates first to see which facilities are available."}
@@ -1255,7 +1267,7 @@ export default function CoordinatorReservationsPage() {
                     const id = String(f.facilityId);
                     const reserved = reservedFacilityIdsGlobal.has(id);
                     const checked = selectedFacilityIds.includes(id);
-                    const dayRate = getFacilityDayRate(f);
+                    const rate = getFacilityRateBySlot(f, timeSlotId);
                     const disabled = customizePerDate || reserved || selectedDates.size === 0;
                     return (
                       <label
@@ -1274,7 +1286,7 @@ export default function CoordinatorReservationsPage() {
                           <span className="shrink-0 text-xs text-destructive">Reserved</span>
                         ) : (
                           <span className="shrink-0 tabular-nums text-muted-foreground">
-                            ₱{dayRate.toLocaleString()}/day
+                            ₱{rate.toLocaleString()}/day
                           </span>
                         )}
                       </label>
@@ -1485,7 +1497,7 @@ export default function CoordinatorReservationsPage() {
               Customize Per Date
             </DialogTitle>
             <DialogDescription>
-              Choose different facilities (day rates) for each selected date.
+              Choose different facilities (with time-slot-based rates) for each selected date.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
@@ -1511,7 +1523,7 @@ export default function CoordinatorReservationsPage() {
                           const id = String(f.facilityId);
                           const reserved = (reservedByDate[date] || []).map(String).includes(id);
                           const checked = dateFacilityIds.includes(id);
-                          const dayRate = getFacilityDayRate(f);
+                          const rate = getFacilityRateBySlot(f, cust.timeSlotId || timeSlotId);
                           return (
                             <label
                               key={id}
@@ -1531,7 +1543,7 @@ export default function CoordinatorReservationsPage() {
                                 <span className="shrink-0 text-xs text-destructive">Reserved</span>
                               ) : (
                                 <span className="shrink-0 tabular-nums text-muted-foreground">
-                                  ₱{dayRate.toLocaleString()}/day
+                                  ₱{rate.toLocaleString()}/day
                                 </span>
                               )}
                             </label>

@@ -13,6 +13,7 @@ import {
   notifyCulturalCenterCoordinators,
   notifySportsComplexCoordinators,
 } from "@/lib/coordinator-notifications";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const DOC_TYPE = {
   BILLING_STATEMENT: 1,
@@ -653,7 +654,7 @@ export async function GET(request) {
 
     if (searchParams.get("eligibleBookings") === "true") {
       if (!clientId) {
-        return NextResponse.json(
+        return noCacheJson(
           { error: "clientId is required" },
           { status: 400 }
         );
@@ -719,7 +720,7 @@ export async function GET(request) {
         }
       }
 
-      return NextResponse.json(items);
+      return noCacheJson(items);
     }
 
     const where = {};
@@ -818,7 +819,7 @@ export async function GET(request) {
         return d.reservationId === reservationId || !d.reservationId;
       });
 
-      return NextResponse.json({
+      return noCacheJson({
         documents: scopedFormatted,
         phase: computePhase(scopedDocs, reservation?.venueId),
         datePhases: computeDatePhases(bookingDocs, eventDates, primaryKey, reservation?.venueId),
@@ -829,10 +830,10 @@ export async function GET(request) {
       });
     }
 
-    return NextResponse.json(formatted);
+    return noCacheJson(formatted);
   } catch (error) {
     console.error("Document fetch error:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch documents" },
       { status: 500 }
     );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 
 export async function GET(request) {
@@ -33,10 +34,10 @@ export async function GET(request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(logs);
+    return noCacheJson(logs);
   } catch (error) {
     console.error("Failed to fetch audit logs:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch audit logs" },
       { status: 500 }
     );

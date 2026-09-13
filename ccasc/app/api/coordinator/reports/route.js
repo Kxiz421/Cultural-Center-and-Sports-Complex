@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const CULTURAL_VENUE_IDS = [1];
 
@@ -88,7 +89,7 @@ export async function GET(request) {
     const confirmedCount = formatted.filter((r) => r.status === "Confirmed").length;
     const pendingCount = formatted.filter((r) => r.status === "Pending").length;
 
-    return NextResponse.json({
+    return noCacheJson({
       summary: {
         totalReservations,
         totalRevenue,
@@ -99,7 +100,7 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("Failed to fetch reports:", error);
-    return NextResponse.json(
+    return noCacheJson(
       { error: "Failed to fetch reports" },
       { status: 500 }
     );
