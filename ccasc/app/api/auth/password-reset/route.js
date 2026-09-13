@@ -4,6 +4,11 @@ import { sendOtpEmail } from "@/lib/email";
 
 
 import prisma from "@/lib/prisma";
+import {
+  getClientIP,
+  checkPasswordResetRateLimit,
+  recordPasswordReset,
+} from "@/lib/rate-limit";
 
 export async function POST(request) {
   try {
@@ -11,6 +16,22 @@ export async function POST(request) {
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+
+    // ----- Rate-limit check (by IP) -----
+    const ip = getClientIP(request);
+    const check = checkPasswordResetRateLimit(ip);
+    if (!check.allowed) {
+      const minutes = Math.ceil(check.retryAfter / 60);
+      return NextResponse.json(
+        {
+          error: `Too many password reset requests. Please try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(check.retryAfter) },
+        }
+      );
     }
 
     // Search for user in both Client and Staff models
@@ -51,6 +72,9 @@ export async function POST(request) {
         { status: 500 }
       );
     }
+
+    // Only record the request on a successful OTP send
+    recordPasswordReset(ip);
 
     return NextResponse.json({ 
       message: "OTP sent successfully"

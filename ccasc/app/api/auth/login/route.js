@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
 import prisma from "@/lib/prisma";
+import {
+  getClientIP,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  clearLoginAttempts,
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +20,22 @@ export async function POST(request) {
       return NextResponse.json(
         { error: "Email/Username and password are required" },
         { status: 400 }
+      );
+    }
+
+    // ----- Rate-limit check (by IP) -----
+    const ip = getClientIP(request);
+    const check = checkLoginRateLimit(ip);
+    if (!check.allowed) {
+      const minutes = Math.ceil(check.retryAfter / 60);
+      return NextResponse.json(
+        {
+          error: `Too many failed login attempts. Please try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(check.retryAfter) },
+        }
       );
     }
 
@@ -33,11 +55,15 @@ export async function POST(request) {
       if (staff) {
         const passwordValid = await bcrypt.compare(password, staff.password);
         if (!passwordValid) {
+          recordFailedLogin(ip);
           return NextResponse.json(
             { error: "Invalid email/username or password" },
             { status: 401 }
           );
         }
+
+        // Successful staff login → clear failed attempts
+        clearLoginAttempts(ip);
 
         // Determine user type: differentiate Program Coordinator by organization
         let userType = staff.staffRole.roleName.toLowerCase();
@@ -72,6 +98,7 @@ export async function POST(request) {
     if (client) {
       const passwordValid = await bcrypt.compare(password, client.password);
       if (!passwordValid) {
+        recordFailedLogin(ip);
         return NextResponse.json(
           { error: "Invalid email/username or password" },
           { status: 401 }
@@ -79,6 +106,8 @@ export async function POST(request) {
       }
 
       if (client.accountStatus === "Deactivated") {
+        // Deactivated → still a "wrong" outcome for the user, record it
+        recordFailedLogin(ip);
         return NextResponse.json(
           { error: "Your account has been deactivated. Contact the administrator." },
           { status: 403 }
@@ -89,6 +118,8 @@ export async function POST(request) {
         const remarksText = client.remarks
           ? ` Reason: ${client.remarks}`
           : "";
+        // Declined verification → wrong outcome, record it
+        recordFailedLogin(ip);
         return NextResponse.json(
           {
             error: `Your Certificate of Employment has been declined. Please resubmit a valid document.${remarksText}`,
@@ -100,11 +131,16 @@ export async function POST(request) {
       }
 
       if (client.accountStatus === "Pending" || client.verificationStatus === "Pending") {
+        // Pending → wrong outcome, record it
+        recordFailedLogin(ip);
         return NextResponse.json(
           { error: "Your registration is still pending verification. Please wait for admin approval." },
           { status: 403 }
         );
       }
+
+      // All checks passed → successful login
+      clearLoginAttempts(ip);
 
       const userType = client.clientRole.clientRoleId === 'PROV' ? 'provincial-agency' : 'client';
 
@@ -118,6 +154,8 @@ export async function POST(request) {
       });
     }
 
+    // No user found at all
+    recordFailedLogin(ip);
     return NextResponse.json(
       { error: "Invalid email/username or password" },
       { status: 401 }
