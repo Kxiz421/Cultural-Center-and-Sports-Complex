@@ -28,8 +28,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -73,6 +74,47 @@ const TIME_SLOTS = TIME_SLOT_OPTIONS.map((slot) => ({
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
+/**
+ * Get the correct facility rate based on the selected time slot.
+ */
+function getFacilityRateBySlot(facility, timeSlotId) {
+  const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
+  const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  const slot = String(timeSlotId || "1");
+  if (slot === "2") return nightRate > 0 ? nightRate : dayRate;
+  if (slot === "3") return dayRate + nightRate;
+  return dayRate > 0 ? dayRate : nightRate;
+}
+
+function normalizeFacilityIds(value) {
+  if (Array.isArray(value)) {
+    return value.map(String).filter((id) => id && id !== "0");
+  }
+  if (value && value !== "0") return [String(value)];
+  return [];
+}
+
+function buildFacilitySummaryLines({
+  facilities,
+  selectedFacilityIds,
+  selectedDatesCount,
+  timeSlotId,
+}) {
+  const lines = [];
+  const numDays = Math.max(1, selectedDatesCount || 1);
+  for (const id of selectedFacilityIds) {
+    const facility = facilities.find((f) => String(f.facilityId) === String(id));
+    if (!facility) continue;
+    const rate = getFacilityRateBySlot(facility, timeSlotId);
+    lines.push({
+      label: numDays > 1 ? `${facility.name} × ${numDays} day(s)` : facility.name,
+      amount: rate * numDays,
+      facilityId: String(facility.facilityId),
+    });
+  }
+  return lines;
+}
+
 export default function WalkInReservationPage() {
   const minEventDateKey = getMinEventDateKey();
 
@@ -108,6 +150,14 @@ export default function WalkInReservationPage() {
   const [particulars, setParticulars] = React.useState([]);
   const [particularQuantities, setParticularQuantities] = React.useState({});
   const [particularsLoading, setParticularsLoading] = React.useState(true);
+
+  // Sports Complex facilities
+  const [facilities, setFacilities] = React.useState([]);
+  const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
+  const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
+  /** dateKey → facilityId[] already reserved by other reservations */
+  const [reservedByDate, setReservedByDate] = React.useState({});
+  const [facilityAvailLoading, setFacilityAvailLoading] = React.useState(false);
 
   // Per-date customization for multi-day
   const [customizePerDate, setCustomizePerDate] = React.useState(false);
@@ -149,6 +199,32 @@ export default function WalkInReservationPage() {
     loadData();
   }, []);
 
+  // Load Sports Complex facilities when venue changes to Sports Complex (venueId=2)
+  React.useEffect(() => {
+    if (venueId === "2") {
+      setFacilitiesLoading(true);
+      fetch("/api/facilities")
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const sportsFacilities = data.filter((item) => item.venueId === 2);
+            setFacilities(sportsFacilities);
+          } else {
+            setFacilities([]);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load facilities:", err);
+          setFacilities([]);
+        })
+        .finally(() => setFacilitiesLoading(false));
+    } else {
+      setFacilities([]);
+      setSelectedFacilityIds([]);
+      setReservedByDate({});
+    }
+  }, [venueId]);
+
 // Fetch availability when venue or month changes
   React.useEffect(() => {
     if (!venueId) return;
@@ -166,6 +242,51 @@ export default function WalkInReservationPage() {
       .catch((err) => console.error("Failed to load availability:", err))
       .finally(() => setAvailLoading(false));
   }, [venueId, currentMonth]);
+
+  // Load facility availability when dates are selected for Sports Complex
+  React.useEffect(() => {
+    if (venueId !== "2") {
+      setReservedByDate({});
+      return;
+    }
+    const dates = [...selectedDates].sort();
+    if (dates.length === 0) {
+      setReservedByDate({});
+      return;
+    }
+    let cancelled = false;
+    setFacilityAvailLoading(true);
+    fetch(
+      `/api/facilities/availability?venueId=2&dates=${dates.map(encodeURIComponent).join(",")}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setReservedByDate(data.reservedByDate || {});
+      })
+      .catch((err) => {
+        console.error("Failed to load facility availability:", err);
+        if (!cancelled) setReservedByDate({});
+      })
+      .finally(() => {
+        if (!cancelled) setFacilityAvailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [venueId, selectedDates]);
+
+  // Drop facility selections that conflict with newly loaded reserved facilities
+  React.useEffect(() => {
+    if (Object.keys(reservedByDate).length === 0) return;
+    if (!venueId || venueId !== "2") return;
+    const reservedOnAny = new Set();
+    for (const date of selectedDates) {
+      for (const id of reservedByDate[date] || []) reservedOnAny.add(String(id));
+    }
+    setSelectedFacilityIds((prev) => {
+      const next = prev.filter((id) => !reservedOnAny.has(String(id)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [reservedByDate, selectedDates, venueId]);
 
   // Initialize date customizations when customize mode is turned on or dates change
   React.useEffect(() => {
@@ -344,6 +465,27 @@ export default function WalkInReservationPage() {
     setTimeSlotId(val);
   };
 
+  const isSportsComplex = venueId === "2";
+
+  const reservedFacilityIdsGlobal = React.useMemo(() => {
+    const reserved = new Set();
+    for (const date of selectedDates) {
+      for (const id of reservedByDate[date] || []) reserved.add(String(id));
+    }
+    return reserved;
+  }, [reservedByDate, selectedDates]);
+
+  const toggleFacilitySelection = (facilityId) => {
+    const id = String(facilityId);
+    if (reservedFacilityIdsGlobal.has(id)) {
+      toast.error("This facility is already reserved on one of the selected dates.");
+      return;
+    }
+    setSelectedFacilityIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const handleDateVirtualParticularQuantitiesChange = (date, pq) => {
     const cust = dateCustomizations[date] || {};
     const slot = deriveTimeSlotFromVirtualPackage(
@@ -470,7 +612,7 @@ export default function WalkInReservationPage() {
               : "",
           particularQuantities:
             isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
-              ? {}
+              ? (prev[date]?.[session]?.particularQuantities || {})
               : (prev[date]?.[session]?.particularQuantities || {}),
         },
       },
@@ -632,7 +774,13 @@ export default function WalkInReservationPage() {
       return;
     }
 
-    if (!customizePerDate && isVirtualPackageId(packageId)) {
+    // Sports Complex validation: require at least one facility
+    if (isSportsComplex && selectedFacilityIds.length === 0) {
+      toast.error("Please select at least one facility.");
+      return;
+    }
+
+    if (!isSportsComplex && !customizePerDate && isVirtualPackageId(packageId)) {
       const entries = getVirtualPackageParticulars(
         packageId,
         particulars,
@@ -712,7 +860,11 @@ export default function WalkInReservationPage() {
       let selectedParticulars = [];
       let selectedPackageId = parseReservationPackageId(packageId);
 
-      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+      // For Sports Complex, override with facility IDs and no packages/particulars
+      if (isSportsComplex) {
+        selectedPackageId = null;
+        selectedParticulars = [];
+      } else if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
         const aggregatedParticulars = {};
         const basketballDayCounts = {};
         const collectSession = (session) => {
@@ -826,6 +978,7 @@ export default function WalkInReservationPage() {
           clientEmail: isExistingUser && selectedClient ? selectedClient.email : clientEmail,
           particulars: selectedParticulars.length > 0 ? selectedParticulars : undefined,
           chargeLines: summaryLines,
+          ...(isSportsComplex ? { facilityIds: selectedFacilityIds } : {}),
         }),
       });
 
@@ -857,6 +1010,8 @@ export default function WalkInReservationPage() {
       setCustomizePerDate(false);
       setDateCustomizations({});
       setEventDates([]);
+      setSelectedFacilityIds([]);
+      setReservedByDate({});
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -900,17 +1055,24 @@ export default function WalkInReservationPage() {
     return "—";
   };
 
-  const summaryLines = buildReservationSummaryLines({
-    particulars,
-    packages,
-    packageId,
-    particularQuantities,
-    timeSlotId,
-    venueRentalSlot,
-    selectedDatesCount: selectedDates.size,
-    customizePerDate,
-    dateCustomizations,
-  });
+  const summaryLines = isSportsComplex
+    ? buildFacilitySummaryLines({
+        facilities,
+        selectedFacilityIds,
+        selectedDatesCount: selectedDates.size,
+        timeSlotId,
+      })
+    : buildReservationSummaryLines({
+        particulars,
+        packages,
+        packageId,
+        particularQuantities,
+        timeSlotId,
+        venueRentalSlot,
+        selectedDatesCount: selectedDates.size,
+        customizePerDate,
+        dateCustomizations,
+      });
   const total = sumReservationSummaryLines(summaryLines);
 
 // Render calendar grid for multi-date selection
@@ -1204,8 +1366,8 @@ export default function WalkInReservationPage() {
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
 
-              {/* Customize Per Date Button - only shown when multiple dates selected */}
-              {selectedDates.size > 1 && (
+              {/* Customize Per Date Button - only shown when multiple dates selected for Cultural Center */}
+              {selectedDates.size > 1 && !isSportsComplex && (
                 <div className="flex items-center gap-2 pt-2">
                   <Button
                     type="button"
@@ -1230,45 +1392,114 @@ export default function WalkInReservationPage() {
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              <Label>Time Slot *</Label>
-              <Select value={timeSlotId} onValueChange={handleTimeSlotChange} disabled={customizePerDate}>
-                <SelectTrigger className="w-full min-w-0">
-                  <SelectValue placeholder="Select time slot" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIME_SLOTS.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {customizePerDate && (
-                <p className="text-xs text-muted-foreground">
-                  Locked while using per-date settings. Press Using Per-Date Settings to unlock.
-                </p>
+            {isSportsComplex ? (
+                <div className="space-y-2">
+                  <Label>Time Slot</Label>
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <Clock className="size-4 text-muted-foreground shrink-0" />
+                    <span className="font-medium">
+                      {TIME_SLOT_OPTIONS.find((s) => s.value === timeSlotId)?.label || "Day (8:00 AM – 5:00 PM)"}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+              <div className="space-y-2">
+                <Label>Time Slot *</Label>
+                <Select value={timeSlotId} onValueChange={handleTimeSlotChange} disabled={customizePerDate}>
+                  <SelectTrigger className="w-full min-w-0">
+                    <SelectValue placeholder="Select time slot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_SLOTS.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {customizePerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Locked while using per-date settings. Press Using Per-Date Settings to unlock.
+                  </p>
+                )}
+              </div>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label>Package</Label>
-              <Select value={packageId} onValueChange={handlePackageSelect} disabled={customizePerDate}>
-                <SelectTrigger className="w-full min-w-0">
-                  <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
-                </SelectTrigger>
-                <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
-                  <SelectItem value="0">None</SelectItem>
-                  <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} />
-                </SelectContent>
-              </Select>
-              {customizePerDate && (
-                <p className="text-xs text-muted-foreground">
-                  Locked while using per-date settings. Edit each date in Per-Date Details.
-                </p>
+            {!isSportsComplex && (
+              <div className="space-y-2">
+                <Label>Package</Label>
+                <Select value={packageId} onValueChange={handlePackageSelect} disabled={customizePerDate}>
+                  <SelectTrigger className="w-full min-w-0">
+                    <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
+                    <SelectItem value="0">None</SelectItem>
+                    <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} />
+                  </SelectContent>
+                </Select>
+                {customizePerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Locked while using per-date settings. Edit each date in Per-Date Details.
+                  </p>
+                )}
+              </div>
               )}
-            </div>
-{/* Conditional: Package Inclusions, virtual packages, or particulars */}
-            {customizePerDate ? (
+{/* Conditional: Package Inclusions, virtual packages, particulars, or Facilities */}
+            {isSportsComplex ? (
+              <div className="space-y-2">
+                <Label>Facilities</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more facilities. Prices shown reflect the selected time slot.
+                  {selectedDates.size > 0
+                    ? " Facilities already reserved on a selected date cannot be chosen."
+                    : " Select dates first to see which facilities are available."}
+                </p>
+                {facilitiesLoading || (selectedDates.size > 0 && facilityAvailLoading) ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    {facilitiesLoading ? "Loading facilities..." : "Checking reserved facilities..."}
+                  </div>
+                ) : facilities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
+                ) : (
+                  <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+                    {facilities.map((f) => {
+                      const id = String(f.facilityId);
+                      const reserved = reservedFacilityIdsGlobal.has(id);
+                      const checked = selectedFacilityIds.includes(id);
+                      const rate = getFacilityRateBySlot(f, timeSlotId);
+                      const disabled = reserved || selectedDates.size === 0;
+                      return (
+                        <label
+                          key={id}
+                          className={`flex items-center gap-3 px-3 py-2.5 text-sm ${
+                            disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/40"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleFacilitySelection(id)}
+                            disabled={disabled}
+                          />
+                          <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                          {reserved ? (
+                            <span className="shrink-0 text-xs text-destructive">Reserved</span>
+                          ) : (
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              ₱{rate.toLocaleString()}/day
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedFacilityIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedFacilityIds.length} facilit{selectedFacilityIds.length === 1 ? "y" : "ies"} selected
+                  </p>
+                )}
+              </div>
+            ) : customizePerDate ? (
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
                 <p>
                   Packages and additional services are configured per date. Use{" "}
@@ -1385,64 +1616,7 @@ export default function WalkInReservationPage() {
                     })()}
                   </div>
                 </>
-              ) : (packageId === "custom" || packageId === "0" || !packageId) ? (
-                <>
-                  <Label>Additional Services / Particulars</Label>
-                  <div className="space-y-2 border rounded-lg p-4">
-                    {particularsLoading ? (
-                      <p className="text-sm text-muted-foreground">Loading particulars...</p>
-                    ) : filterCustomParticulars(particulars).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No particulars available.</p>
-                    ) : (
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {filterCustomParticulars(particulars).map((p) => {
-                          const qty = readParticularQuantity(
-                            particularQuantities,
-                            p.particularId
-                          );
-                          const cost = p.unitCost ? Number(p.unitCost) : 0;
-                          const maxQty = p.totalQuantity || 999;
-                          const isAircon = p.particularName === "Aircon Compressor";
-                          const airconTiers = [
-                            { qty: 4, label: "100–1K pax", price: 3200 },
-                            { qty: 6, label: "1K–3K pax", price: 4800 },
-                            { qty: 8, label: "4K–6K pax", price: 6400 },
-                            { qty: 10, label: "7K–10K pax", price: 8000 },
-                          ];
-                          return (
-                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{p.particularName}</p>
-                                {cost > 0 && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
-                                {isAircon && (
-                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                                    {airconTiers.map((t) => (
-                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
-                                    ))}
-                                  </div>
-                                )}
-                                {!isAircon && <p className="text-xs text-muted-foreground">Available: {maxQty}</p>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <ParticularQuantityStepper
-                                  value={qty}
-                                  max={maxQty}
-                                  onChange={(val) =>
-                                    setParticularQuantities((prev) => ({
-                                      ...prev,
-                                      [p.particularId]: val,
-                                    }))
-                                  }
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : null}
+              ) : (packageId === "custom" || packageId === "0" || !packageId) ? null : null}
             </div>
             )}
             <div className="space-y-2">
@@ -1684,6 +1858,58 @@ export default function WalkInReservationPage() {
                             </SelectContent>
                           </Select>
                         </div>
+                        {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
+                          <>
+                            <ReservationVirtualPackagePanel
+                              packageId={s.packageId}
+                              particulars={particulars}
+                              particularQuantities={s.particularQuantities || {}}
+                              onParticularQuantitiesChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
+                              timeSlotId={timeSlotForSession}
+                              venueRentalSlot={s.venueRentalSlot || ""}
+                              onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
+                            />
+                            <Separator className="my-2" />
+                            <div className="space-y-2">
+                              <Label className="text-xs">Additional Services / Particulars</Label>
+                              <div className="space-y-2 border rounded-lg p-3">
+                                {particularsLoading ? (
+                                  <p className="text-xs text-muted-foreground">Loading particulars...</p>
+                                ) : filterCustomParticulars(particulars).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No particulars available.</p>
+                                ) : (
+                                  <div className="grid gap-2 md:grid-cols-2">
+                                    {filterCustomParticulars(particulars).map((p) => {
+                                      const qty = readParticularQuantity(s.particularQuantities || {}, p.particularId);
+                                      const cost = p.unitCost ? Number(p.unitCost) : 0;
+                                      const maxQty = p.totalQuantity || 999;
+                                      const isAircon = p.particularName === "Aircon Compressor";
+                                      return (
+                                        <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                            {cost > 0 && !isAircon && (
+                                              <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
+                                            )}
+                                          </div>
+                                          <ParticularQuantityStepper
+                                            value={qty}
+                                            max={maxQty}
+                                            buttonClassName="size-7"
+                                            onChange={(val) => {
+                                              const newPq = { ...(s.particularQuantities || {}), [p.particularId]: val };
+                                              handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, newPq);
+                                            }}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
