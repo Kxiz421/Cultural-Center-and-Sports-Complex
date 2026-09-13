@@ -79,8 +79,14 @@ export async function GET(request) {
       const endHour = parseInt(endParts[0], 10);
       const endMin = parseInt(endParts[1], 10);
       if (Number.isNaN(endHour) || Number.isNaN(endMin)) return false;
-      // Construct a local datetime for the event end
-      const endDateTime = new Date(eventDateStr + "T" + String(endHour).padStart(2, "0") + ":" + String(endMin).padStart(2, "0") + ":00");
+      // Construct date with +08:00 (PHT) offset since time slots are in Philippine Time.
+      // Using explicit offset avoids timezone-dependent parsing (no more "local time" ambiguity).
+      const endDateTime = new Date(
+        eventDateStr +
+        "T" + String(endHour).padStart(2, "0") +
+        ":" + String(endMin).padStart(2, "0") +
+        ":00+08:00"
+      );
       return endDateTime <= now;
     }
 

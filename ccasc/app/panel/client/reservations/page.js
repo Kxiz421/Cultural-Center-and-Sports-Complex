@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Printer, Layers, RotateCcw } from "lucide-react";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Printer, Layers, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -45,6 +46,47 @@ import {
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
+/**
+ * Get the correct facility rate based on the selected time slot.
+ */
+function getFacilityRateBySlot(facility, timeSlotId) {
+  const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
+  const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  const slot = String(timeSlotId || "1");
+  if (slot === "2") return nightRate > 0 ? nightRate : dayRate;       // Night
+  if (slot === "3") return dayRate + nightRate;                        // Whole Day = Day + Night
+  return dayRate > 0 ? dayRate : nightRate;                            // Day (default)
+}
+
+function normalizeFacilityIds(value) {
+  if (Array.isArray(value)) {
+    return value.map(String).filter((id) => id && id !== "0");
+  }
+  if (value && value !== "0") return [String(value)];
+  return [];
+}
+
+function buildFacilitySummaryLines({
+  facilities,
+  selectedFacilityIds,
+  selectedDatesCount,
+  timeSlotId,
+}) {
+  const lines = [];
+  const numDays = Math.max(1, selectedDatesCount || 1);
+  for (const id of selectedFacilityIds) {
+    const facility = facilities.find((f) => String(f.facilityId) === String(id));
+    if (!facility) continue;
+    const rate = getFacilityRateBySlot(facility, timeSlotId);
+    lines.push({
+      label: numDays > 1 ? `${facility.name} × ${numDays} day(s)` : facility.name,
+      amount: rate * numDays,
+      facilityId: String(facility.facilityId),
+    });
+  }
+  return lines;
+}
+
 export default function ClientReservationsPage() {
   const [form, setForm] = React.useState({
     venueId: "",
@@ -65,7 +107,16 @@ export default function ClientReservationsPage() {
   const [lastReservationId, setLastReservationId] = React.useState(null);
   const [lastTotalAmount, setLastTotalAmount] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
+  const [particularsLoading, setParticularsLoading] = React.useState(true);
   const submitLockRef = React.useRef(false);
+
+  // Sports Complex facilities
+  const [facilities, setFacilities] = React.useState([]);
+  const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
+  const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
+  /** dateKey → facilityId[] already reserved by other reservations */
+  const [reservedByDate, setReservedByDate] = React.useState({});
+  const [facilityAvailLoading, setFacilityAvailLoading] = React.useState(false);
 
   // Logged-in user info
   const [clientInfo, setClientInfo] = React.useState({ name: "", email: "" });
@@ -97,10 +148,37 @@ export default function ClientReservationsPage() {
         console.error("Failed to load data:", err);
       } finally {
         setLoading(false);
+        setParticularsLoading(false);
       }
     }
     load();
   }, []);
+
+  // Load Sports Complex facilities when venue changes to Sports Complex (venueId=2)
+  React.useEffect(() => {
+    if (form.venueId === "2") {
+      setFacilitiesLoading(true);
+      fetch("/api/facilities")
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const sportsFacilities = data.filter((item) => item.venueId === 2);
+            setFacilities(sportsFacilities);
+          } else {
+            setFacilities([]);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load facilities:", err);
+          setFacilities([]);
+        })
+        .finally(() => setFacilitiesLoading(false));
+    } else {
+      setFacilities([]);
+      setSelectedFacilityIds([]);
+      setReservedByDate({});
+    }
+  }, [form.venueId]);
 
   // Fetch availability when venue or month changes
   React.useEffect(() => {
@@ -119,6 +197,51 @@ export default function ClientReservationsPage() {
       .catch((err) => console.error("Failed to load availability:", err))
       .finally(() => setAvailLoading(false));
   }, [form.venueId, currentMonth]);
+
+  // Load facility availability when dates are selected for Sports Complex
+  React.useEffect(() => {
+    if (form.venueId !== "2") {
+      setReservedByDate({});
+      return;
+    }
+    const dates = [...selectedDates].sort();
+    if (dates.length === 0) {
+      setReservedByDate({});
+      return;
+    }
+    let cancelled = false;
+    setFacilityAvailLoading(true);
+    fetch(
+      `/api/facilities/availability?venueId=2&dates=${dates.map(encodeURIComponent).join(",")}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setReservedByDate(data.reservedByDate || {});
+      })
+      .catch((err) => {
+        console.error("Failed to load facility availability:", err);
+        if (!cancelled) setReservedByDate({});
+      })
+      .finally(() => {
+        if (!cancelled) setFacilityAvailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [form.venueId, selectedDates]);
+
+  // Drop facility selections that conflict with newly loaded reserved facilities
+  React.useEffect(() => {
+    if (Object.keys(reservedByDate).length === 0) return;
+    if (!form.venueId || form.venueId !== "2") return;
+    const reservedOnAny = new Set();
+    for (const date of selectedDates) {
+      for (const id of reservedByDate[date] || []) reservedOnAny.add(String(id));
+    }
+    setSelectedFacilityIds((prev) => {
+      const next = prev.filter((id) => !reservedOnAny.has(String(id)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [reservedByDate, selectedDates, form.venueId]);
 
   // Initialize date customizations when dates change or customize mode is turned on
   React.useEffect(() => {
@@ -158,6 +281,10 @@ export default function ClientReservationsPage() {
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    // For Sports Complex, default timeSlotId to Day (1)
+    if (field === "venueId" && value === "2") {
+      setForm((prev) => ({ ...prev, timeSlotId: prev.timeSlotId || "1" }));
+    }
   };
 
   const handleTimeSlotChange = (value) => {
@@ -280,6 +407,25 @@ export default function ClientReservationsPage() {
 
   const handleVenueRentalSlotChange = (val) => {
     setForm((prev) => ({ ...prev, venueRentalSlot: val, timeSlotId: val }));
+  };
+
+  const reservedFacilityIdsGlobal = React.useMemo(() => {
+    const reserved = new Set();
+    for (const date of selectedDates) {
+      for (const id of reservedByDate[date] || []) reserved.add(String(id));
+    }
+    return reserved;
+  }, [reservedByDate, selectedDates]);
+
+  const toggleFacilitySelection = (facilityId) => {
+    const id = String(facilityId);
+    if (reservedFacilityIdsGlobal.has(id)) {
+      toast.error("This facility is already reserved on one of the selected dates.");
+      return;
+    }
+    setSelectedFacilityIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   const handleDateVirtualParticularQuantitiesChange = (date, pq) => {
@@ -466,7 +612,7 @@ export default function ClientReservationsPage() {
               : "",
           particularQuantities:
             isVirtualPackageId(pkgId) || (pkgId && pkgId !== "0" && pkgId !== "custom")
-              ? {}
+              ? (prev[date]?.[session]?.particularQuantities || {})
               : (prev[date]?.[session]?.particularQuantities || {}),
         },
       },
@@ -509,6 +655,28 @@ export default function ClientReservationsPage() {
     }));
   };
 
+  const handleDateSessionParticularQuantitiesChange = (date, session, pq) => {
+    const cust = dateCustomizations[date]?.[session] || {};
+    const slot = deriveTimeSlotFromVirtualPackage(
+      cust.packageId,
+      particulars,
+      pq,
+      cust.venueRentalSlot,
+      cust.timeSlotId || form.timeSlotId
+    );
+    setDateCustomizations((prev) => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [session]: {
+          ...prev[date]?.[session],
+          particularQuantities: pq,
+          timeSlotId: slot || prev[date]?.[session]?.timeSlotId || form.timeSlotId,
+        },
+      },
+    }));
+  };
+
   const toggleCustomizeMode = () => {
     if (!customizePerDate) {
       // Turning on: initialize customizations from current global values
@@ -541,17 +709,26 @@ export default function ClientReservationsPage() {
     setCustomizePerDate(!customizePerDate);
   };
 
-  const summaryLines = buildReservationSummaryLines({
-    particulars,
-    packages,
-    packageId: form.packageId,
-    particularQuantities,
-    timeSlotId: form.timeSlotId,
-    venueRentalSlot: form.venueRentalSlot,
-    selectedDatesCount: selectedDates.size,
-    customizePerDate,
-    dateCustomizations,
-  });
+  const isSportsComplex = form.venueId === "2";
+
+  const summaryLines = isSportsComplex
+    ? buildFacilitySummaryLines({
+        facilities,
+        selectedFacilityIds,
+        selectedDatesCount: selectedDates.size,
+        timeSlotId: form.timeSlotId,
+      })
+    : buildReservationSummaryLines({
+        particulars,
+        packages,
+        packageId: form.packageId,
+        particularQuantities,
+        timeSlotId: form.timeSlotId,
+        venueRentalSlot: form.venueRentalSlot,
+        selectedDatesCount: selectedDates.size,
+        customizePerDate,
+        dateCustomizations,
+      });
   const total = sumReservationSummaryLines(summaryLines);
 
   const handleSubmit = async (e) => {
@@ -566,9 +743,14 @@ export default function ClientReservationsPage() {
       return;
     }
 
-    if (!form.venueId || !form.eventType ||
-      (!form.timeSlotId && !(customizePerDate && Object.keys(dateCustomizations).length > 0))) {
+    if (!form.venueId || !form.eventType) {
       toast.error("Please fill in all required fields");
+      submitLockRef.current = false;
+      return;
+    }
+
+    if (!form.timeSlotId && !(customizePerDate && Object.keys(dateCustomizations).length > 0)) {
+      toast.error("Please select a time slot");
       submitLockRef.current = false;
       return;
     }
@@ -579,7 +761,15 @@ export default function ClientReservationsPage() {
       return;
     }
 
-    if (!customizePerDate && isVirtualPackageId(form.packageId)) {
+    // Sports Complex validation: require at least one facility
+    if (isSportsComplex && selectedFacilityIds.length === 0) {
+      toast.error("Please select at least one facility.");
+      submitLockRef.current = false;
+      return;
+    }
+
+    // Cultural Center validation: virtual package entries
+    if (!isSportsComplex && !customizePerDate && isVirtualPackageId(form.packageId)) {
       const entries = getVirtualPackageParticulars(
         form.packageId,
         particulars,
@@ -717,6 +907,12 @@ export default function ClientReservationsPage() {
       }
     }
 
+    // For Sports Complex, override with facility IDs and no packages/particulars
+    if (isSportsComplex) {
+      selectedPackageId = null;
+      selectedParticulars = [];
+    }
+
     try {
       setSubmitting(true);
       const res = await fetch('/api/reservations', {
@@ -733,6 +929,7 @@ export default function ClientReservationsPage() {
           notes: form.notes || null,
           particulars: selectedParticulars,
           chargeLines: summaryLines,
+          ...(isSportsComplex ? { facilityIds: selectedFacilityIds } : {}),
         }),
       });
 
@@ -761,6 +958,8 @@ export default function ClientReservationsPage() {
       setParticularQuantities({});
       setCustomizePerDate(false);
       setDateCustomizations({});
+      setSelectedFacilityIds([]);
+      setReservedByDate({});
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -909,6 +1108,17 @@ export default function ClientReservationsPage() {
                 />
               </div>
 
+              {isSportsComplex ? (
+                <div className="space-y-2">
+                  <Label>Time Slot</Label>
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <Clock className="size-4 text-muted-foreground shrink-0" />
+                    <span className="font-medium">
+                      {TIME_SLOT_OPTIONS.find((s) => s.value === form.timeSlotId)?.label || "Day (8:00 AM – 5:00 PM)"}
+                    </span>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-2">
                 <Label htmlFor="timeslot">Time Slot <span className="text-red-500">*</span></Label>
                 <Select
@@ -933,7 +1143,9 @@ export default function ClientReservationsPage() {
                   </p>
                 )}
               </div>
+              )}
 
+              {!isSportsComplex && (
               <div className="space-y-2">
                 <Label htmlFor="package">Package</Label>
                 <Select
@@ -955,6 +1167,7 @@ export default function ClientReservationsPage() {
                   </p>
                 )}
               </div>
+              )}
             </div>
 {/* Date Picker - Calendar Grid */}
             <div className="space-y-2">
@@ -967,8 +1180,8 @@ export default function ClientReservationsPage() {
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
 
-              {/* Customize Per Date Button - only shown when multiple dates selected */}
-              {selectedDates.size > 1 && (
+              {/* Customize Per Date Button - only shown when multiple dates selected for Cultural Center */}
+              {selectedDates.size > 1 && !isSportsComplex && (
                 <div className="flex items-center gap-2 pt-2">
                   <Button
                     type="button"
@@ -994,8 +1207,63 @@ export default function ClientReservationsPage() {
               )}
             </div>
 
-            {/* Conditional: Package Inclusions or Particulars Selector */}
-            {customizePerDate ? (
+            {/* Conditional: Package Inclusions, Particulars Selector, or Facilities */}
+            {isSportsComplex ? (
+              <div className="space-y-2">
+                <Label>Facilities</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more facilities. Prices shown reflect the selected time slot.
+                  {selectedDates.size > 0
+                    ? " Facilities already reserved on a selected date cannot be chosen."
+                    : " Select dates first to see which facilities are available."}
+                </p>
+                {facilitiesLoading || (selectedDates.size > 0 && facilityAvailLoading) ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    {facilitiesLoading ? "Loading facilities..." : "Checking reserved facilities..."}
+                  </div>
+                ) : facilities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
+                ) : (
+                  <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+                    {facilities.map((f) => {
+                      const id = String(f.facilityId);
+                      const reserved = reservedFacilityIdsGlobal.has(id);
+                      const checked = selectedFacilityIds.includes(id);
+                      const rate = getFacilityRateBySlot(f, form.timeSlotId);
+                      const disabled = reserved || selectedDates.size === 0;
+                      return (
+                        <label
+                          key={id}
+                          className={`flex items-center gap-3 px-3 py-2.5 text-sm ${
+                            disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/40"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleFacilitySelection(id)}
+                            disabled={disabled}
+                          />
+                          <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                          {reserved ? (
+                            <span className="shrink-0 text-xs text-destructive">Reserved</span>
+                          ) : (
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              ₱{rate.toLocaleString()}/day
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedFacilityIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedFacilityIds.length} facilit{selectedFacilityIds.length === 1 ? "y" : "ies"} selected
+                  </p>
+                )}
+              </div>
+            ) : customizePerDate ? (
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
                 <p>
                   Packages and additional services are configured per date. Use{" "}
@@ -1126,99 +1394,7 @@ export default function ClientReservationsPage() {
                     })()}
                   </div>
                 </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Label>Additional Services / Particulars</Label>
-                    {Object.keys(particularQuantities).length > 0 && (
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setParticularQuantities({})}>
-                        <RotateCcw className="size-3 mr-1" />
-                        Restore to Default
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Select the quantity for each service you need.</p>
-                  <div className="space-y-2 border rounded-lg p-4">
-                    {particulars.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No particulars available.</p>
-                    ) : (
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {filterCustomParticulars(particulars).map((p) => {
-                          const qty = readParticularQuantity(
-                            particularQuantities,
-                            p.particularId
-                          );
-                          const cost = p.unitCost ? Number(p.unitCost) : 0;
-                          const maxQty = p.totalQuantity || 999;
-                          const isBasketball = p.particularName === "Basketball Game";
-                          const isAircon = p.particularName === "Aircon Compressor";
-                          const basketballOptions = [
-                            { value: 2, label: "Day w/o Shot Clock", price: 1000 },
-                            { value: 3, label: "Day w/ Shot Clock", price: 1500 },
-                            { value: 4, label: "Night w/o Shot Clock", price: 1500 },
-                            { value: 5, label: "Night w/ Shot Clock", price: 2000 },
-                          ];
-                          const airconTiers = [
-                            { qty: 4, label: "100–1K pax", price: 3200 },
-                            { qty: 6, label: "1K–3K pax", price: 4800 },
-                            { qty: 8, label: "4K–6K pax", price: 6400 },
-                            { qty: 10, label: "7K–10K pax", price: 8000 },
-                          ];
-                          return (
-                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-3">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{p.particularName}</p>
-                                {cost > 0 && !isBasketball && <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>}
-                                {isAircon && (
-                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                                    {airconTiers.map((t) => (
-                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
-                                    ))}
-                                  </div>
-                                )}
-                                {!isBasketball && !isAircon && <p className="text-xs text-muted-foreground">Available: {maxQty}</p>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {isBasketball ? (
-                                  <Select
-                                    value={qty > 0 ? String(qty) : ""}
-                                    onValueChange={(val) => {
-                                      setParticularQuantities((prev) => ({ ...prev, [p.particularId]: parseInt(val, 10) }));
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-48 text-xs">
-                                      <SelectValue placeholder="Select game type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {basketballOptions.map((opt) => (
-                                        <SelectItem key={opt.value} value={String(opt.value)}>
-                                          {opt.label} — ₱{opt.price.toLocaleString()}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <ParticularQuantityStepper
-                                    value={qty}
-                                    max={maxQty}
-                                    buttonClassName="size-7"
-                                    onChange={(val) =>
-                                      setParticularQuantities((prev) => ({
-                                        ...prev,
-                                        [p.particularId]: val,
-                                      }))
-                                    }
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+              ) : null}
             </div>
             )}
 
@@ -1358,6 +1534,59 @@ export default function ClientReservationsPage() {
                             </SelectContent>
                           </Select>
                         </div>
+                        {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
+                          <>
+                            <ReservationVirtualPackagePanel
+                              packageId={s.packageId}
+                              particulars={particulars}
+                              particularQuantities={s.particularQuantities || {}}
+                              onParticularQuantitiesChange={(pq) => handleDateSessionParticularQuantitiesChange(date, sessionKey, pq)}
+                              timeSlotId={timeSlotForSession}
+                              venueRentalSlot={s.venueRentalSlot || ""}
+                              onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
+                            />
+                            <Separator className="my-2" />
+                            <div className="space-y-2">
+                              <Label className="text-xs">Additional Services / Particulars</Label>
+                              <div className="space-y-2 border rounded-lg p-3">
+                                {particularsLoading ? (
+                                  <p className="text-xs text-muted-foreground">Loading particulars...</p>
+                                ) : filterCustomParticulars(particulars).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No particulars available.</p>
+                                ) : (
+                                  <div className="grid gap-2 md:grid-cols-2">
+                                    {filterCustomParticulars(particulars).map((p) => {
+                                      const qty = readParticularQuantity(s.particularQuantities || {}, p.particularId);
+                                      const cost = p.unitCost ? Number(p.unitCost) : 0;
+                                      const maxQty = p.totalQuantity || 999;
+                                      const isBasketball = p.particularName === "Basketball Game";
+                                      const isAircon = p.particularName === "Aircon Compressor";
+                                      return (
+                                        <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                            {cost > 0 && !isBasketball && !isAircon && (
+                                              <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
+                                            )}
+                                          </div>
+                                          <ParticularQuantityStepper
+                                            value={qty}
+                                            max={maxQty}
+                                            buttonClassName="size-7"
+                                            onChange={(val) => {
+                                              const newPq = { ...(s.particularQuantities || {}), [p.particularId]: val };
+                                              handleDateSessionParticularQuantitiesChange(date, sessionKey, newPq);
+                                            }}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1369,236 +1598,9 @@ export default function ClientReservationsPage() {
                     <Calendar className="size-4 text-muted-foreground" />
                     {date}
                   </h4>
-                  {dateCustomizations[date]?.morning || dateCustomizations[date]?.night ? (
-                    <>
-                      {renderSessionControls(cust, "morning", "Morning Session", TIME_SLOT.DAY)}
-                      {renderSessionControls(cust, "night", "Night Session", TIME_SLOT.NIGHT)}
-                    </>
-                  ) : (
-                    /* Legacy single-package view - render original controls */
-
-                  {/* Package for this date */}
-                  <div className="space-y-2 mb-3">
-                    <Label className="text-xs">Package for {date}</Label>
-                    <Select
-                      value={cust.packageId}
-                      onValueChange={(v) => handleDatePackageSelect(date, v)}
-                    >
-                      <SelectTrigger className="w-full min-w-0">
-                        <SelectValue placeholder="Select package" />
-                      </SelectTrigger>
-                      <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
-                        <SelectItem value="0">None</SelectItem>
-                        <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || form.timeSlotId} />
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Conditional: Package Inclusions or Particulars for this date */}
-                  {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
-                    <>
-                      <ReservationVirtualPackagePanel
-                        packageId={cust.packageId}
-                        particulars={particulars}
-                        particularQuantities={cust.particularQuantities || {}}
-                        onParticularQuantitiesChange={(pq) =>
-                          handleDateVirtualParticularQuantitiesChange(date, pq)
-                        }
-                        timeSlotId={cust.timeSlotId || form.timeSlotId}
-                        venueRentalSlot={cust.venueRentalSlot}
-                        onVenueRentalSlotChange={(val) =>
-                          handleDateVenueRentalSlotChange(date, val)
-                        }
-                        compact
-                      />
-                      <Separator className="my-2" />
-                      <div className="space-y-1">
-                        <Label className="text-xs">Additional Services / Particulars</Label>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          {filterCustomParticulars(particulars).map((p) => {
-                            const qty = readParticularQuantity(
-                              cust.particularQuantities,
-                              p.particularId
-                            );
-                            const cost = p.unitCost ? Number(p.unitCost) : 0;
-                            const maxQty = p.totalQuantity || 999;
-                            return (
-                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                  {cost > 0 && (
-                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
-                                  )}
-                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
-                                </div>
-                                <ParticularQuantityStepper
-                                  value={qty}
-                                  max={maxQty}
-                                  buttonClassName="size-7"
-                                  onChange={(val) =>
-                                    handleDateVirtualParticularQuantitiesChange(date, {
-                                      ...(cust.particularQuantities || {}),
-                                      [String(p.particularId)]: val,
-                                    })
-                                  }
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
-                  ) : isVirtualPackageId(cust.packageId) ? (
-                    <ReservationVirtualPackagePanel
-                      packageId={cust.packageId}
-                      particulars={particulars}
-                      particularQuantities={cust.particularQuantities || {}}
-                      onParticularQuantitiesChange={(pq) =>
-                        handleDateVirtualParticularQuantitiesChange(date, pq)
-                      }
-                      timeSlotId={cust.timeSlotId || form.timeSlotId}
-                      venueRentalSlot={cust.venueRentalSlot}
-                      onVenueRentalSlotChange={(val) =>
-                        handleDateVenueRentalSlotChange(date, val)
-                      }
-                      compact
-                    />
-                  ) : isRegularPackageId(cust.packageId) ? (
-                    <div className="space-y-2">
-                      <Label className="text-xs">Package Inclusions for {date}</Label>
-                      <div className="border rounded-lg p-3 bg-muted/20">
-                        {(() => {
-                          const pkg = packages.find(p => String(p.packageId) === cust.packageId);
-                          if (!pkg || !pkg.inclusions || pkg.inclusions.length === 0) {
-                            return <p className="text-xs text-muted-foreground">No inclusions for this package.</p>;
-                          }
-                          return (
-                            <div className="grid gap-1 md:grid-cols-2">
-                              {pkg.inclusions.map((inc, idx) => (
-                                <div key={idx} className="flex items-center justify-between rounded-md border p-2">
-                                  <p className="text-xs font-medium truncate">{inc.itemName}</p>
-                                  <span className="text-xs text-muted-foreground shrink-0 ml-2">× {inc.quantityAvailable}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </div>
+                  {renderSessionControls(cust, "morning", "Morning Session", TIME_SLOT.DAY)}
+                  {renderSessionControls(cust, "night", "Night Session", TIME_SLOT.NIGHT)}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs">Particulars for {date}</Label>
-                        {Object.keys(cust.particularQuantities || {}).length > 0 && (
-                          <Button type="button" variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground"
-                            onClick={() => {
-                              setDateCustomizations((prev) => ({
-                                ...prev,
-                                [date]: { ...prev[date], particularQuantities: {} },
-                              }));
-                            }}
-                          >
-                            <RotateCcw className="size-3 mr-1" />
-                            Restore to Default
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {filterCustomParticulars(particulars).map((p) => {
-                          const qty = readParticularQuantity(
-                            cust.particularQuantities,
-                            p.particularId
-                          );
-                          const cost = p.unitCost ? Number(p.unitCost) : 0;
-                          const maxQty = p.totalQuantity || 999;
-                          const isBasketball = p.particularName === "Basketball Game";
-                          const isAircon = p.particularName === "Aircon Compressor";
-                          const basketballOptions = [
-                            { value: 2, label: "Day w/o Shot Clock", price: 1000 },
-                            { value: 3, label: "Day w/ Shot Clock", price: 1500 },
-                            { value: 4, label: "Night w/o Shot Clock", price: 1500 },
-                            { value: 5, label: "Night w/ Shot Clock", price: 2000 },
-                          ];
-                          const airconTiers = [
-                            { qty: 4, label: "100–1K pax", price: 3200 },
-                            { qty: 6, label: "1K–3K pax", price: 4800 },
-                            { qty: 8, label: "4K–6K pax", price: 6400 },
-                            { qty: 10, label: "7K–10K pax", price: 8000 },
-                          ];
-                          return (
-                            <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                {cost > 0 && !isBasketball && !isAircon && (
-                                  <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
-                                )}
-                                {isAircon && (
-                                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                                    {airconTiers.map((t) => (
-                                      <div key={t.qty}>{t.qty} units = ₱{t.price.toLocaleString()} ({t.label})</div>
-                                    ))}
-                                  </div>
-                                )}
-                                {!isBasketball && !isAircon && (
-                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {isBasketball ? (
-                                  <Select
-                                    value={qty > 0 ? String(qty) : ""}
-                                    onValueChange={(val) => {
-                                      setDateCustomizations((prev) => ({
-                                        ...prev,
-                                        [date]: {
-                                          ...prev[date],
-                                          particularQuantities: {
-                                            ...(prev[date]?.particularQuantities || {}),
-                                            [String(p.particularId)]: parseInt(val, 10),
-                                          },
-                                        },
-                                      }));
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-40 text-xs h-8">
-                                      <SelectValue placeholder="Select type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {basketballOptions.map((opt) => (
-                                        <SelectItem key={opt.value} value={String(opt.value)}>
-                                          {opt.label} — ₱{opt.price.toLocaleString()}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <ParticularQuantityStepper
-                                    value={qty}
-                                    max={maxQty}
-                                    buttonClassName="size-6"
-                                    inputClassName="w-12 h-7 text-xs"
-                                    onChange={(val) =>
-                                      setDateCustomizations((prev) => ({
-                                        ...prev,
-                                        [date]: {
-                                          ...prev[date],
-                                          particularQuantities: {
-                                            ...(prev[date]?.particularQuantities || {}),
-                                            [String(p.particularId)]: val,
-                                          },
-                                        },
-                                      }))
-                                    }
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
               );
             })}
           </div>
