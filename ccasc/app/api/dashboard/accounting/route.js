@@ -101,7 +101,7 @@ export async function GET() {
     for (const t of transactions) {
       const d = new Date(t.paymentDate);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (monthlyMap[key]) {
+      if (monthlyMap[key] && t.payment) {
         monthlyMap[key].clientRevenue += Number(t.payment.amountPaid);
       }
     }
