@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import {
@@ -1124,7 +1124,6 @@ export default function WalkInReservationPage() {
                 </SelectTrigger>
                 <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                   <SelectItem value="0">None</SelectItem>
-                  <SelectItem value="custom">Custom — Pick Items</SelectItem>
                   <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} />
                 </SelectContent>
               </Select>
@@ -1147,7 +1146,79 @@ export default function WalkInReservationPage() {
               </div>
             ) : (
             <div className="space-y-2">
-              {isVirtualPackageId(packageId) ? (
+              {packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
+                <>
+                  <ReservationVirtualPackagePanel
+                    packageId={packageId}
+                    particulars={particulars}
+                    particularQuantities={particularQuantities}
+                    onParticularQuantitiesChange={handleVirtualParticularQuantitiesChange}
+                    timeSlotId={timeSlotId}
+                    venueRentalSlot={venueRentalSlot}
+                    onVenueRentalSlotChange={handleVenueRentalSlotChange}
+                  />
+                  <Separator className="my-3" />
+                  <div className="space-y-2">
+                    <Label>Additional Services / Particulars</Label>
+                    <div className="space-y-2 border rounded-lg p-4">
+                      {particularsLoading ? (
+                        <p className="text-sm text-muted-foreground">Loading particulars...</p>
+                      ) : filterCustomParticulars(particulars).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No particulars available.</p>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {filterCustomParticulars(particulars).map((p) => {
+                            const qty = readParticularQuantity(
+                              particularQuantities,
+                              p.particularId
+                            );
+                            const cost = p.unitCost ? Number(p.unitCost) : 0;
+                            const maxQty = p.totalQuantity || 999;
+                            const isAircon = p.particularName === "Aircon Compressor";
+                            const airconTiers = [
+                              { qty: 4, label: "100-1K pax", price: 3200 },
+                              { qty: 6, label: "1K-3K pax", price: 4800 },
+                              { qty: 8, label: "4K-6K pax", price: 6400 },
+                              { qty: 10, label: "7K-10K pax", price: 8000 },
+                            ];
+                            return (
+                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                  {cost > 0 && !isAircon && (
+                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
+                                  )}
+                                  {isAircon && (
+                                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                      {airconTiers.map((t) => (
+                                        <div key={t.qty}>{t.qty} units = P{t.price.toLocaleString()} ({t.label})</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {!isAircon && (
+                                    <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                  )}
+                                </div>
+                                <ParticularQuantityStepper
+                                  value={qty}
+                                  max={maxQty}
+                                  buttonClassName="size-7"
+                                  onChange={(val) =>
+                                    setParticularQuantities((prev) => ({
+                                      ...prev,
+                                      [String(p.particularId)]: val,
+                                    }))
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : isVirtualPackageId(packageId) ? (
                 <ReservationVirtualPackagePanel
                   packageId={packageId}
                   particulars={particulars}
@@ -1463,13 +1534,65 @@ export default function WalkInReservationPage() {
                       </SelectTrigger>
                       <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
-                        <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} />
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {isVirtualPackageId(cust.packageId) ? (
+                  {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
+                    <>
+                      <ReservationVirtualPackagePanel
+                        packageId={cust.packageId}
+                        particulars={particulars}
+                        particularQuantities={cust.particularQuantities || {}}
+                        onParticularQuantitiesChange={(pq) =>
+                          handleDateVirtualParticularQuantitiesChange(date, pq)
+                        }
+                        timeSlotId={cust.timeSlotId || timeSlotId}
+                        venueRentalSlot={cust.venueRentalSlot}
+                        onVenueRentalSlotChange={(val) =>
+                          handleDateVenueRentalSlotChange(date, val)
+                        }
+                        compact
+                      />
+                      <Separator className="my-2" />
+                      <div className="space-y-1">
+                        <Label className="text-xs">Additional Services / Particulars</Label>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {filterCustomParticulars(particulars).map((p) => {
+                            const qty = readParticularQuantity(
+                              cust.particularQuantities,
+                              p.particularId
+                            );
+                            const cost = p.unitCost ? Number(p.unitCost) : 0;
+                            const maxQty = p.totalQuantity || 999;
+                            return (
+                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                  {cost > 0 && (
+                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                </div>
+                                <ParticularQuantityStepper
+                                  value={qty}
+                                  max={maxQty}
+                                  buttonClassName="size-7"
+                                  onChange={(val) =>
+                                    handleDateVirtualParticularQuantitiesChange(date, {
+                                      ...(cust.particularQuantities || {}),
+                                      [String(p.particularId)]: val,
+                                    })
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  ) : isVirtualPackageId(cust.packageId) ? (
                     <ReservationVirtualPackagePanel
                       packageId={cust.packageId}
                       particulars={particulars}

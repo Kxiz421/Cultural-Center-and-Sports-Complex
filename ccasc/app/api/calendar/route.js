@@ -14,8 +14,8 @@ export async function GET(request) {
     // Fetch reservations without client include to avoid orphaned FK errors
     const reservations = await prisma.reservation.findMany({
       where: ownEventsOnly
-        ? { clientId: Number.isFinite(mineClientId) ? mineClientId : -1 }
-        : (venueId ? { venueId: parseInt(venueId) } : undefined),
+        ? { clientId: Number.isFinite(mineClientId) ? mineClientId : -1, reservationStatus: { not: "Cancelled" } }
+        : { ...(venueId ? { venueId: parseInt(venueId) } : undefined), reservationStatus: { not: "Cancelled" } },
       include: {
         venue: true,
         package: {

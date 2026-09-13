@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { formatPhp } from "@/lib/utils";
+import { formatDbDate, formatPhp } from "@/lib/utils";
 import {
   consumeDeposit,
   mapDepositSnapshot,
@@ -25,7 +25,15 @@ async function findBookingId(reservationId) {
           deductions: { orderBy: { recordedAt: "desc" } },
         },
       },
-      reservation: { select: { clientId: true, eventType: true } },
+      reservation: {
+        select: {
+          clientId: true,
+          eventType: true,
+          eventDate: true,
+          eventStatus: true,
+          additionalDates: { select: { eventDate: true } },
+        },
+      },
     },
   });
   return booking;
@@ -85,10 +93,18 @@ export async function POST(request) {
     }
 
     if (action === "pullout") {
+      const res = booking.reservation;
+      const eventDate = res?.eventDate ? formatDbDate(res.eventDate) : null;
+      const additionalDates = res?.additionalDates || null;
+      const eventStatus = res?.eventStatus || null;
+
       const result = await pulloutDeposit(prisma, {
         bookingId: booking.bookingId,
         recordedBy,
         staffId,
+        eventDate,
+        additionalDates,
+        eventStatus,
       });
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });

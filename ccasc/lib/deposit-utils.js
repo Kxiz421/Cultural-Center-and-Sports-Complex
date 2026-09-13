@@ -13,6 +13,32 @@ export const DEPOSIT_SATISFIED_STATUSES = [
 export const DEPOSIT_CONSUMABLE_STATUSES = ["Held", "Deducted"];
 export const DEPOSIT_PULLOUT_STATUSES = ["Held", "Deducted"];
 
+/**
+ * Determine whether the event has ended by checking eventStatus
+ * or by comparing the latest event date against today.
+ * @param {string|null|undefined} eventDate   Primary event date (ISO date string YYYY-MM-DD)
+ * @param {Array<{eventDate: string}>|Array<string>|null|undefined} additionalDates
+ * @param {string|null|undefined} eventStatus "Upcoming" | "Ongoing" | "Completed"
+ */
+export function isEventEnded(eventDate, additionalDates, eventStatus) {
+  if (eventStatus === "Completed") return true;
+
+  if (!eventDate) return false;
+  const dates = [eventDate];
+  if (Array.isArray(additionalDates)) {
+    for (const ad of additionalDates) {
+      const d = typeof ad === "string" ? ad : ad?.eventDate;
+      if (d) dates.push(d);
+    }
+  }
+  const latestStr = dates.sort().at(-1);
+  if (!latestStr) return false;
+
+  // Compare against end of the event day (23:59 UTC+8, i.e. 15:59 UTC)
+  const latestEvent = new Date(`${latestStr}T15:59:59.000Z`);
+  const now = new Date();
+  return now > latestEvent;
+}
 /** Deduction reasons may contain letters and spaces only. */
 export function sanitizeDeductionReason(raw) {
   return String(raw ?? "").replace(/[^\p{L}\s]/gu, "");
@@ -245,7 +271,7 @@ export async function consumeDeposit(prisma, {
   return { ok: true, deduction, deposit: updated };
 }
 
-export function validateDepositPullout(deposit) {
+export function validateDepositPullout(deposit, eventDate = null, additionalDates = null, eventStatus = null) {
   if (!deposit) {
     return { ok: false, error: "No deposit has been recorded yet." };
   }
@@ -259,6 +285,9 @@ export function validateDepositPullout(deposit) {
   if (!DEPOSIT_PULLOUT_STATUSES.includes(statusName) && !isDepositRecordMet(deposit)) {
     return { ok: false, error: "Record the 10% deposit before pulling it out." };
   }
+  if (!isEventEnded(eventDate, additionalDates, eventStatus)) {
+    return { ok: false, error: "The 10% deposit cannot be pulled out until the event has ended." };
+  }
   return { ok: true, releaseAmount: getDepositRemaining(deposit) };
 }
 
@@ -266,12 +295,15 @@ export async function pulloutDeposit(prisma, {
   bookingId,
   recordedBy = "LTOO",
   staffId = null,
+  eventDate = null,
+  additionalDates = null,
+  eventStatus = null,
 }) {
   const deposit = await prisma.deposit.findUnique({
     where: { bookingId },
     include: { status: true, deductions: true },
   });
-  const check = validateDepositPullout(deposit);
+  const check = validateDepositPullout(deposit, eventDate, additionalDates, eventStatus);
   if (!check.ok) {
     return { ok: false, error: check.error };
   }

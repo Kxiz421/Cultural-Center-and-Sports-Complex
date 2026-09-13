@@ -71,7 +71,7 @@ import {
   allocateFullDiscountCoverage,
   BALANCE_PAYMENT_MINIMUM,
 } from "@/lib/payment-utils";
-import { isDepositRecordMet, sanitizeDeductionReason } from "@/lib/deposit-utils";
+import { isDepositRecordMet, sanitizeDeductionReason, isEventEnded } from "@/lib/deposit-utils";
 
 const PAYMENT_RADIO_OPTIONS = [
   { value: "downpayment", title: "50% Down Payment" },
@@ -119,12 +119,15 @@ function canConsumeDeposit(deposit) {
   return Boolean(deposit && ["Held", "Deducted"].includes(deposit.status));
 }
 
-function canPulloutDeposit(deposit) {
-  return Boolean(
-    deposit &&
-    ["Held", "Deducted"].includes(deposit.status) &&
-    roundMoney(deposit.amountAfterDeductions) > 0
-  );
+function canPulloutDeposit(deposit, reservation) {
+  if (!deposit) return false;
+  if (!["Held", "Deducted"].includes(deposit.status)) return false;
+  if (roundMoney(deposit.amountAfterDeductions) <= 0) return false;
+  // 10% deposit cannot be pulled out until the event has ended
+  if (!isEventEnded(reservation?.eventDate, reservation?.eventDates, reservation?.eventStatus)) {
+    return false;
+  }
+  return true;
 }
 
 // Human-friendly label for a status token (used where a colored badge isn't wanted).
@@ -373,7 +376,14 @@ export default function LTOOPaymentsPage() {
   }, [discountEnabled, discountMode, selectedReservation]);
 
   const currentBreakdown = React.useMemo(
-    () => breakdownFromReservation(selectedReservation, discountCheck.ok ? pendingDiscount : 0),
+    () => {
+      // When a discount is already saved, pendingDiscount from pre-populated
+      // fields represents the SAVED discount (for display only) — don't
+      // double-count it as a new extra discount on top of the saved one.
+      const hasSaved = (selectedReservation?.totalDiscount ?? 0) > 0;
+      const extra = hasSaved ? 0 : (discountCheck.ok ? pendingDiscount : 0);
+      return breakdownFromReservation(selectedReservation, extra);
+    },
     [selectedReservation, pendingDiscount, discountCheck.ok]
   );
 
@@ -467,12 +477,10 @@ export default function LTOOPaymentsPage() {
 
   const canSubmitPayment =
     !!currentBreakdown &&
-    discountCheck.ok &&
     (discountSettlesRemaining ||
-      discountEnabled || // discount-only submission – no payment required
-      (!currentBreakdown.balanceSettled &&
+      (!!paymentAmount &&
+        !currentBreakdown.balanceSettled &&
         isPaymentTypeAllowed(currentBreakdown, paymentType) &&
-        !!paymentAmount &&
         paymentAmountCheck.ok));
 
   const counts = React.useMemo(() => ({
@@ -501,23 +509,13 @@ export default function LTOOPaymentsPage() {
     // Pre-fill discount if one already exists on this reservation
     const hasExistingDiscount = reservation.totalDiscount > 0;
     if (hasExistingDiscount) {
-      setDiscountEnabled(true);
-      const existingPercent = reservation.discountPercent;
-      if (existingPercent && existingPercent > 0 && existingPercent < 100) {
-        setDiscountMode("percent");
-        setDiscountPercent(String(existingPercent));
-        setDiscountPeso("");
-      } else if (existingPercent === 100) {
-        setDiscountMode("full");
-        setDiscountPercent("100");
-        setDiscountPeso("");
-        setPaymentType("full");
-        setPaymentAmount("0.00");
-      } else {
-        setDiscountMode("peso");
-        setDiscountPeso(formatMoneyInput(reservation.totalDiscount));
-        setDiscountPercent("");
-      }
+      // Don't open the discount section by default — just set up the discount
+      // state so the "Update discount" button text appears. Pre-population
+      // happens when the user clicks "Update discount".
+      setDiscountEnabled(false);
+      setDiscountMode("peso");
+      setDiscountPeso("");
+      setDiscountPercent("");
     } else {
       setDiscountEnabled(false);
       setDiscountMode("peso");
@@ -632,10 +630,27 @@ export default function LTOOPaymentsPage() {
 
     // Payment with cash — validate and close after saving
     if (!isDiscountOnly && !isUpdateDiscount) {
-      const amount = roundMoney(paymentAmount || 0);
-      if (discountEnabled && !discountCheck.ok) {
+      let amount = roundMoney(paymentAmount || 0);
+      if (discountEnabled && pendingDiscount > 0 && !discountCheck.ok) {
         toast.error(discountCheck.error || "Enter a valid discount.");
         return;
+      }
+
+      // When a pending discount is active, ensure the amount reflects the
+      // projected (discounted) breakdown so stale pre-discount values don't
+      // trigger a spurious "cannot exceed" error.
+      if (discountEnabled && discountCheck.ok) {
+        const projected = breakdownFromReservation(
+          selectedReservation,
+          pendingDiscount
+        );
+        if (projected) {
+          const max = getPaymentTypeMax(projected, paymentType || "full");
+          if (max > 0 && amount > max) {
+            amount = roundMoney(max);
+            setPaymentAmount(formatMoneyInput(amount));
+          }
+        }
       }
 
       const current = breakdownFromReservation(
@@ -756,7 +771,19 @@ export default function LTOOPaymentsPage() {
 
       setDiscountOnlySubmission(false);
       // Refresh data but keep dialog open
-      await refreshSelectedReservation();
+      const updated = await refreshSelectedReservation();
+
+      // Close the discount section after save (the user can re-open via
+      // "Update discount" button if needed).
+      setDiscountEnabled(false);
+      setDiscountMode("peso");
+      setDiscountPeso("");
+      setDiscountPercent("");
+      setAmountError("");
+      // Sync the payment amount to the new discounted breakdown
+      if (updated) {
+        syncAmountToBreakdown(updated, 0, paymentType);
+      }
     } catch (err) {
       toast.error(err.message || "Failed to apply discount");
     } finally {
@@ -769,14 +796,17 @@ export default function LTOOPaymentsPage() {
     const data = await res.json();
     if (!res.ok || !Array.isArray(data)) return;
     setReservations(data);
+    let match;
     setSelectedReservation((current) => {
       if (!current) return current;
-      return data.find((row) => row.reservationId === current.reservationId) || current;
+      match = data.find((row) => row.reservationId === current.reservationId) || current;
+      return match;
     });
     setHistoryReservation((current) => {
       if (!current) return current;
       return data.find((row) => row.reservationId === current.reservationId) || current;
     });
+    return match || null;
   };
 
   const handleConsumeDeposit = async () => {
@@ -1085,7 +1115,7 @@ export default function LTOOPaymentsPage() {
                     </>
                   )}
                   <span className="text-muted-foreground">New 100% total (includes 10% deposit)</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.base)}</span>
+                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.totalPayable)}</span>
                   <span className="text-muted-foreground">10% deposit</span>
                   <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.requiredDeposit)}</span>
                   <span className="text-muted-foreground">Already paid</span>
@@ -1156,22 +1186,50 @@ export default function LTOOPaymentsPage() {
                   variant={discountEnabled ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
-                    if (selectedReservation?.totalDiscount > 0) return; // Locked — discount already exists
                     const next = !discountEnabled;
                     setDiscountEnabled(next);
                     if (!next) {
+                      // Closing the discount section
+                      if (!(selectedReservation?.totalDiscount > 0)) {
+                        // New discount being cancelled: reset all state
+                        setDiscountMode("peso");
+                        setDiscountPeso("");
+                        setDiscountPercent("");
+                        setAmountError("");
+                      }
+                      syncAmountToBreakdown(selectedReservation, 0, paymentType);
+                    } else if (selectedReservation?.totalDiscount > 0) {
+                      // Opening to update existing discount: pre-populate fields
+                      // from the saved discount so the user can see current values.
+                      const existingPercent = selectedReservation.discountPercent;
+                      if (existingPercent && existingPercent > 0 && existingPercent < 100) {
+                        setDiscountMode("percent");
+                        setDiscountPercent(String(existingPercent));
+                        setDiscountPeso("");
+                      } else if (existingPercent === 100) {
+                        setDiscountMode("full");
+                        setDiscountPercent("100");
+                        setDiscountPeso("");
+                        setPaymentType("full");
+                        setPaymentAmount("0.00");
+                      } else {
+                        setDiscountMode("peso");
+                        setDiscountPeso(formatMoneyInput(selectedReservation.totalDiscount));
+                        setDiscountPercent("");
+                      }
+                    } else {
+                      // Opening for a NEW discount: start fresh
                       setDiscountMode("peso");
                       setDiscountPeso("");
                       setDiscountPercent("");
-                      syncAmountToBreakdown(selectedReservation, 0, paymentType);
                     }
                   }}
-                  disabled={selectedReservation?.totalDiscount > 0}
+                  disabled={false}
                 >
                   <Percent className="size-4 mr-1" />
                   {discountEnabled
-                    ? (selectedReservation?.totalDiscount > 0 ? "Update discount" : "Remove discount")
-                    : "Add discount"}
+                    ? "Cancel"
+                    : (selectedReservation?.totalDiscount > 0 ? "Update discount" : "Add discount")}
                 </Button>
               </div>
               {discountEnabled && (
@@ -1185,6 +1243,7 @@ export default function LTOOPaymentsPage() {
                         onChange={() => {
                           setDiscountMode("peso");
                           setDiscountPercent("");
+                          setDiscountPeso("");
                           syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
@@ -1198,6 +1257,7 @@ export default function LTOOPaymentsPage() {
                         onChange={() => {
                           setDiscountMode("percent");
                           setDiscountPeso("");
+                          setDiscountPercent("");
                           syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
@@ -1229,10 +1289,7 @@ export default function LTOOPaymentsPage() {
                       onChange={(e) => {
                         const current = breakdownFromReservation(selectedReservation, 0);
                         const max = current
-                          ? roundMoney(Math.min(
-                            current.remainingBalance,
-                            Math.max(0, current.totalPayable - current.requiredDeposit)
-                          ))
+                          ? roundMoney(Math.max(0, current.remainingBalance))
                           : 0;
                         const next = sanitizeMoneyInput(e.target.value, max);
                         setDiscountPeso(next);
@@ -1342,7 +1399,7 @@ export default function LTOOPaymentsPage() {
             )}
 
             <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
-              <fieldset className="space-y-2" disabled={discountEnabled || (currentBreakdown?.balanceSettled && !discountSettlesRemaining)}>
+              <fieldset className="space-y-2" disabled={(discountEnabled && pendingDiscount > 0) || (currentBreakdown?.balanceSettled && !discountSettlesRemaining)}>
                 <legend className="text-sm font-medium">Record What?</legend>
                 <div className="space-y-2">
                   {PAYMENT_RADIO_OPTIONS.map((option) => {
@@ -1358,9 +1415,9 @@ export default function LTOOPaymentsPage() {
                         key={option.value}
                         className={cn(
                           "flex items-start gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors",
-                          selected && allowed && !discountEnabled && "border-primary bg-primary/5",
-                          allowed && !selected && !discountEnabled && "hover:bg-muted/50 cursor-pointer",
-                          (!allowed || discountEnabled) && "opacity-60 cursor-not-allowed bg-muted/20"
+                          selected && allowed && !(discountEnabled && pendingDiscount > 0) && "border-primary bg-primary/5",
+                          allowed && !selected && !(discountEnabled && pendingDiscount > 0) && "hover:bg-muted/50 cursor-pointer",
+                          (!allowed || (discountEnabled && pendingDiscount > 0)) && "opacity-60 cursor-not-allowed bg-muted/20"
                         )}
                       >
                         <input
@@ -1556,7 +1613,7 @@ export default function LTOOPaymentsPage() {
                   }
                   setConfirmOpen(true);
                 }}
-                disabled={saving || discountEnabled || !canSubmitPayment}
+                disabled={saving || !canSubmitPayment}
               >
                 {saving ? "Saving..." : "Save Payment"}
               </Button>
@@ -1633,7 +1690,7 @@ export default function LTOOPaymentsPage() {
                 )}
                 <span className="text-muted-foreground">New 100% total (includes 10% deposit)</span>
                 <span className="tabular-nums font-medium text-right">
-                  {formatPhp(historyBreakdown.base)}
+                  {formatPhp(historyBreakdown.totalPayable)}
                 </span>
                 <span className="text-muted-foreground">Total paid</span>
                 <span className="tabular-nums font-medium text-right">
@@ -1735,7 +1792,7 @@ export default function LTOOPaymentsPage() {
                         >
                           Record deduction
                         </Button>
-                        {canPulloutDeposit(historyReservation.deposit) && (
+                        {canPulloutDeposit(historyReservation.deposit, historyReservation) && (
                           <Button type="button" size="sm" disabled={depositSaving} onClick={handlePulloutDeposit}>
                             Pull out remaining {formatPhp(historyReservation.deposit.amountAfterDeductions)}
                           </Button>

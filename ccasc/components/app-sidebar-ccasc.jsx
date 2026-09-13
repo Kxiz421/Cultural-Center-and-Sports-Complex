@@ -11,6 +11,7 @@ import {
   Boxes,
   Warehouse,
   Megaphone,
+  FileBarChart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,11 @@ const navMain = [
     title: "Bookings",
     url: "/panel/admin/bookings",
     icon: ClipboardList,
+  },
+  {
+    title: "Reports",
+    url: "/panel/admin/reports",
+    icon: FileBarChart,
   },
   {
     title: "Particulars Management",

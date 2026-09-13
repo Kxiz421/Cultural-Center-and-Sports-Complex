@@ -422,7 +422,7 @@ export function getManualPaymentError(breakdown, amount) {
 
   const allocation = allocateManualPayment(breakdown, amt);
 
-  if (!breakdown.depositMet && allocation.deposit < breakdown.requiredDeposit) {
+  if (breakdown.downPaymentMet && !breakdown.depositMet && allocation.deposit < breakdown.requiredDeposit) {
     return `Manual payments must cover the 10% deposit first (${formatPhp(breakdown.requiredDeposit)}).`;
   }
 

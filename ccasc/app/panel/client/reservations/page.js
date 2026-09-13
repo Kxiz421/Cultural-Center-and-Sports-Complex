@@ -67,6 +67,15 @@ export default function ClientReservationsPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const submitLockRef = React.useRef(false);
 
+  // Logged-in user info
+  const [clientInfo, setClientInfo] = React.useState({ name: "", email: "" });
+
+  React.useEffect(() => {
+    const name = localStorage.getItem("userName") || localStorage.getItem("name") || "";
+    const email = localStorage.getItem("userEmail") || localStorage.getItem("email") || "";
+    setClientInfo({ name, email });
+  }, []);
+
   // Per-date customization state
   const [customizePerDate, setCustomizePerDate] = React.useState(false);
   const [dateCustomizations, setDateCustomizations] = React.useState({});
@@ -709,13 +718,26 @@ export default function ClientReservationsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Reservation Details</CardTitle>
+          <CardTitle>Client Information</CardTitle>
           <CardDescription>
-            Select your preferred venue, dates, and services.
+            Your account details and reservation preferences.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Logged-in User Info */}
+          <div className="rounded-lg border bg-muted/30 p-4 mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="size-4 text-primary" />
+              <span className="text-sm font-medium">Logged-in User</span>
+              <Badge variant="secondary" className="ml-auto">Client</Badge>
+            </div>
+            <p className="text-sm font-medium">{clientInfo.name || "Client"}</p>
+            <p className="text-xs text-muted-foreground">{clientInfo.email || ""}</p>
+          </div>
+
+          <Separator className="mb-6" />
+
+          <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="venue">Venue <span className="text-red-500">*</span></Label>
@@ -777,7 +799,6 @@ export default function ClientReservationsPage() {
                   </SelectTrigger>
                   <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                     <SelectItem value="0">None</SelectItem>
-                    <SelectItem value="custom">Custom — Pick Items</SelectItem>
                     <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={form.timeSlotId} />
                   </SelectContent>
                 </Select>
@@ -839,7 +860,93 @@ export default function ClientReservationsPage() {
               </div>
             ) : (
             <div className="space-y-2">
-              {isVirtualPackageId(form.packageId) ? (
+              {form.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
+                <>
+                  <ReservationVirtualPackagePanel
+                    packageId={form.packageId}
+                    particulars={particulars}
+                    particularQuantities={particularQuantities}
+                    onParticularQuantitiesChange={handleVirtualParticularQuantitiesChange}
+                    timeSlotId={form.timeSlotId}
+                    venueRentalSlot={form.venueRentalSlot}
+                    onVenueRentalSlotChange={handleVenueRentalSlotChange}
+                  />
+                  <Separator className="my-3" />
+                  <div className="space-y-2">
+                    <Label>Additional Services / Particulars</Label>
+                    <div className="space-y-2 border rounded-lg p-4">
+                      {particularsLoading ? (
+                        <p className="text-sm text-muted-foreground">Loading particulars...</p>
+                      ) : filterCustomParticulars(particulars).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No particulars available.</p>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {filterCustomParticulars(particulars).map((p) => {
+                            const qty = readParticularQuantity(
+                              particularQuantities,
+                              p.particularId
+                            );
+                            const cost = p.unitCost ? Number(p.unitCost) : 0;
+                            const maxQty = p.totalQuantity || 999;
+                            const isBasketball = p.particularName === "Basketball Game";
+                            const isAircon = p.particularName === "Aircon Compressor";
+                            const basketballOptions = [
+                              { value: 2, label: "Day w/o Shot Clock", price: 1000 },
+                              { value: 3, label: "Day w/ Shot Clock", price: 1500 },
+                              { value: 4, label: "Night w/o Shot Clock", price: 1500 },
+                              { value: 5, label: "Night w/ Shot Clock", price: 2000 },
+                            ];
+                            const airconTiers = [
+                              { qty: 4, label: "100-1K pax", price: 3200 },
+                              { qty: 6, label: "1K-3K pax", price: 4800 },
+                              { qty: 8, label: "4K-6K pax", price: 6400 },
+                              { qty: 10, label: "7K-10K pax", price: 8000 },
+                            ];
+                            return (
+                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                  {cost > 0 && !isBasketball && !isAircon && (
+                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
+                                  )}
+                                  {isBasketball && (
+                                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                      {basketballOptions.map((o) => (
+                                        <div key={o.value}>{o.label} = P{o.price.toLocaleString()}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {isAircon && (
+                                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                      {airconTiers.map((t) => (
+                                        <div key={t.qty}>{t.qty} units = P{t.price.toLocaleString()} ({t.label})</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {!isBasketball && !isAircon && (
+                                    <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                  )}
+                                </div>
+                                <ParticularQuantityStepper
+                                  value={qty}
+                                  max={maxQty}
+                                  buttonClassName="size-7"
+                                  onChange={(val) =>
+                                    setParticularQuantities((prev) => ({
+                                      ...prev,
+                                      [String(p.particularId)]: val,
+                                    }))
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : isVirtualPackageId(form.packageId) ? (
                 <ReservationVirtualPackagePanel
                   packageId={form.packageId}
                   particulars={particulars}
@@ -979,50 +1086,83 @@ export default function ClientReservationsPage() {
               />
             </div>
 
-            {/* Total Cost Summary */}
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Selected Dates</span>
-                  <span className="font-medium">{selectedDates.size || 1} day(s)</span>
-                </div>
-                {summaryLines.length > 0 ? (
-                  summaryLines.map((line, i) => (
-                    <div
-                      key={`${line.date || "line"}-${i}`}
-                      className={line.date ? "border-t pt-1 mt-1" : undefined}
-                    >
-                      {line.date && (
-                        <p className="text-xs font-medium text-muted-foreground">{line.date}</p>
-                      )}
-                      <div className="flex items-start justify-between gap-3 pl-2">
-                        <span className="min-w-0 wrap-break-word">{line.label}</span>
-                        <span className="shrink-0 tabular-nums font-medium">
-                          ₱{line.amount.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">No charges selected yet.</p>
+            </div>{/* end space-y-6 */}
+        </CardContent>
+      </Card>
+
+      {/* Reservation Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Reservation Summary</CardTitle>
+          <CardDescription>
+            Review the reservation details before submitting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span>Client</span>
+              <span className="font-medium">{clientInfo.name || "Client"}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span>Venue</span>
+              <span className="font-medium">
+                {form.venueId ? (form.venueId === "1" ? "Cultural Center" : "Sports Complex") : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span>Event Type</span>
+              <span className="font-medium">{form.eventType || "—"}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span>Date(s)</span>
+              <span className="font-medium text-right">
+                {selectedDates.size > 0
+                  ? `${[...selectedDates].sort().join(", ")}`
+                  : "—"}
+                {selectedDates.size > 1 && (
+                  <span className="text-xs text-muted-foreground ml-1">({selectedDates.size} days)</span>
                 )}
-                <Separator />
-                <div className="flex justify-between text-base font-bold">
-                  <span>Total</span>
-                  <span className="tabular-nums">₱{total.toLocaleString()}</span>
-                </div>
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span>Package</span>
+              <span className="font-medium">
+                {form.packageId && form.packageId !== "0"
+                  ? packages.find(p => String(p.packageId) === form.packageId)?.packageName || "Custom"
+                  : "None"}
+              </span>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Charge Breakdown</p>
+              {summaryLines.length > 0 ? (
+                summaryLines.map((line, i) => (
+                  <div key={`${line.date || "line"}-${i}`} className="flex items-start justify-between gap-3 pl-2">
+                    <span className="min-w-0 wrap-break-word">{line.label}</span>
+                    <span className="shrink-0 tabular-nums font-medium">
+                      ₱{line.amount.toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No charges selected yet.</p>
+              )}
+              <Separator />
+              <div className="flex justify-between text-base font-bold">
+                <span>Total</span>
+                <span className="tabular-nums">₱{total.toLocaleString()}</span>
               </div>
             </div>
-
             <Button
-              type="submit"
-              className="w-full md:w-auto"
+              type="button"
+              className="w-full"
               size="lg"
-              disabled={submitting}
+              disabled={submitting || !form.venueId || !form.eventType || selectedDates.size === 0}
+              onClick={handleSubmit}
             >
-              {submitting ? "Submitting..." : "Submit Reservation"}
+              {submitting ? "Submitting..." : "Generate Order of Payment"}
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
 
@@ -1060,14 +1200,66 @@ export default function ClientReservationsPage() {
                       </SelectTrigger>
                       <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                         <SelectItem value="0">None</SelectItem>
-                        <SelectItem value="custom">Custom — Pick Items</SelectItem>
                         <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || form.timeSlotId} />
                       </SelectContent>
                     </Select>
                   </div>
 
                   {/* Conditional: Package Inclusions or Particulars for this date */}
-                  {isVirtualPackageId(cust.packageId) ? (
+                  {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ? (
+                    <>
+                      <ReservationVirtualPackagePanel
+                        packageId={cust.packageId}
+                        particulars={particulars}
+                        particularQuantities={cust.particularQuantities || {}}
+                        onParticularQuantitiesChange={(pq) =>
+                          handleDateVirtualParticularQuantitiesChange(date, pq)
+                        }
+                        timeSlotId={cust.timeSlotId || form.timeSlotId}
+                        venueRentalSlot={cust.venueRentalSlot}
+                        onVenueRentalSlotChange={(val) =>
+                          handleDateVenueRentalSlotChange(date, val)
+                        }
+                        compact
+                      />
+                      <Separator className="my-2" />
+                      <div className="space-y-1">
+                        <Label className="text-xs">Additional Services / Particulars</Label>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {filterCustomParticulars(particulars).map((p) => {
+                            const qty = readParticularQuantity(
+                              cust.particularQuantities,
+                              p.particularId
+                            );
+                            const cost = p.unitCost ? Number(p.unitCost) : 0;
+                            const maxQty = p.totalQuantity || 999;
+                            return (
+                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
+                                  {cost > 0 && (
+                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                </div>
+                                <ParticularQuantityStepper
+                                  value={qty}
+                                  max={maxQty}
+                                  buttonClassName="size-7"
+                                  onChange={(val) =>
+                                    handleDateVirtualParticularQuantitiesChange(date, {
+                                      ...(cust.particularQuantities || {}),
+                                      [String(p.particularId)]: val,
+                                    })
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  ) : isVirtualPackageId(cust.packageId) ? (
                     <ReservationVirtualPackagePanel
                       packageId={cust.packageId}
                       particulars={particulars}

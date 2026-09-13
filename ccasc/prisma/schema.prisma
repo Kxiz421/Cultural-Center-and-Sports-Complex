@@ -88,6 +88,7 @@ model Client {
   otpExpiration      DateTime? @map("otp_expiration")
   clientRoleId       String  @map("client_role_id") @db.VarChar(10)
   clientOrgId        Int     @map("client_org_id")
+  otherOrganization  String? @map("other_organization") @db.VarChar(200)
   createdAt          DateTime @default(now()) @map("created_at")
 
   clientRole ClientRole         @relation(fields: [clientRoleId], references: [clientRoleId])

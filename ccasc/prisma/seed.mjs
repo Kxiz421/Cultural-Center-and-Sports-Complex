@@ -47,6 +47,7 @@ async function main() {
     prisma.clientOrganization.create({ data: { organizationName: 'South Cotabato State College' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'Villanueva Events Management' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'STI College Koronadal' } }),
+    prisma.clientOrganization.create({ data: { organizationName: 'Other' } }),
   ]);
   console.log(`✓ Created ${clientOrgs.length} client organizations`);
 

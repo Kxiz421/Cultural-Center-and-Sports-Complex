@@ -94,16 +94,22 @@ export async function POST(request) {
 
     // Handle organization
     let orgId;
+    let otherOrgValue = null;
     if (organizationId && organizationId !== "other") {
       orgId = parseInt(organizationId, 10);
     } else {
-      // Create a new organization for "Other"
-      const newOrg = await prisma.clientOrganization.create({
-        data: {
-          organizationName: otherOrganization,
-        },
+      // Use a single generic "Other" entry — find or create it once
+      const OTHER_ORG_NAME = "Other";
+      let otherOrg = await prisma.clientOrganization.findFirst({
+        where: { organizationName: OTHER_ORG_NAME },
       });
-      orgId = newOrg.clientOrgId;
+      if (!otherOrg) {
+        otherOrg = await prisma.clientOrganization.create({
+          data: { organizationName: OTHER_ORG_NAME },
+        });
+      }
+      orgId = otherOrg.clientOrgId;
+      otherOrgValue = otherOrganization; // store custom name on the client record
     }
 
     // Hash password
@@ -124,6 +130,7 @@ export async function POST(request) {
         verificationStatus: "Pending",
         clientRoleId: "PUB",
         clientOrgId: orgId,
+        otherOrganization: otherOrgValue,
       },
     });
 
