@@ -40,7 +40,7 @@ function normalizeFacilityIdList(ids) {
 
 /** Build { dateKey: facilityId[] } from body fields. */
 function resolveFacilityAssignments(body, allDateStrs) {
-  const { facilityAssignments, facilityIds } = body;
+  const { facilityAssignments, facilityQuantities, facilityIds } = body;
   const assignments = {};
 
   if (facilityAssignments && typeof facilityAssignments === "object") {
@@ -48,6 +48,24 @@ function resolveFacilityAssignments(body, allDateStrs) {
       const dateKey = parseSqlDate(date);
       if (!dateKey) continue;
       assignments[dateKey] = normalizeFacilityIdList(ids).map(String);
+    }
+  }
+
+  // Handle facilityQuantities map: { facilityId: qty }
+  if (facilityQuantities && typeof facilityQuantities === "object") {
+    const idsFromQty = Object.entries(facilityQuantities)
+      .filter(([, qty]) => Number(qty) > 0)
+      .map(([id]) => parseInt(id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0)
+      .map(String);
+    // Deduplicate
+    const uniqueIds = [...new Set(idsFromQty)];
+    if (uniqueIds.length > 0) {
+      for (const dateKey of allDateStrs) {
+        if (!assignments[dateKey]?.length) {
+          assignments[dateKey] = [...uniqueIds];
+        }
+      }
     }
   }
 
