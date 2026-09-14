@@ -52,11 +52,6 @@ const navMain = [
     icon: ClipboardList,
   },
   {
-    title: "Reports",
-    url: "/panel/admin/reports",
-    icon: FileBarChart,
-  },
-  {
     title: "Particulars Management",
     url: "/panel/admin/particulars",
     icon: Package,
@@ -75,6 +70,11 @@ const navMain = [
     title: "Announcements",
     url: "/panel/admin/announcements",
     icon: Megaphone,
+  },
+  {
+    title: "Reports",
+    url: "/panel/admin/reports",
+    icon: FileBarChart,
   },
 ];
 
