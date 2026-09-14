@@ -1589,6 +1589,7 @@ export default function CoordinatorReservationsPage() {
             {[...selectedDates].sort().map((date) => {
               const cust = dateCustomizations[date] || { facilityIds: [] };
               const dateFacilityIds = normalizeFacilityIds(cust.facilityIds ?? cust.facilityId);
+              const dateQtyMap = cust.facilityQuantities || {};
               return (
                 <div key={date} className="rounded-lg border p-4">
                   <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
@@ -1607,7 +1608,6 @@ export default function CoordinatorReservationsPage() {
                         {facilities.map((f) => {
                           const id = String(f.facilityId);
                           const reserved = (reservedByDate[date] || []).map(String).includes(id);
-                          const dateQtyMap = cust.facilityQuantities || {};
                           const qty = dateQtyMap[id] || 0;
                           const rate = getFacilityRateBySlot(f, cust.timeSlotId || timeSlotId);
                           const maxQty = getFacilityMaxQuantity(f);
