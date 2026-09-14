@@ -94,22 +94,42 @@ function normalizeFacilityIds(value) {
   return [];
 }
 
+/** Get the maximum quantity allowed for a facility (from DB capacity field). */
+function getFacilityMaxQuantity(facility) {
+  const capacity = Number(facility?.capacity ?? 0);
+  return capacity > 0 ? capacity : 99;
+}
+
+/** Check if any facility has a quantity > 0, given a quantities map. */
+function hasAnyFacilityQuantity(qtyMap) {
+  return Object.values(qtyMap).some((q) => Number(q) > 0);
+}
+
 function buildFacilitySummaryLines({
   facilities,
-  selectedFacilityIds,
+  facilityQuantities,
   selectedDatesCount,
   timeSlotId,
 }) {
   const lines = [];
   const numDays = Math.max(1, selectedDatesCount || 1);
-  for (const id of selectedFacilityIds) {
+  for (const [id, qty] of Object.entries(facilityQuantities || {})) {
+    const parsedQty = Number(qty) || 0;
+    if (parsedQty <= 0) continue;
     const facility = facilities.find((f) => String(f.facilityId) === String(id));
     if (!facility) continue;
     const rate = getFacilityRateBySlot(facility, timeSlotId);
+    const label =
+      numDays > 1
+        ? `${facility.name} × ${parsedQty} × ${numDays} day(s)`
+        : parsedQty > 1
+          ? `${facility.name} × ${parsedQty}`
+          : facility.name;
     lines.push({
-      label: numDays > 1 ? `${facility.name} × ${numDays} day(s)` : facility.name,
-      amount: rate * numDays,
+      label,
+      amount: rate * parsedQty * numDays,
       facilityId: String(facility.facilityId),
+      quantity: parsedQty,
     });
   }
   return lines;
