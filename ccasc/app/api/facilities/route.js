@@ -2,6 +2,67 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+const CULTURAL_CENTER_VENUE_ID = 1;
+
+/**
+ * Sync a Cultural Center facility to Inventory + Particular
+ * so it appears in the Venue Rental package option.
+ */
+async function syncFacilityToVenueRental(facility, rate) {
+  if (facility.venueId !== CULTURAL_CENTER_VENUE_ID) return;
+  const dayRate = Number(rate?.dayRate ?? 0);
+  if (dayRate <= 0) return;
+
+  const particularName = `Venue Rental – ${facility.facilityName}`;
+
+  // Find or create the Particular
+  let particular = await prisma.particular.findFirst({
+    where: { particularName },
+  });
+  if (!particular) {
+    particular = await prisma.particular.create({
+      data: {
+        particularName,
+        description: facility.description || `Venue rental for ${facility.facilityName}`,
+        statusId: facility.statusId,
+      },
+    });
+  }
+
+  // Find or create the Inventory item
+  let inventory = await prisma.inventory.findFirst({
+    where: { itemName: particularName, venueId: CULTURAL_CENTER_VENUE_ID },
+  });
+  if (!inventory) {
+    inventory = await prisma.inventory.create({
+      data: {
+        itemName: particularName,
+        unitCost: dayRate,
+        quantityAvailable: facility.capacity || 1,
+        venueId: CULTURAL_CENTER_VENUE_ID,
+        statusId: facility.statusId,
+      },
+    });
+  } else {
+    await prisma.inventory.update({
+      where: { itemId: inventory.itemId },
+      data: {
+        unitCost: dayRate,
+        quantityAvailable: facility.capacity || 1,
+        statusId: facility.statusId,
+      },
+    });
+  }
+
+  // Link particular to inventory
+  if (!particular.itemId || particular.itemId !== inventory.itemId) {
+    await prisma.particular.update({
+      where: { particularId: particular.particularId },
+      data: { itemId: inventory.itemId },
+    });
+  }
+}
+
 export async function GET() {
   try {
     const facilities = await prisma.facility.findMany({
@@ -68,6 +129,11 @@ export async function POST(request) {
         status: true
       }
     });
+
+    // Sync to Venue Rental inventory/particular for Cultural Center facilities
+    if (facility.venueId === CULTURAL_CENTER_VENUE_ID) {
+      await syncFacilityToVenueRental(facility, facility.rate);
+    }
 
     return NextResponse.json({
       id: `FAC-${facility.facilityId}`,
@@ -170,6 +236,11 @@ export async function PUT(request) {
         images: true
       }
     });
+
+    // Sync to Venue Rental inventory/particular for Cultural Center facilities
+    if (updated && updated.venueId === CULTURAL_CENTER_VENUE_ID) {
+      await syncFacilityToVenueRental(updated, updated.rate);
+    }
 
     return NextResponse.json({
       id: `FAC-${updated.facilityId}`,

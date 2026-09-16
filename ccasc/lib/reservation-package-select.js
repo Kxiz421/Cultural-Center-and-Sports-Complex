@@ -6,12 +6,15 @@ import {
   isBasketballEncodedQuantity,
   formatFormParticularLine,
 } from "@/lib/particular-options";
-import { TIME_SLOT, isDaySlot, isWholeDaySlot } from "@/lib/time-slots";
+import { TIME_SLOT, isDaySlot, isWholeDaySlot, timeSlotKey } from "@/lib/time-slots";
 
 export const VIRTUAL_PACKAGE_IDS = {
   BASKETBALL: "basketball",
   VENUE_RENTAL: "venue-rental",
 };
+
+/** Prefix used for Cultural Center facility items rendered inside the packages dropdown. */
+export const FACILITY_PACKAGE_PREFIX = "FAC-";
 
 export function isVirtualPackageId(packageId) {
   const id = String(packageId || "");
@@ -23,7 +26,18 @@ export function isVirtualPackageId(packageId) {
 
 export function isRegularPackageId(packageId) {
   const id = String(packageId || "");
-  return id && id !== "0" && id !== "custom" && !isVirtualPackageId(id);
+  return id && id !== "0" && id !== "custom" && !isVirtualPackageId(id) && !isFacilityPackageId(id);
+}
+
+/** Check whether a package ID refers to a Cultural Center facility item. */
+export function isFacilityPackageId(packageId) {
+  return String(packageId || "").startsWith(FACILITY_PACKAGE_PREFIX);
+}
+
+/** Extract the facilityId from a FAC-{facilityId} package value. */
+export function parseFacilityId(packageId) {
+  if (!isFacilityPackageId(packageId)) return null;
+  return parseInt(String(packageId).replace(FACILITY_PACKAGE_PREFIX, ""), 10);
 }
 
 /** Whether a package bundle includes the LED Wall inclusion or is an LED Wall package. */
@@ -161,33 +175,90 @@ export function findBasketballParticular(particulars) {
   return particulars.find((p) => p.particularName === BASKETBALL_NAME);
 }
 
-export function findVenueRentalParticulars(particulars) {
-  const day = particulars.find(
-    (p) =>
-      /venue rental/i.test(p.particularName || "") &&
-      /day/i.test(p.particularName || "")
-  );
-  const night = particulars.find(
-    (p) =>
-      /venue rental/i.test(p.particularName || "") &&
-      /night/i.test(p.particularName || "")
-  );
-  return { day, night };
+/** Base Venue Rental rows ("... Day Rate" / "... Night Rate"), not facility-specific rows. */
+export function isBaseVenueRentalParticular(particularName) {
+  const name = String(particularName || "");
+  return /venue rental/i.test(name) && /\b(day|night)\b/i.test(name);
 }
 
-export function getVenueRentalParticular(particulars, timeSlotId) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  if (isWholeDaySlot(timeSlotId)) return day || night;
-  return isDaySlot(timeSlotId) ? day : night;
+/** Facility-specific Venue Rental rows synced from Cultural Center facilities. */
+export function isFacilityVenueRentalParticular(particularName) {
+  const name = String(particularName || "");
+  return /venue rental/i.test(name) && !isBaseVenueRentalParticular(name);
+}
+
+/**
+ * Base Venue Rental items only. Facility-specific rows are excluded so the
+ * Venue Rental package never absorbs individual facility rates.
+ */
+export function findVenueRentalParticulars(particulars) {
+  return (particulars || []).filter((p) =>
+    isBaseVenueRentalParticular(p.particularName)
+  );
+}
+
+/** Facility-specific Venue Rental items (one per Cultural Center facility). */
+export function findFacilityVenueRentalParticulars(particulars) {
+  return (particulars || []).filter((p) =>
+    isFacilityVenueRentalParticular(p.particularName)
+  );
 }
 
 export function getVenueRentalParticularsForSlot(particulars, timeSlotId) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  if (isWholeDaySlot(timeSlotId)) {
-    return [day, night].filter(Boolean);
-  }
-  const one = isDaySlot(timeSlotId) ? day : night;
-  return one ? [one] : [];
+  const items = findVenueRentalParticulars(particulars);
+  if (items.length === 0) return [];
+  if (isWholeDaySlot(timeSlotId)) return items;
+  const isDayRow = (p) => /\bday\b/i.test(p.particularName || "");
+  const isNightRow = (p) => /\bnight\b/i.test(p.particularName || "");
+  const dayRows = items.filter(isDayRow);
+  const nightRows = items.filter(isNightRow);
+  if (isDaySlot(timeSlotId)) return dayRows.length > 0 ? dayRows : nightRows;
+  return nightRows.length > 0 ? nightRows : dayRows;
+}
+
+export function getVenueRentalParticular(particulars, timeSlotId) {
+  const items = getVenueRentalParticularsForSlot(particulars, timeSlotId);
+  return items.length > 0 ? items[0] : null;
+}
+
+/**
+ * Slot-aware facility rate.
+ * Day (1) = day rate, Night (2) = night rate, Whole Day (3) = day + night.
+ */
+export function getFacilityRateForSlot(facility, timeSlotId) {
+  const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
+  const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  const slot = timeSlotKey(timeSlotId || TIME_SLOT.DAY);
+  if (slot === TIME_SLOT.NIGHT) return nightRate > 0 ? nightRate : dayRate;
+  if (slot === TIME_SLOT.WHOLE_DAY) return dayRate + nightRate;
+  return dayRate > 0 ? dayRate : nightRate;
+}
+
+/**
+ * Charge line for a facility selected from the packages dropdown (FAC-{facilityId}).
+ * Priced from the facility catalogue so it never depends on particular naming.
+ */
+export function getFacilityPackageLine(
+  packageId,
+  { facilities = [], timeSlotId, venueRentalSlot, quantity = 1, days = 1 } = {}
+) {
+  const facilityId = parseFacilityId(packageId);
+  if (facilityId == null || Number.isNaN(facilityId)) return null;
+  const facility = (facilities || []).find(
+    (f) => String(f.facilityId) === String(facilityId)
+  );
+  const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
+  const unitRate = getFacilityRateForSlot(facility, slot);
+  const qty = Math.max(1, Number(quantity) || 1);
+  const dayCount = Math.max(1, Number(days) || 1);
+  return {
+    label: facility?.name ? facility.name : `Facility #${facilityId}`,
+    amount: unitRate * qty * dayCount,
+    facilityId: String(facilityId),
+    quantity: qty,
+    unitRate,
+    hasRate: unitRate > 0,
+  };
 }
 
 /** Prefer explicit venue rental slot; fall back to reservation time slot. */
@@ -332,6 +403,7 @@ export function buildReservationSummaryLines({
   selectedDatesCount,
   customizePerDate,
   dateCustomizations,
+  facilities = [],
 }) {
   const lines = [];
   const numDays = Math.max(1, selectedDatesCount || 1);
@@ -372,6 +444,20 @@ export function buildReservationSummaryLines({
                 date,
                 label: `${sessionLabel} — ${packageSummaryLabel(pkg, slot, packages)}`,
                 amount: rate,
+              });
+            }
+          } else if (isFacilityPackageId(pkgId)) {
+            const line = getFacilityPackageLine(pkgId, {
+              facilities,
+              timeSlotId: session.timeSlotId || timeSlotId,
+              venueRentalSlot: session.venueRentalSlot,
+            });
+            if (line) {
+              lines.push({
+                date,
+                label: `${sessionLabel} — ${line.label}`,
+                amount: line.amount,
+                facilityId: line.facilityId,
               });
             }
           } else if (pkgId === "0" || pkgId === "custom" || !pkgId) {
@@ -424,6 +510,20 @@ export function buildReservationSummaryLines({
               date,
               label: packageSummaryLabel(pkg, slot, packages),
               amount: rate,
+            });
+          }
+        } else if (isFacilityPackageId(cust.packageId)) {
+          const line = getFacilityPackageLine(cust.packageId, {
+            facilities,
+            timeSlotId: cust.timeSlotId || timeSlotId,
+            venueRentalSlot: cust.venueRentalSlot,
+          });
+          if (line) {
+            lines.push({
+              date,
+              label: line.label,
+              amount: line.amount,
+              facilityId: line.facilityId,
             });
           }
         } else if (
@@ -485,6 +585,21 @@ export function buildReservationSummaryLines({
       lines.push({
         label: numDays > 1 ? `${label} × ${numDays} day(s)` : label,
         amount: rate * numDays,
+      });
+    }
+  } else if (isFacilityPackageId(packageId)) {
+    const line = getFacilityPackageLine(packageId, {
+      facilities,
+      timeSlotId,
+      venueRentalSlot,
+      days: numDays,
+    });
+    if (line) {
+      lines.push({
+        label: line.label,
+        amount: line.amount,
+        facilityId: line.facilityId,
+        quantity: line.quantity,
       });
     }
   } else if (packageId === "custom" || packageId === "0" || !packageId) {
@@ -553,6 +668,16 @@ export function getVirtualPackageParticulars(
     return entry ? [entry] : [];
   }
 
+  if (isFacilityPackageId(packageId)) {
+    // Return particular entries for the selected facility from particularQuantities
+    return Object.entries(particularQuantities || {})
+      .filter(([, qty]) => qty > 0)
+      .map(([partId, qty]) => ({
+        particularId: parseInt(partId, 10),
+        quantity: qty,
+      }));
+  }
+
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
     const slot = resolveVenueRentalSlot(venueRentalSlot, timeSlotId);
     const venueEntries = getVenueRentalParticularsForSlot(particulars, slot).map((vr) => ({
@@ -591,6 +716,17 @@ export function calculateVirtualPackageAmount(
       }
     }
     return 0;
+  }
+
+  if (isFacilityPackageId(packageId)) {
+    // Legacy path: facility packages are priced from the facility catalogue
+    // (see getFacilityPackageLine); fall back to summing selected particulars.
+    return Object.entries(particularQuantities || {}).reduce((sum, [partId, qty]) => {
+      const count = Number(qty) || 0;
+      if (count <= 0) return sum;
+      const part = particulars.find((p) => String(p.particularId) === String(partId));
+      return sum + (part?.unitCost ? Number(part.unitCost) * count : 0);
+    }, 0);
   }
 
   if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
@@ -656,13 +792,15 @@ export function getVirtualPackageDisplayInfo(
 }
 
 export function getVenueRentalPriceHint(particulars) {
-  const { day, night } = findVenueRentalParticulars(particulars);
+  const items = findVenueRentalParticulars(particulars);
+  const sumRows = (rows) =>
+    rows.reduce((sum, item) => sum + (item.unitCost ? Number(item.unitCost) : 0), 0);
+  const dayPrice = sumRows(items.filter((p) => /\bday\b/i.test(p.particularName || "")));
+  const nightPrice = sumRows(items.filter((p) => /\bnight\b/i.test(p.particularName || "")));
   return {
-    dayPrice: day?.unitCost ? Number(day.unitCost) : 0,
-    nightPrice: night?.unitCost ? Number(night.unitCost) : 0,
-    wholeDayPrice:
-      (day?.unitCost ? Number(day.unitCost) : 0) +
-      (night?.unitCost ? Number(night.unitCost) : 0),
+    dayPrice,
+    nightPrice,
+    wholeDayPrice: dayPrice + nightPrice,
   };
 }
 
@@ -674,8 +812,7 @@ export function hasBasketballPackageOption(particulars) {
 }
 
 export function hasVenueRentalPackageOption(particulars) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  return Boolean(day || night);
+  return findVenueRentalParticulars(particulars).length > 0;
 }
 
 export { BASKETBALL_OPTIONS };

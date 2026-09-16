@@ -13,6 +13,7 @@ import {
   getVenueRentalPriceHint,
   resolveVenueRentalSlot,
   VIRTUAL_PACKAGE_IDS,
+  FACILITY_PACKAGE_PREFIX,
   BASKETBALL_OPTIONS,
   hasBasketballPackageOption,
   hasVenueRentalPackageOption,
@@ -21,6 +22,7 @@ import {
   formatPackageRateHint,
   getPackageSlotRate,
   packageIncludesLedWall,
+  getFacilityRateForSlot,
 } from "@/lib/reservation-package-select";
 import { TIME_SLOT, isDaySlot, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
 
@@ -123,11 +125,41 @@ export function ReservationVirtualPackagePanel({
   return null;
 }
 
+/** Render a single Cultural Center facility as a selectable package item. */
+function renderFacilitySelectItem(facility, timeSlotId) {
+  const rate = getFacilityRateForSlot(facility, timeSlotId);
+  const value = `${FACILITY_PACKAGE_PREFIX}${facility.facilityId}`;
+  return (
+    <SelectItem key={value} value={value} itemText={facility.name}>
+      {rate > 0 && (
+        <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+          — ₱{rate.toLocaleString()}
+        </span>
+      )}
+    </SelectItem>
+  );
+}
+
+/** Render Cultural Center facilities section (only for Cultural Center venue). */
+function renderFacilitiesSection(facilities, timeSlotId, venueId) {
+  if (String(venueId) !== "1") return null;
+  if (!facilities || facilities.length === 0) return null;
+  const active = facilities.filter((f) => f.statusId === 1);
+  if (active.length === 0) return null;
+  return (
+    <>
+      {active.map((facility) => renderFacilitySelectItem(facility, timeSlotId))}
+    </>
+  );
+}
+
 export function ReservationPackageSelectItems({
   packages,
   particulars,
   timeSlotId,
   sessionType,
+  facilities,
+  venueId,
 }) {
   // When a session type is provided, filter accordingly (no Whole Day grouping)
   if (sessionType) {
@@ -145,6 +177,7 @@ export function ReservationPackageSelectItems({
         {sessionType === "night" && hasVenueRentalPackageOption(particulars) && (
           <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental — Night</SelectItem>
         )}
+        {renderFacilitiesSection(facilities, slot, venueId)}
         {filteredPackages.map((pkg) => {
           const rate = getPackageSlotRate(pkg, slot, packages);
           return (
@@ -153,10 +186,9 @@ export function ReservationPackageSelectItems({
               value={String(pkg.packageId)}
               itemText={pkg.packageName}
             >
-              {pkg.packageName}
               {rate > 0 && (
                 <span className="text-xs font-normal whitespace-normal text-muted-foreground">
-                  {" "}— ₱{rate.toLocaleString()}
+                  — ₱{rate.toLocaleString()}
                 </span>
               )}
             </SelectItem>
@@ -189,6 +221,7 @@ export function ReservationPackageSelectItems({
         {hasVenueRentalPackageOption(particulars) && (
           <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental</SelectItem>
         )}
+        {renderFacilitiesSection(facilities, timeSlotId, venueId)}
         {standardDay && (
           <SelectItem value={String(standardDay.packageId)}>
             <span className="font-medium">Whole Day Package (without LED Wall)</span>
@@ -217,6 +250,7 @@ export function ReservationPackageSelectItems({
       {hasVenueRentalPackageOption(particulars) && (
         <SelectItem value={VIRTUAL_PACKAGE_IDS.VENUE_RENTAL}>Venue Rental</SelectItem>
       )}
+      {renderFacilitiesSection(facilities, timeSlotId, venueId)}
       {packages
         .filter((p) => p.statusId === 1)
         .map((pkg) => {
@@ -227,10 +261,9 @@ export function ReservationPackageSelectItems({
               value={String(pkg.packageId)}
               itemText={pkg.packageName}
             >
-              {pkg.packageName}
               {rateHint ? (
                 <span className="text-xs font-normal whitespace-normal text-muted-foreground">
-                  {" "}— {rateHint}
+                  — {rateHint}
                 </span>
               ) : null}
             </SelectItem>

@@ -162,32 +162,19 @@ export function findBasketballParticular(particulars) {
 }
 
 export function findVenueRentalParticulars(particulars) {
-  const day = particulars.find(
-    (p) =>
-      /venue rental/i.test(p.particularName || "") &&
-      /day/i.test(p.particularName || "")
+  const venueRentals = particulars.filter(
+    (p) => /venue rental/i.test(p.particularName || "")
   );
-  const night = particulars.find(
-    (p) =>
-      /venue rental/i.test(p.particularName || "") &&
-      /night/i.test(p.particularName || "")
-  );
-  return { day, night };
+  return venueRentals;
 }
 
 export function getVenueRentalParticular(particulars, timeSlotId) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  if (isWholeDaySlot(timeSlotId)) return day || night;
-  return isDaySlot(timeSlotId) ? day : night;
+  const items = findVenueRentalParticulars(particulars);
+  return items.length > 0 ? items[0] : null;
 }
 
 export function getVenueRentalParticularsForSlot(particulars, timeSlotId) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  if (isWholeDaySlot(timeSlotId)) {
-    return [day, night].filter(Boolean);
-  }
-  const one = isDaySlot(timeSlotId) ? day : night;
-  return one ? [one] : [];
+  return findVenueRentalParticulars(particulars);
 }
 
 /** Prefer explicit venue rental slot; fall back to reservation time slot. */
@@ -564,13 +551,15 @@ export function getVirtualPackageDisplayInfo(
 }
 
 export function getVenueRentalPriceHint(particulars) {
-  const { day, night } = findVenueRentalParticulars(particulars);
+  const items = findVenueRentalParticulars(particulars);
+  const totalPrice = items.reduce(
+    (sum, item) => sum + (item.unitCost ? Number(item.unitCost) : 0),
+    0
+  );
   return {
-    dayPrice: day?.unitCost ? Number(day.unitCost) : 0,
-    nightPrice: night?.unitCost ? Number(night.unitCost) : 0,
-    wholeDayPrice:
-      (day?.unitCost ? Number(day.unitCost) : 0) +
-      (night?.unitCost ? Number(night.unitCost) : 0),
+    dayPrice: totalPrice,
+    nightPrice: totalPrice,
+    wholeDayPrice: totalPrice,
   };
 }
 
@@ -582,8 +571,7 @@ export function hasBasketballPackageOption(particulars) {
 }
 
 export function hasVenueRentalPackageOption(particulars) {
-  const { day, night } = findVenueRentalParticulars(particulars);
-  return Boolean(day || night);
+  return findVenueRentalParticulars(particulars).length > 0;
 }
 
 export { BASKETBALL_OPTIONS };

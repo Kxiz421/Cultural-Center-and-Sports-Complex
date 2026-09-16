@@ -34,6 +34,8 @@ import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, Rot
 import {
   isVirtualPackageId,
   isRegularPackageId,
+  isFacilityPackageId,
+  parseFacilityId,
   VIRTUAL_PACKAGE_IDS,
   filterCustomParticulars,
   getVirtualPackageParticulars,
@@ -174,6 +176,7 @@ export default function WalkInReservationPage() {
   // Sports Complex facilities
   const [facilities, setFacilities] = React.useState([]);
   const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
+  const [facilityQuantities, setFacilityQuantities] = React.useState({});
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
   /** dateKey → facilityId[] already reserved by other reservations */
   const [reservedByDate, setReservedByDate] = React.useState({});
@@ -219,16 +222,16 @@ export default function WalkInReservationPage() {
     loadData();
   }, []);
 
-  // Load Sports Complex facilities when venue changes to Sports Complex (venueId=2)
+  // Load facilities based on venue selection
   React.useEffect(() => {
-    if (venueId === "2") {
+    if (venueId === "2" || venueId === "1") {
       setFacilitiesLoading(true);
       fetch("/api/facilities")
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
-            const sportsFacilities = data.filter((item) => item.venueId === 2);
-            setFacilities(sportsFacilities);
+            const matchingFacilities = data.filter((item) => item.venueId === parseInt(venueId, 10));
+            setFacilities(matchingFacilities);
           } else {
             setFacilities([]);
           }
@@ -242,6 +245,7 @@ export default function WalkInReservationPage() {
       setFacilities([]);
       setSelectedFacilityIds([]);
       setReservedByDate({});
+      setFacilityQuantities({});
     }
   }, [venueId]);
 
@@ -501,9 +505,21 @@ export default function WalkInReservationPage() {
       toast.error("This facility is already reserved on one of the selected dates.");
       return;
     }
-    setSelectedFacilityIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedFacilityIds((prev) => {
+      if (prev.includes(id)) {
+        setFacilityQuantities((qPrev) => {
+          const next = { ...qPrev };
+          delete next[id];
+          return next;
+        });
+        return prev.filter((x) => x !== id);
+      } else {
+        const facility = facilities.find((f) => String(f.facilityId) === id);
+        const maxQty = facility ? (facility.capacity > 0 ? facility.capacity : 99) : 99;
+        setFacilityQuantities((qPrev) => ({ ...qPrev, [id]: 1 }));
+        return [...prev, id];
+      }
+    });
   };
 
   const handleDateVirtualParticularQuantitiesChange = (date, pq) => {
@@ -533,6 +549,29 @@ export default function WalkInReservationPage() {
   };
 
   const handlePackageSelect = (value) => {
+    // Cultural Center facility rental selected from the packages dropdown.
+    // Priced from the facility's own rate — see buildReservationSummaryLines.
+    if (isFacilityPackageId(value)) {
+      setPackageId(value);
+      setVenueRentalSlot("");
+      setParticularQuantities({});
+      if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
+        setDateCustomizations((prev) => {
+          const updated = { ...prev };
+          for (const date of Object.keys(updated)) {
+            updated[date] = {
+              ...updated[date],
+              packageId: value,
+              particularQuantities: {},
+              venueRentalSlot: "",
+              timeSlotId: updated[date]?.timeSlotId || timeSlotId,
+            };
+          }
+          return updated;
+        });
+      }
+      return;
+    }
     if (isVirtualPackageId(value)) {
       setPackageId(value);
       if (value === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
@@ -569,7 +608,6 @@ export default function WalkInReservationPage() {
           timeSlotAfterPackageChange(prev, selectedPkg.timeSlotId)
         );
         setParticularQuantities({});
-        // Sync per-date customizations when package changes and customize mode is active
         if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
           setDateCustomizations((prev) => {
             const updated = { ...prev };
@@ -585,7 +623,6 @@ export default function WalkInReservationPage() {
     setPackageId(value);
     if (value === "custom" || value === "0") {
       setParticularQuantities({});
-      // Sync per-date customizations when package changes and customize mode is active
       if (customizePerDate && Object.keys(dateCustomizations).length > 0) {
         setDateCustomizations((prev) => {
           const updated = { ...prev };
@@ -600,9 +637,27 @@ export default function WalkInReservationPage() {
 
   // Per-date customization handlers — morning/night sessions
   const handleDateSessionPackageSelect = (date, session, pkgId) => {
-    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
     let nextTimeSlotId =
       dateCustomizations[date]?.[session]?.timeSlotId || (session === "morning" ? TIME_SLOT.DAY : TIME_SLOT.NIGHT);
+    // Cultural Center facility rental for this date/session (priced from the facility rate)
+    if (isFacilityPackageId(pkgId)) {
+      setDateCustomizations((prev) => ({
+        ...prev,
+        [date]: {
+          ...prev[date],
+          [session]: {
+            ...prev[date]?.[session],
+            enabled: true,
+            packageId: pkgId,
+            timeSlotId: nextTimeSlotId,
+            venueRentalSlot: "",
+            particularQuantities: {},
+          },
+        },
+      }));
+      return;
+    }
+    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
 
     if (selectedPkg && isRegularPackageId(pkgId)) {
       nextTimeSlotId = timeSlotAfterPackageChange(
@@ -641,9 +696,23 @@ export default function WalkInReservationPage() {
 
   // Legacy single-package per date handler (backward compatibility)
   const handleDatePackageSelect = (date, pkgId) => {
-    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
     let nextTimeSlotId =
       dateCustomizations[date]?.timeSlotId || timeSlotId || "1";
+    // Cultural Center facility rental for this date (priced from the facility rate)
+    if (isFacilityPackageId(pkgId)) {
+      setDateCustomizations((prev) => ({
+        ...prev,
+        [date]: {
+          ...prev[date],
+          packageId: pkgId,
+          timeSlotId: nextTimeSlotId,
+          venueRentalSlot: "",
+          particularQuantities: {},
+        },
+      }));
+      return;
+    }
+    const selectedPkg = packages.find((p) => String(p.packageId) === pkgId);
 
     if (selectedPkg && isRegularPackageId(pkgId)) {
       nextTimeSlotId = timeSlotAfterPackageChange(
@@ -733,6 +802,7 @@ export default function WalkInReservationPage() {
   const toggleCustomizeMode = () => {
     if (!customizePerDate) {
       const initial = {};
+      const isSports = venueId === "2";
       for (const date of selectedDates) {
         initial[date] = {
           morning: {
@@ -749,6 +819,7 @@ export default function WalkInReservationPage() {
             timeSlotId: TIME_SLOT.NIGHT,
             venueRentalSlot: "",
           },
+          ...(isSports ? { facilityIds: [...selectedFacilityIds] } : {}),
         };
       }
       setDateCustomizations(initial);
@@ -998,7 +1069,19 @@ export default function WalkInReservationPage() {
           clientEmail: isExistingUser && selectedClient ? selectedClient.email : clientEmail,
           particulars: selectedParticulars.length > 0 ? selectedParticulars : undefined,
           chargeLines: summaryLines,
-          ...(isSportsComplex ? { facilityIds: selectedFacilityIds } : {}),
+          ...(isSportsComplex
+            ? customizePerDate
+              ? {
+                  facilityAssignments: Object.fromEntries(
+                    [...new Set([primaryDate, ...sortedDates].filter(Boolean))].sort().map((date) => [
+                      date,
+                      (dateCustomizations[date]?.facilityIds || []).map(String),
+                    ])
+                  ),
+                  facilityQuantities,
+                }
+              : { facilityIds: selectedFacilityIds, facilityQuantities }
+            : {}),
         }),
       });
 
@@ -1032,6 +1115,7 @@ export default function WalkInReservationPage() {
       setEventDates([]);
       setSelectedFacilityIds([]);
       setReservedByDate({});
+      setFacilityQuantities({});
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -1072,13 +1156,18 @@ export default function WalkInReservationPage() {
     if (isRegularPackageId(packageId)) {
       return packages.find((p) => String(p.packageId) === packageId)?.packageName || "—";
     }
+    if (isFacilityPackageId(packageId)) {
+      const facilityId = parseFacilityId(packageId);
+      const facility = facilities.find((f) => f.facilityId === facilityId);
+      return facility?.name || "Facility";
+    }
     return "—";
   };
 
   const summaryLines = isSportsComplex
     ? buildFacilitySummaryLines({
         facilities,
-        selectedFacilityIds,
+        facilityQuantities,
         selectedDatesCount: selectedDates.size,
         timeSlotId,
       })
@@ -1092,6 +1181,7 @@ export default function WalkInReservationPage() {
         selectedDatesCount: selectedDates.size,
         customizePerDate,
         dateCustomizations,
+        facilities,
       });
   const total = sumReservationSummaryLines(summaryLines);
 
@@ -1176,6 +1266,99 @@ export default function WalkInReservationPage() {
           </div>
         )}
         {availLoading && <p className="text-xs text-muted-foreground text-center">Loading availability...</p>}
+      </div>
+    );
+  };
+const renderPerDateFacilities = (date, cust) => {
+    const dateReservedIds = new Set((reservedByDate[date] || []).map(String));
+    const availableFacilities = facilities.filter((f) => !dateReservedIds.has(String(f.facilityId)));
+    const availableIds = availableFacilities.map((f) => String(f.facilityId));
+    const dateFacilityIds = cust.facilityIds || [];
+    const selectedAvailable = availableIds.filter((id) => dateFacilityIds.includes(id));
+    const allSelected = availableIds.length > 0 && selectedAvailable.length === availableIds.length;
+    const someSelected = selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+
+    return (
+      <div className="space-y-2 mb-4">
+        <Label className="text-xs">Facilities for {date}</Label>
+        {facilities.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-1">No facilities available.</p>
+        ) : (
+          <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+            {/* Select All */}
+            <label
+              className="flex items-center gap-3 px-3 py-2 text-sm border-b cursor-pointer hover:bg-muted/40"
+              onClick={() => {
+                if (allSelected) {
+                  setDateCustomizations((prev) => ({
+                    ...prev,
+                    [date]: {
+                      ...prev[date],
+                      facilityIds: (prev[date]?.facilityIds || []).filter(
+                        (id) => !availableIds.includes(String(id))
+                      ),
+                    },
+                  }));
+                } else {
+                  setDateCustomizations((prev) => {
+                    const existing = new Set((prev[date]?.facilityIds || []).map(String));
+                    availableIds.forEach((id) => existing.add(id));
+                    return {
+                      ...prev,
+                      [date]: { ...prev[date], facilityIds: [...existing] },
+                    };
+                  });
+                }
+              }}
+            >
+              <Checkbox
+                checked={someSelected ? "indeterminate" : allSelected}
+              />
+              <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground text-xs">
+                Select All
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {selectedAvailable.length}/{availableIds.length} available
+              </span>
+            </label>
+            {facilities.map((f) => {
+              const id = String(f.facilityId);
+              const dateReserved = dateReservedIds.has(id);
+              const checked = dateFacilityIds.includes(id);
+              const rate = getFacilityRateBySlot(f, cust.morning?.timeSlotId || timeSlotId);
+              return (
+                <label
+                  key={id}
+                  className={`flex items-center gap-3 px-3 py-2 text-sm ${
+                    dateReserved
+                      ? "cursor-not-allowed opacity-60"
+                      : "cursor-pointer hover:bg-muted/40"
+                  }`}
+                  onClick={() => {
+                    if (dateReserved) return;
+                    setDateCustomizations((prev) => {
+                      const existing = prev[date]?.facilityIds || [];
+                      const next = existing.includes(id)
+                        ? existing.filter((x) => x !== id)
+                        : [...existing, id];
+                      return { ...prev, [date]: { ...prev[date], facilityIds: next } };
+                    });
+                  }}
+                >
+                  <Checkbox checked={checked} disabled={dateReserved} />
+                  <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                  {dateReserved ? (
+                    <span className="shrink-0 text-xs text-destructive">Reserved</span>
+                  ) : (
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      ₱{rate.toLocaleString()}/day
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -1453,7 +1636,7 @@ export default function WalkInReservationPage() {
                   </SelectTrigger>
                   <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                     <SelectItem value="0">None</SelectItem>
-                    <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} />
+                    <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} facilities={facilities} venueId={venueId} />
                   </SelectContent>
                 </Select>
                 {customizePerDate && (
@@ -1482,12 +1665,65 @@ export default function WalkInReservationPage() {
                   <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
                 ) : (
                   <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+                    {/* Select All */}
+                    {(() => {
+                      const availableFacilities = facilities.filter(
+                        (f) => !reservedFacilityIdsGlobal.has(String(f.facilityId))
+                      );
+                      const availableIds = availableFacilities.map((f) => String(f.facilityId));
+                      const selectedAvailable = availableIds.filter((id) =>
+                        selectedFacilityIds.includes(id)
+                      );
+                      const allSelected =
+                        availableIds.length > 0 && selectedAvailable.length === availableIds.length;
+                      const someSelected =
+                        selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+                      const selectAllDisabled = selectedDates.size === 0;
+                      return (
+                        <label
+                          className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
+                            selectAllDisabled
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:bg-muted/40"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
+                            onCheckedChange={(checked) => {
+                              if (selectAllDisabled) return;
+                              if (checked) {
+                                setSelectedFacilityIds((prev) => {
+                                  const next = new Set(prev.map(String));
+                                  availableIds.forEach((id) => next.add(id));
+                                  return Array.from(next);
+                                });
+                              } else {
+                                setSelectedFacilityIds((prev) =>
+                                  prev.filter((id) => !availableIds.includes(String(id)))
+                                );
+                              }
+                            }}
+                            disabled={selectAllDisabled}
+                          />
+                          <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground">
+                            Select All
+                          </span>
+                          {availableIds.length > 0 && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {selectedAvailable.length}/{availableIds.length} available
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })()}
                     {facilities.map((f) => {
                       const id = String(f.facilityId);
                       const reserved = reservedFacilityIdsGlobal.has(id);
                       const checked = selectedFacilityIds.includes(id);
                       const rate = getFacilityRateBySlot(f, timeSlotId);
                       const disabled = reserved || selectedDates.size === 0;
+                      const maxQty = f.capacity > 0 ? f.capacity : 99;
+                      const currentQty = facilityQuantities[id] || 0;
                       return (
                         <label
                           key={id}
@@ -1508,14 +1744,45 @@ export default function WalkInReservationPage() {
                               ₱{rate.toLocaleString()}/day
                             </span>
                           )}
+                          {checked && (
+                            <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] text-muted-foreground mr-1">Qty:</span>
+                              <button
+                                type="button"
+                                className="size-6 rounded border border-input bg-background text-xs font-medium hover:bg-accent disabled:opacity-30"
+                                disabled={currentQty <= 1}
+                                onClick={() => {
+                                  setFacilityQuantities((prev) => {
+                                    const next = { ...prev };
+                                    const newVal = Math.max(1, (next[id] || 1) - 1);
+                                    if (newVal <= 0) delete next[id];
+                                    else next[id] = newVal;
+                                    return next;
+                                  });
+                                }}
+                              >−</button>
+                              <span className="tabular-nums text-xs font-medium w-6 text-center">{currentQty}</span>
+                              <button
+                                type="button"
+                                className="size-6 rounded border border-input bg-background text-xs font-medium hover:bg-accent disabled:opacity-30"
+                                disabled={currentQty >= maxQty}
+                                onClick={() => {
+                                  setFacilityQuantities((prev) => ({
+                                    ...prev,
+                                    [id]: Math.min(maxQty, (prev[id] || 1) + 1),
+                                  }));
+                                }}
+                              >+</button>
+                            </div>
+                          )}
                         </label>
                       );
                     })}
                   </div>
                 )}
-                {selectedFacilityIds.length > 0 && (
+                {Object.keys(facilityQuantities).length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {selectedFacilityIds.length} facilit{selectedFacilityIds.length === 1 ? "y" : "ies"} selected
+                    {Object.entries(facilityQuantities).reduce((sum, [, q]) => sum + (Number(q) || 0), 0)} unit(s) selected
                   </p>
                 )}
               </div>
@@ -1558,7 +1825,8 @@ export default function WalkInReservationPage() {
                               p.particularId
                             );
                             const cost = p.unitCost ? Number(p.unitCost) : 0;
-                            const maxQty = p.totalQuantity || 999;
+                            const maxQty = p.totalQuantity >= 0 ? p.totalQuantity : 999;
+                            const hasInventory = p.itemId !== null && p.itemId !== undefined;
                             const isAircon = p.particularName === "Aircon Compressor";
                             const airconTiers = [
                               { qty: 4, label: "100-1K pax", price: 3200 },
@@ -1581,7 +1849,9 @@ export default function WalkInReservationPage() {
                                     </div>
                                   )}
                                   {!isAircon && (
-                                    <p className="text-xs text-muted-foreground">Available: {maxQty}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {hasInventory ? `Available: ${maxQty}` : "No inventory record — contact admin"}
+                                    </p>
                                   )}
                                 </div>
                                 <ParticularQuantityStepper
@@ -1874,7 +2144,7 @@ export default function WalkInReservationPage() {
                             </SelectTrigger>
                             <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                               <SelectItem value="0">None</SelectItem>
-                              <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotForSession} sessionType={sessionKey} />
+                              <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotForSession} sessionType={sessionKey} facilities={facilities} venueId={venueId} />
                             </SelectContent>
                           </Select>
                         </div>
@@ -1902,7 +2172,8 @@ export default function WalkInReservationPage() {
                                     {filterCustomParticulars(particulars).map((p) => {
                                       const qty = readParticularQuantity(s.particularQuantities || {}, p.particularId);
                                       const cost = p.unitCost ? Number(p.unitCost) : 0;
-                                      const maxQty = p.totalQuantity || 999;
+                                      const maxQty = p.totalQuantity >= 0 ? p.totalQuantity : 999;
+                                      const hasInventory = p.itemId !== null && p.itemId !== undefined;
                                       const isAircon = p.particularName === "Aircon Compressor";
                                       return (
                                         <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
@@ -1910,6 +2181,11 @@ export default function WalkInReservationPage() {
                                             <p className="text-xs font-medium truncate">{p.particularName}</p>
                                             {cost > 0 && !isAircon && (
                                               <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
+                                            )}
+                                            {!isAircon && (
+                                              <p className="text-[10px] text-muted-foreground">
+                                                {hasInventory ? `Available: ${maxQty}` : "No inventory record"}
+                                              </p>
                                             )}
                                           </div>
                                           <ParticularQuantityStepper
@@ -1941,6 +2217,7 @@ export default function WalkInReservationPage() {
                     <Calendar className="size-4 text-muted-foreground" />
                     {date}
                   </h4>
+                  {isSportsComplex && renderPerDateFacilities(date, cust)}
                   {dateCustomizations[date]?.morning || dateCustomizations[date]?.night ? (
                     <>
                       {renderSessionControls(cust, "morning", "Morning Session", TIME_SLOT.DAY)}
@@ -1956,7 +2233,7 @@ export default function WalkInReservationPage() {
                         </SelectTrigger>
                         <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
                           <SelectItem value="0">None</SelectItem>
-                          <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} />
+                          <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} facilities={facilities} venueId={venueId} />
                         </SelectContent>
                       </Select>
                     </div>

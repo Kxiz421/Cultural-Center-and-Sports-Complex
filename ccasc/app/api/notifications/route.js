@@ -50,9 +50,13 @@ export async function GET(request) {
 
     if (searchParams.get("unreadCountOnly") === "true") {
       if (clientId) {
+        const parsedClientId = parseInt(clientId, 10);
+        if (isNaN(parsedClientId)) {
+          return noCacheJson({ unreadCount: 0 });
+        }
         const unreadCount = await prisma.notification.count({
           where: {
-            clientId: parseInt(clientId, 10),
+            clientId: parsedClientId,
             isRead: false,
           },
         });

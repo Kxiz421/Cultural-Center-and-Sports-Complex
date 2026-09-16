@@ -192,8 +192,23 @@ model Particular {
   inventory           Inventory?           @relation(fields: [itemId], references: [itemId])
   status              AvailabilityStatus   @relation(fields: [statusId], references: [statusId])
   reservedParticulars ReservedParticular[]
+  transactions        ParticularTransaction[]
 
   @@map("Particular")
+}
+
+model ParticularTransaction {
+  transactionId   Int      @id @default(autoincrement()) @map("transaction_id")
+  particularId    Int      @map("particular_id")
+  transactionType String   @map("transaction_type") @db.VarChar(20)
+  quantity        Int      @map("quantity")
+  performedById   String   @map("performed_by_id") @db.VarChar(50)
+  performedByName String   @map("performed_by_name") @db.VarChar(200)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  particular Particular @relation(fields: [particularId], references: [particularId])
+
+  @@map("ParticularTransaction")
 }
 
 model Inventory {

@@ -365,7 +365,7 @@ export default function FacilitiesPage() {
   const culturalFacilities = filtered.filter((f) => f.venueId === 1);
   const sportsFacilities = filtered.filter((f) => f.venueId === 2);
 
-  const renderFacilityTable = (facilitiesList, title, Icon, color) => {
+  const renderFacilityTable = (facilitiesList, title, Icon, color, hideCapacity) => {
     return (
       <Card className="flex flex-col">
         <CardHeader className={`border-b pb-3 ${color}`}>
@@ -389,7 +389,7 @@ export default function FacilitiesPage() {
                 <TableHead>Facility</TableHead>
                 <TableHead>Day Rate</TableHead>
                 <TableHead>Night Rate</TableHead>
-                <TableHead>Capacity</TableHead>
+                {!hideCapacity && <TableHead>Capacity</TableHead>}
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -398,7 +398,7 @@ export default function FacilitiesPage() {
               {facilitiesList.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={hideCapacity ? 5 : 6}
                     className="text-center text-muted-foreground py-6"
                   >
                     No facilities in this venue
@@ -416,7 +416,7 @@ export default function FacilitiesPage() {
                       <TableCell className="tabular-nums">
                         {formatPhp(f.rateDaily)}
                       </TableCell>
-                      <TableCell>{f.capacity || "—"}</TableCell>
+                      {!hideCapacity && <TableCell>{f.capacity || "—"}</TableCell>}
                       <TableCell>
                         <Badge
                           variant={
@@ -539,6 +539,7 @@ export default function FacilitiesPage() {
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                {addForm.venueId !== "2" && (
                 <div className="space-y-2">
                   <Label htmlFor="add-capacity">Capacity (pax)</Label>
                   <Input
@@ -553,6 +554,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="add-venue">Venue *</Label>
                   <Select
@@ -770,7 +772,8 @@ export default function FacilitiesPage() {
             sportsFacilities,
             "Sports Complex",
             Trophy,
-            "border-l-4 border-l-orange-500"
+            "border-l-4 border-l-orange-500",
+            true
           )}
         </div>
       )}
@@ -842,6 +845,7 @@ export default function FacilitiesPage() {
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                {editForm.venueId !== "2" && (
                 <div className="space-y-2">
                   <Label htmlFor="edit-capacity">Capacity (pax)</Label>
                   <Input
@@ -855,6 +859,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="edit-venue">Venue</Label>
                   <Select

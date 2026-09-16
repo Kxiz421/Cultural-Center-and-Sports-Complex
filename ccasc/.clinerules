@@ -1,0 +1,50 @@
+# Rules for DeepSeek V4 Flash Integration
+
+You are tasked with safely adding DeepSeek-V4-Flash logic to the current Next.js application. Follow these structural constraints strictly to ensure zero disruption to the existing UI or existing functional workflows.
+
+## ⛔ CRITICAL RESTRICTIONS
+- **DO NOT OVERWRITE OR MUTATE EXISTING UI:** Never modify, delete, or replace current Tailwind CSS classes, layouts, pages, or visual components unless explicitly told to do so.
+- **PRESERVE PRE-EXISTING FUNCTIONS:** Do not delete or rewrite any existing helper functions, state managers, analytics, database functions, or auth logic. 
+
+## 🛠️ COMPONENT HOOKING METHOD
+When connecting the AI logic to an existing UI component:
+1. Leave the visual JSX/TSX structure exactly as it is.
+2. Initialize the Vercel AI SDK chat controller safely at the top of the component:
+   ```typescript
+   import { useChat } from 'ai/react';
+
+   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+     api: '/api/chat',
+   });
+   ```
+3. Wire the SDK properties natively into the **already existing** form inputs and tags (`value={input}`, `onChange={handleInputChange}`, and `onSubmit={handleSubmit}`).
+
+## 📡 BACKEND IMPLEMENTATION (`app/api/chat/route.ts`)
+Create a completely isolated API route handler. Do not disturb other api folders. Use the standard runtime stream pipeline:
+
+```typescript
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText } from 'ai';
+
+const deepseek = createOpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: process.env.DEEPSEEK_BASE_URL,
+});
+
+export const runtime = 'edge';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const result = await streamText({
+    model: deepseek('deepseek-flash'),
+    system: 'You are a precise backend processing assistant for this application.',
+    messages,
+  });
+  return result.toDataStreamResponse();
+}
+```
+
+## 🔄 DEPENDENCY MANIFEST
+If these packages are missing, install them cleanly without breaking existing lockfiles:
+- `ai`
+- `@ai-sdk/openai`

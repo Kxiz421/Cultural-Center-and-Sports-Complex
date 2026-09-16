@@ -13,8 +13,20 @@ function getStatusName(id) {
   return STATUS_NAMES[id] || `Status ${id}`;
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const transactionsFor = searchParams.get("transactionsFor");
+
+    // If fetching transactions for a specific particular
+    if (transactionsFor) {
+      const transactions = await prisma.particularTransaction.findMany({
+        where: { particularId: parseInt(transactionsFor, 10) },
+        orderBy: { createdAt: "desc" },
+      });
+      return noCacheJson(transactions);
+    }
+
     const items = await prisma.particular.findMany({
       include: {
         inventory: {
@@ -273,6 +285,128 @@ export async function PUT(request) {
   }
 }
 
+export async function PATCH(request) {
+  try {
+    const { particularId, action, quantity, performedBy, performedByName } = await request.json();
+
+    if (!particularId) {
+      return NextResponse.json(
+        { error: "Particular ID is required" },
+        { status: 400 }
+      );
+    }
+    if (!action || !["RESTOCK", "DAMAGE"].includes(action)) {
+      return NextResponse.json(
+        { error: "Valid action (RESTOCK or DAMAGE) is required" },
+        { status: 400 }
+      );
+    }
+    const qty = parseInt(quantity, 10);
+    if (!qty || qty <= 0) {
+      return NextResponse.json(
+        { error: "Quantity must be a positive number" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await prisma.particular.findUnique({
+      where: { particularId: parseInt(particularId, 10) },
+      include: { inventory: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Particular not found" },
+        { status: 404 }
+      );
+    }
+
+    let newQty;
+    if (action === "RESTOCK") {
+      newQty = (existing.inventory?.quantityAvailable ?? 0) + qty;
+    } else {
+      // DAMAGE
+      const currentQty = existing.inventory?.quantityAvailable ?? 0;
+      if (qty > currentQty) {
+        return NextResponse.json(
+          { error: `Cannot report ${qty} damaged — only ${currentQty} available` },
+          { status: 400 }
+        );
+      }
+      newQty = currentQty - qty;
+    }
+
+    // Update inventory quantity
+    if (existing.inventory) {
+      await prisma.inventory.update({
+        where: { itemId: existing.inventory.itemId },
+        data: { quantityAvailable: newQty },
+      });
+    } else if (action === "RESTOCK") {
+      // No inventory exists — create one
+      await prisma.inventory.create({
+        data: {
+          itemName: existing.particularName,
+          unitCost: 0,
+          quantityAvailable: qty,
+          venueId: 1,
+          statusId: 1,
+        },
+      });
+      // Link it
+      const inv = await prisma.inventory.findFirst({
+        where: { itemName: existing.particularName },
+      });
+      if (inv) {
+        await prisma.particular.update({
+          where: { particularId: existing.particularId },
+          data: { itemId: inv.itemId },
+        });
+      }
+    }
+
+    // Create a transaction record
+    await prisma.particularTransaction.create({
+      data: {
+        particularId: parseInt(particularId, 10),
+        transactionType: action,
+        quantity: qty,
+        performedById: performedBy || "system",
+        performedByName: performedByName || "System",
+      },
+    });
+
+    // Log the audit
+    const actionLabel = action === "RESTOCK" ? "RESTOCKED" : "DAMAGED";
+    const detailText =
+      action === "RESTOCK"
+        ? `Restocked ${qty} unit(s). New total: ${newQty}`
+        : `Reported ${qty} damaged unit(s). Remaining: ${newQty}`;
+
+    await prisma.auditLog.create({
+      data: {
+        action: actionLabel,
+        targetUserId: `PART-${particularId}`,
+        targetName: existing.particularName,
+        performedById: performedBy || "system",
+        performedByName: performedByName || "System",
+        details: detailText,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      particularId: existing.particularId,
+      totalQuantity: newQty,
+    });
+  } catch (error) {
+    console.error("Failed to process particular action:", error);
+    return NextResponse.json(
+      { error: "Failed to process action" },
+      { status: 500 }
+    );
+  }
+}
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -298,8 +432,19 @@ export async function DELETE(request) {
       );
     }
 
+    const id = parseInt(particularId, 10);
+
+    // First, delete child records to avoid foreign key constraint violations
+    await prisma.reservedParticular.deleteMany({
+      where: { particularId: id },
+    });
+
+    await prisma.particularTransaction.deleteMany({
+      where: { particularId: id },
+    });
+
     await prisma.particular.delete({
-      where: { particularId: parseInt(particularId, 10) },
+      where: { particularId: id },
     });
 
     await prisma.auditLog.create({
