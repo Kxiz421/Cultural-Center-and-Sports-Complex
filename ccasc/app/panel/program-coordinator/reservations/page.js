@@ -1322,6 +1322,61 @@ export default function CoordinatorReservationsPage() {
                 <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
               ) : (
                 <div className={`rounded-md border divide-y max-h-64 overflow-y-auto ${customizePerDate ? "opacity-60 pointer-events-none" : ""}`}>
+                  {/* Select All */}
+                  {(() => {
+                    const availableFacilities = facilities.filter(
+                      (f) => !reservedFacilityIdsGlobal.has(String(f.facilityId))
+                    );
+                    const availableIds = availableFacilities.map((f) => String(f.facilityId));
+                    const selectedAvailable = availableIds.filter((id) => Number(facilityQuantities[id] || 0) > 0);
+                    const allSelected =
+                      availableIds.length > 0 && selectedAvailable.length === availableIds.length;
+                    const someSelected =
+                      selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+                    const selectAllDisabled = customizePerDate || selectedDates.size === 0;
+                    return (
+                      <div
+                        className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
+                          selectAllDisabled
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:bg-muted/40"
+                        }`}
+                        onClick={() => {
+                          if (selectAllDisabled) return;
+                          if (allSelected) {
+                            // Deselect all available: set each to 0
+                            setFacilityQuantities((prev) => {
+                              const next = { ...prev };
+                              availableIds.forEach((id) => delete next[id]);
+                              return next;
+                            });
+                          } else {
+                            // Select all available: set each to 1 (or keep existing qty if already > 0)
+                            setFacilityQuantities((prev) => {
+                              const next = { ...prev };
+                              availableIds.forEach((id) => {
+                                if (!next[id] || Number(next[id]) <= 0) next[id] = 1;
+                              });
+                              return next;
+                            });
+                          }
+                        }}
+                      >
+                        <Checkbox
+                          checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
+                          disabled={selectAllDisabled}
+                        />
+                        <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground">
+                          Select All
+                        </span>
+                        {availableIds.length > 0 && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {selectedAvailable.length}/{availableIds.length} available
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {facilities.map((f) => {
                     const id = String(f.facilityId);
                     const reserved = reservedFacilityIdsGlobal.has(id);
@@ -1605,6 +1660,51 @@ export default function CoordinatorReservationsPage() {
                       </div>
                     ) : (
                       <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                        {/* Select All */}
+                        {(() => {
+                          const dateReservedIds = new Set((reservedByDate[date] || []).map(String));
+                          const availableFacilities = facilities.filter((f) => !dateReservedIds.has(String(f.facilityId)));
+                          const availableIds = availableFacilities.map((f) => String(f.facilityId));
+                          const selectedAvailable = availableIds.filter((id) => Number(dateQtyMap[id] || 0) > 0);
+                          const allSelected = availableIds.length > 0 && selectedAvailable.length === availableIds.length;
+                          const someSelected = selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+                          return (
+                            <div
+                              className="flex items-center gap-3 px-3 py-2 text-sm border-b cursor-pointer hover:bg-muted/40"
+                              onClick={() => {
+                                if (allSelected) {
+                                  setDateCustomizations((prev) => {
+                                    const next = { ...prev };
+                                    if (next[date]) {
+                                      const nextQty = { ...(next[date]?.facilityQuantities || {}) };
+                                      availableIds.forEach((id) => delete nextQty[id]);
+                                      next[date] = { ...next[date], facilityQuantities: nextQty };
+                                    }
+                                    return next;
+                                  });
+                                } else {
+                                  setDateCustomizations((prev) => {
+                                    const nextQty = { ...(prev[date]?.facilityQuantities || {}) };
+                                    availableIds.forEach((id) => {
+                                      if (!nextQty[id] || Number(nextQty[id]) <= 0) nextQty[id] = 1;
+                                    });
+                                    return { ...prev, [date]: { ...prev[date], facilityQuantities: nextQty } };
+                                  });
+                                }
+                              }}
+                            >
+                              <Checkbox
+                                checked={someSelected ? "indeterminate" : allSelected}
+                              />
+                              <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground text-xs">
+                                Select All
+                              </span>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {selectedAvailable.length}/{availableIds.length} available
+                              </span>
+                            </div>
+                          );
+                        })()}
                         {facilities.map((f) => {
                           const id = String(f.facilityId);
                           const reserved = (reservedByDate[date] || []).map(String).includes(id);

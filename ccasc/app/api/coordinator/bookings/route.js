@@ -12,6 +12,7 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const history = searchParams.get("history");
+    const cancelled = searchParams.get("cancelled");
     const venueId = searchParams.get("venueId");
 
     // Determine which venue IDs to filter by
@@ -26,15 +27,22 @@ export async function GET(request) {
     const reservations = await prisma.reservation.findMany({
       where: {
         venueId: venueFilter,
-        ...(history === "true"
-          ? { reservationStatus: "Confirmed" }
-          : { reservationStatus: { in: ["Pending"] } }),
+        ...(cancelled === "true"
+          ? { reservationStatus: "Cancelled" }
+          : history === "true"
+            ? { reservationStatus: "Confirmed" }
+            : { reservationStatus: { in: ["Pending"] } }),
       },
       include: {
         venue: { select: { venue: true } },
         timeSlot: { select: { startTime: true, endTime: true } },
         package: { select: { packageName: true } },
         additionalDates: { select: { eventDate: true } },
+        schedules: {
+          include: {
+            facility: { select: { facilityName: true } },
+          },
+        },
         bookings: {
           include: {
             payments: {
@@ -62,11 +70,15 @@ export async function GET(request) {
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
     let filtered;
-    if (history === "true") {
+    if (cancelled === "true" || history === "true") {
       // For history, include all confirmed reservations that have valid client
       filtered = reservations.filter((r) => clientMap[r.clientId] !== undefined);
+    } else if (venueId === "2") {
+      // For Sports Complex (venueId=2), show ALL pending reservations — payment is recorded by coordinator
+      filtered = reservations
+        .filter((r) => clientMap[r.clientId] !== undefined);
     } else {
-      // For pending bookings, only include fully paid ones
+      // For Cultural Center, only include fully paid ones (LTOO handles payment)
       filtered = reservations
         .filter((r) => clientMap[r.clientId] !== undefined)
         .filter((r) =>
@@ -109,9 +121,15 @@ export async function GET(request) {
         eventDates: allDates,
         timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
         status: r.reservationStatus,
+        totalAmount: r.totalAmount ? Number(r.totalAmount) : 0,
         amountPaid: totalPaid,
         packageName: r.package?.packageName || null,
+        facilities: (r.schedules || []).map((s) => ({
+          facilityName: s.facility.facilityName,
+        })),
         documents: docs,
+        notes: r.notes || "",
+        isWalkIn: r.notes ? r.notes.startsWith("Walk-in client:") : false,
       };
     });
 
@@ -127,7 +145,8 @@ export async function GET(request) {
 
 export async function PATCH(request) {
   try {
-    const { reservationId, action } = await request.json();
+    const body = await request.json();
+    const { reservationId, action } = body;
 
     if (!reservationId || !action) {
       return NextResponse.json(
@@ -190,6 +209,71 @@ export async function PATCH(request) {
       }
 
       return NextResponse.json({ success: true, message: "Booking confirmed. The client has been notified." });
+    } else if (action === "pay_and_confirm") {
+      const { performedBy, performedByName } = body;
+
+      const existing = await prisma.reservation.findUnique({
+        where: { reservationId: id },
+        select: { reservationStatus: true, clientId: true, totalAmount: true },
+      });
+
+      if (!existing) {
+        return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+      }
+
+      if (existing.reservationStatus === "Confirmed") {
+        return NextResponse.json({ error: "This booking has already been confirmed." }, { status: 400 });
+      }
+
+      const paidAmount = Number(existing.totalAmount) || 0;
+
+      // Create confirmed booking
+      const booking = await prisma.booking.create({
+        data: {
+          reservationId: id,
+          confirmationDate: new Date(),
+          bookingStatusId: 2, // Confirmed
+          staffId: performedBy ? parseInt(performedBy, 10) || null : null,
+        },
+      });
+
+      // Create payment record
+      await prisma.payment.create({
+        data: {
+          bookingId: booking.bookingId,
+          amountPaid: paidAmount,
+          baseAmount: paidAmount,
+          amountAfterDiscount: paidAmount,
+          staffId: performedBy ? parseInt(performedBy.replace("STF-", ""), 10) || null : null,
+          paymentStatusId: 5, // Fully Paid
+        },
+      });
+
+      // Update reservation status
+      await prisma.reservation.update({
+        where: { reservationId: id },
+        data: { reservationStatus: "Confirmed" },
+      });
+
+      const reservation = await prisma.reservation.findUnique({
+        where: { reservationId: id },
+        select: {
+          clientId: true,
+          eventType: true,
+          eventDate: true,
+          venue: { select: { venue: true } },
+        },
+      });
+
+      if (reservation) {
+        await createClientNotification({
+          clientId: reservation.clientId,
+          type: "Booking Confirmation",
+          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
+        });
+      }
+
+      return NextResponse.json({ success: true, message: "Payment recorded and booking confirmed. The client has been notified." });
     } else if (action === "cancel") {
       await prisma.reservation.update({
         where: { reservationId: id },

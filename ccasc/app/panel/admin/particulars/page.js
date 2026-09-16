@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -50,7 +51,7 @@ import {
   History,
   User,
   ShieldCheck,
-  XCircle,
+  PackageX,
   Shield,
 } from "lucide-react";
 
@@ -77,6 +78,10 @@ export default function ParticularsPage() {
     description: "",
     quantityAvailable: "",
   });
+  const [editTransactions, setEditTransactions] = React.useState([]);
+  const [editTransactionsLoading, setEditTransactionsLoading] = React.useState(false);
+  const [editRestockQty, setEditRestockQty] = React.useState("");
+  const [editDamageQty, setEditDamageQty] = React.useState("");
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmAction, setConfirmAction] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -127,7 +132,19 @@ export default function ParticularsPage() {
       description: item.description || "",
       quantityAvailable: String(item.totalQuantity || ""),
     });
+    setEditRestockQty("");
+    setEditDamageQty("");
+    setEditTransactions([]);
     setEditOpen(true);
+    // Fetch transactions for this particular
+    setEditTransactionsLoading(true);
+    fetch(`/api/particulars?transactionsFor=${item.particularId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setEditTransactions(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {})
+      .finally(() => setEditTransactionsLoading(false));
   };
 
   const handleOpenHistory = async () => {
@@ -289,6 +306,92 @@ export default function ParticularsPage() {
       await fetchItems(searchQuery);
     } catch (err) {
       toast.error(err.message || "Failed to delete particular");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditRestock = async () => {
+    if (!editItem) return;
+    const qty = parseInt(editRestockQty, 10);
+    if (!qty || qty <= 0) {
+      toast.error("Please enter a valid quantity");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/particulars", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          particularId: editItem.particularId,
+          action: "RESTOCK",
+          quantity: qty,
+          performedBy,
+          performedByName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to restock");
+      }
+
+      toast.success(`Successfully restocked ${qty} unit(s)`);
+      setEditRestockQty("");
+      // Refresh transactions and items
+      await fetchItems(searchQuery);
+      const txRes = await fetch(`/api/particulars?transactionsFor=${editItem.particularId}`);
+      const txData = await txRes.json();
+      setEditTransactions(Array.isArray(txData) ? txData : []);
+    } catch (err) {
+      toast.error(err.message || "Failed to restock");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditDamage = async () => {
+    if (!editItem) return;
+    const qty = parseInt(editDamageQty, 10);
+    if (!qty || qty <= 0) {
+      toast.error("Please enter a valid quantity");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/particulars", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          particularId: editItem.particularId,
+          action: "DAMAGE",
+          quantity: qty,
+          performedBy,
+          performedByName,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to report damage");
+      }
+
+      toast.success(`Reported ${qty} damaged unit(s)`);
+      setEditDamageQty("");
+      // Refresh transactions and items
+      await fetchItems(searchQuery);
+      const txRes = await fetch(`/api/particulars?transactionsFor=${editItem.particularId}`);
+      const txData = await txRes.json();
+      setEditTransactions(Array.isArray(txData) ? txData : []);
+    } catch (err) {
+      toast.error(err.message || "Failed to report damage");
     } finally {
       setSaving(false);
     }
@@ -546,14 +649,18 @@ export default function ParticularsPage() {
 
       {/* Edit Dialog */}
       <Dialog key={editItem?.particularId || "no-edit"} open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Particular</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-5" />
+              {editItem?.particularName}
+            </DialogTitle>
             <DialogDescription>
-              Update the item name, description, and quantity.
+              Update item details, restock, or report damaged units.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-5 py-2">
+            {/* Basic Info Fields */}
             <div className="space-y-2">
               <Label htmlFor="edit-name">Item Name</Label>
               <Input
@@ -585,6 +692,103 @@ export default function ParticularsPage() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Linked to Inventory: <span className="font-medium">{editItem.inventoryName}</span>
                 </p>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Restock Section */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <Package className="size-4 text-green-600" />
+                Restock — Add New Units
+              </Label>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Quantity to add"
+                    value={editRestockQty}
+                    onChange={(e) => setEditRestockQty(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  />
+                </div>
+                <Button
+                  onClick={handleEditRestock}
+                  disabled={saving || !editRestockQty || parseInt(editRestockQty, 10) <= 0}
+                  className="shrink-0"
+                >
+                  {saving ? "Adding..." : "Restock"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Report Damage Section */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <PackageX className="size-4 text-red-500" />
+                Report Damage — Deduct Units
+              </Label>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Quantity damaged"
+                    value={editDamageQty}
+                    onChange={(e) => setEditDamageQty(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  />
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={handleEditDamage}
+                  disabled={saving || !editDamageQty || parseInt(editDamageQty, 10) <= 0}
+                  className="shrink-0"
+                >
+                  {saving ? "Recording..." : "Report Damage"}
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Transaction History */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <History className="size-4 text-muted-foreground" />
+                Transaction History
+              </Label>
+              {editTransactionsLoading ? (
+                <p className="text-sm text-muted-foreground py-2">Loading transactions...</p>
+              ) : editTransactions.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No restock or damage records yet.</p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                  {editTransactions.map((t) => (
+                    <div key={t.transactionId} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {t.transactionType === "RESTOCK" ? (
+                          <Package className="size-4 shrink-0 text-green-600" />
+                        ) : (
+                          <PackageX className="size-4 shrink-0 text-red-500" />
+                        )}
+                        <span className="font-medium truncate">
+                          {t.transactionType === "RESTOCK" ? "Restocked" : "Damaged"}
+                        </span>
+                        <span className="tabular-nums font-bold">
+                          {t.transactionType === "RESTOCK" ? "+" : "-"}{t.quantity}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
+                        <span>{t.performedByName}</span>
+                        <span>{new Date(t.createdAt).toLocaleDateString("en-US", {
+                          month: "short", day: "numeric", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -790,6 +994,8 @@ export default function ParticularsPage() {
                     {log.action === "DELETED" && <Trash2 className="size-4 text-red-500" />}
                     {log.action === "ARCHIVED" && <Archive className="size-4 text-amber-600" />}
                     {log.action === "RESTORED" && <RotateCcw className="size-4 text-green-500" />}
+                    {log.action === "RESTOCKED" && <Package className="size-4 text-green-600" />}
+                    {log.action === "DAMAGED" && <PackageX className="size-4 text-red-500" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
@@ -800,6 +1006,8 @@ export default function ParticularsPage() {
                           log.action === "UPDATED" ? "text-blue-600 border-blue-300" :
                           log.action === "DELETED" ? "text-red-600 border-red-300" :
                           log.action === "ARCHIVED" ? "text-amber-600 border-amber-300" :
+                          log.action === "RESTOCKED" ? "text-green-600 border-green-300" :
+                          log.action === "DAMAGED" ? "text-red-600 border-red-300" :
                           "text-green-600 border-green-300"
                         }
                       >

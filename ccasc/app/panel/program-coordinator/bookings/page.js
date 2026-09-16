@@ -29,8 +29,10 @@ function formatPhp(amount) {
 export default function CoordinatorBookingsPage() {
   const [reservations, setReservations] = useState([]);
   const [historyReservations, setHistoryReservations] = useState([]);
+  const [cancelledReservations, setCancelledReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [cancelledLoading, setCancelledLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRes, setSelectedRes] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -38,6 +40,10 @@ export default function CoordinatorBookingsPage() {
   const [resubmitDoc, setResubmitDoc] = useState(null);
   const [resubmitMessage, setResubmitMessage] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [orNumber, setOrNumber] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [selectedDateIndex, setSelectedDateIndex] = useState(null);
 
   function getVenueParam() {
     if (typeof window === "undefined") return "";
@@ -79,7 +85,24 @@ export default function CoordinatorBookingsPage() {
     }
   }
 
+  async function loadCancelled() {
+    setCancelledLoading(true);
+    try {
+      const res = await fetch(`/api/coordinator/bookings?cancelled=true&${getVenueParam()}`);
+      const data = await res.json();
+      setCancelledReservations(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load cancelled bookings:", err);
+      toast.error("Failed to load cancelled bookings");
+    } finally {
+      setCancelledLoading(false);
+    }
+  }
+
   useEffect(() => {
+    if (activeTab === "cancelled" && cancelledReservations.length === 0) {
+      loadCancelled();
+    }
     if (activeTab === "history" && historyReservations.length === 0) {
       loadHistory();
     }
@@ -110,6 +133,33 @@ export default function CoordinatorBookingsPage() {
       setDetailOpen(false);
     } catch (err) {
       toast.error("Failed to confirm booking");
+    }
+  }
+
+  async function handlePayAndConfirm(reservationId) {
+    setSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/coordinator/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reservationId,
+          action: "pay_and_confirm",
+          performedBy,
+          performedByName,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to record payment and confirm");
+      toast.success("Payment recorded and booking confirmed successfully");
+      refreshBookings();
+      notifyPanelNotificationsUpdated();
+      setDetailOpen(false);
+    } catch (err) {
+      toast.error("Failed to record payment and confirm booking");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -250,6 +300,18 @@ export default function CoordinatorBookingsPage() {
         >
           Confirmed History
         </Button>
+        <Button
+          variant={activeTab === "cancelled" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("cancelled")}
+        >
+          Cancelled
+          {cancelledReservations.length > 0 && (
+            <span className="ml-2 text-xs bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">
+              {cancelledReservations.length}
+            </span>
+          )}
+        </Button>
       </div>
 
       {/* Search */}
@@ -270,16 +332,16 @@ export default function CoordinatorBookingsPage() {
       {activeTab === "pending" && (
         <Card>
           <CardHeader>
-            <CardTitle>Fully Paid Bookings</CardTitle>
+            <CardTitle>{getVenueParam().includes("venueId=2") ? "Pending Bookings" : "Fully Paid Bookings"}</CardTitle>
             <CardDescription>
-              {filtered.length} booking(s) awaiting confirmation.
+              {getVenueParam().includes("venueId=2") ? `${filtered.length} booking(s) awaiting payment and confirmation.` : `${filtered.length} booking(s) awaiting confirmation.`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {filtered.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8 text-center">
-                  No fully paid bookings awaiting confirmation.
+                  {getVenueParam().includes("venueId=2") ? "No pending bookings awaiting payment." : "No fully paid bookings awaiting confirmation."}
                 </p>
               ) : (
                 filtered.map((res) => (
@@ -288,6 +350,7 @@ export default function CoordinatorBookingsPage() {
                     className="flex flex-col gap-2 rounded-lg border p-4 cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => {
                       setSelectedRes(res);
+                      setSelectedDateIndex(null);
                       setDetailOpen(true);
                     }}
                   >
@@ -298,7 +361,11 @@ export default function CoordinatorBookingsPage() {
                           {res.clientType}
                         </Badge>
                       </div>
+                      {getVenueParam().includes("venueId=2") ? (
+                      <Badge variant="outline" className="text-amber-600 border-amber-300">Pending Payment</Badge>
+                    ) : (
                       <Badge variant="default">Fully Paid</Badge>
+                    )}
                     </div>
                     <p className="text-muted-foreground text-sm">
                       {res.venue} &middot; {res.eventDate} &middot; {res.eventType}
@@ -370,6 +437,57 @@ export default function CoordinatorBookingsPage() {
         </Card>
       )}
 
+      {/* Cancelled History */}
+      {activeTab === "cancelled" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cancelled Bookings</CardTitle>
+            <CardDescription>
+              {cancelledLoading ? "Loading..." : `${cancelledReservations.length} cancelled booking(s).`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {cancelledLoading ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">Loading cancelled bookings...</p>
+              ) : cancelledReservations.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">No cancelled bookings.</p>
+              ) : (
+                cancelledReservations.map((res) => (
+                  <div
+                    key={res.id}
+                    className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50/30 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{res.clientName}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {res.clientType}
+                        </Badge>
+                      </div>
+                      <Badge variant="outline" className="text-red-600 border-red-300">Cancelled</Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {res.venue} &middot; {res.eventDates && res.eventDates.length > 1
+                        ? `${res.eventDates[0]} — ${res.eventDates[res.eventDates.length - 1]} (${res.eventDates.length} days)`
+                        : res.eventDate} &middot; {res.eventType}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-muted-foreground text-xs">
+                        {res.timeSlot}
+                      </p>
+                      <p className="text-xs font-medium tabular-nums">
+                        {formatPhp(res.amountPaid)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Detail Dialog */}
       {detailOpen && selectedRes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -378,7 +496,7 @@ export default function CoordinatorBookingsPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Booking Details</h3>
                 <button
-                  onClick={() => setDetailOpen(false)}
+                  onClick={() => { setDetailOpen(false); setSelectedDateIndex(null); }}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <XCircle className="size-5" />
@@ -413,14 +531,34 @@ export default function CoordinatorBookingsPage() {
                   <span className="text-muted-foreground text-xs">Time Slot</span>
                   <p className="font-medium">{selectedRes.timeSlot}</p>
                 </div>
+                {!selectedRes.venue?.toLowerCase().includes("sports complex") && (
                 <div>
                   <span className="text-muted-foreground text-xs">Amount Paid</span>
                   <p className="font-medium tabular-nums">{formatPhp(selectedRes.amountPaid)}</p>
                 </div>
+              )}
+                {!selectedRes.venue?.toLowerCase().includes("sports complex") && (
                 <div>
                   <span className="text-muted-foreground text-xs">Package</span>
                   <p className="font-medium">{selectedRes.packageName || "N/A"}</p>
                 </div>
+              )}
+                <div>
+                  <span className="text-muted-foreground text-xs">Total Amount</span>
+                  <p className="font-medium tabular-nums">{formatPhp(selectedRes.totalAmount)}</p>
+                </div>
+                {selectedRes.facilities && selectedRes.facilities.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-xs block mb-1">Facilities</span>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedRes.facilities.map((fac, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {fac.facilityName}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Documents Section */}
                 {selectedRes.documents && selectedRes.documents.length > 0 && (
@@ -501,34 +639,93 @@ export default function CoordinatorBookingsPage() {
                 )}
               </div>
               <div className="flex flex-col gap-2 pt-2 border-t">
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <AlertTriangle className="size-3" />
-                  {selectedRes.venue?.toLowerCase().includes("sports complex")
-                    ? "Confirm only after the Official Receipt has been verified."
-                    : "Confirm only if physical copies of certification and contract of lease are verified."}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
-                    onClick={() => handleCancel(selectedRes.id.replace("RES-", ""))}
-                  >
-                    Cancel Booking
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    disabled={
-                      selectedRes.venue?.toLowerCase().includes("sports complex") &&
-                      !(selectedRes.documents || []).some(
-                        (d) => d.type === "Official Receipt" && d.status === "Verified"
-                      )
-                    }
-                    onClick={() => handleConfirm(selectedRes.id.replace("RES-", ""))}
-                  >
-                    <CheckCircle2 className="mr-2 size-4" />
-                    Confirm Booking
-                  </Button>
-                </div>
+                {selectedRes.venue?.toLowerCase().includes("sports complex") ? (
+                  <>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <AlertTriangle className="size-3" />
+                      Confirm the booking. Payment will be recorded as fully paid.
+                    </p>
+                    {/* Date buttons to view facilities per date */}
+                    {selectedRes.eventDates && selectedRes.eventDates.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-xs text-muted-foreground block mb-1.5">Reserved Dates</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedRes.eventDates.map((dateStr, idx) => (
+                            <Button
+                              key={dateStr}
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              onClick={() => setSelectedDateIndex(selectedDateIndex === idx ? null : idx)}
+                            >
+                              {new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </Button>
+                          ))}
+                        </div>
+                        {selectedDateIndex !== null && selectedRes.facilities && selectedRes.facilities.length > 0 && (
+                          <div className="mt-2 rounded-md border bg-muted/30 p-2.5">
+                            <span className="text-xs text-muted-foreground block mb-1">
+                              Facilities for {new Date(selectedRes.eventDates[selectedDateIndex]).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedRes.facilities.map((fac, fidx) => (
+                                <Badge key={fidx} variant="secondary" className="text-xs">
+                                  {fac.facilityName}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleCancel(selectedRes.id.replace("RES-", ""))}
+                      >
+                        Cancel Booking
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        disabled={
+                          saving ||
+                          (selectedRes.isWalkIn
+                            ? false
+                            : !(selectedRes.documents || []).some(
+                                (d) => d.type === "Official Receipt" && d.status === "Verified"
+                              ))
+                        }
+                        onClick={() => handlePayAndConfirm(selectedRes.id.replace("RES-", ""))}
+                      >
+                        {saving ? "Processing..." : "Record Payment & Confirm"}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <AlertTriangle className="size-3" />
+                      Confirm only if physical copies of certification and contract of lease are verified.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleCancel(selectedRes.id.replace("RES-", ""))}
+                      >
+                        Cancel Booking
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        onClick={() => handleConfirm(selectedRes.id.replace("RES-", ""))}
+                      >
+                        <CheckCircle2 className="mr-2 size-4" />
+                        Confirm Booking
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

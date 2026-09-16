@@ -103,7 +103,7 @@ export default function ProvincialDocumentsPage() {
   const [bookings, setBookings] = React.useState([]);
   const [selectedReservationId, setSelectedReservationId] = React.useState("");
   const [viewDoc, setViewDoc] = React.useState(null);
-  const [isFullyPaid, setIsFullyPaid] = React.useState(false);
+  
 
   const [billingFile, setBillingFile] = React.useState(null);
   const [receiptFile, setReceiptFile] = React.useState(null);
@@ -151,7 +151,7 @@ export default function ProvincialDocumentsPage() {
 
   const showInitialForm =
     isSportsComplex
-      ? !phase.receiptStatus && phase.needsReceipt && isFullyPaid
+      ? !phase.receiptStatus && phase.needsReceipt
       : !phase.initialApproved && (phase.needsBilling || phase.needsReceipt);
   const requireBothInitial = isSportsComplex ? false : phase.needsBilling && phase.needsReceipt;
   const showFinalForm =
@@ -201,13 +201,13 @@ export default function ProvincialDocumentsPage() {
         const parsedClientId = parseInt(cleanId, 10);
         const userBookings = Array.isArray(data)
           ? data.filter(
-              (b) => b.hasBooking && b.clientId === parsedClientId
+              (b) => b.clientId === parsedClientId
             )
           : [];
         setBookings(userBookings);
       } catch (err) {
         console.error("Failed to load bookings:", err);
-        toast.error("Failed to load your bookings.");
+        toast.error("Failed to load your reservations.");
       } finally {
         setBookingsLoading(false);
       }
@@ -220,7 +220,6 @@ export default function ProvincialDocumentsPage() {
       if (!reservationId) {
         setDocuments([]);
         setPhase(EMPTY_PHASE);
-        setIsFullyPaid(false);
         return;
       }
       setDocumentsLoading(true);
@@ -237,13 +236,9 @@ export default function ProvincialDocumentsPage() {
           throw new Error(data.error || "Failed to load documents");
         }
 
-        // Determine if the reservation is fully paid
-        const booking = bookings.find((b) => String(b.id) === String(reservationId));
-        const fullyPaid = booking?.computedStatus === "Fully Paid" || booking?.balanceSettled === true;
-        setIsFullyPaid(fullyPaid);
-
         // Determine venue type
-        const venueName = booking?.venue || "";
+        const currentBooking = bookings.find((b) => String(b.id) === String(reservationId));
+        const venueName = currentBooking?.venue || "";
         const sportsComplex = venueName.toLowerCase().includes("sports complex");
 
         if (Array.isArray(data)) {
@@ -264,7 +259,6 @@ export default function ProvincialDocumentsPage() {
         toast.error(err.message || "Failed to load documents");
         setDocuments([]);
         setPhase(EMPTY_PHASE);
-        setIsFullyPaid(false);
       } finally {
         setDocumentsLoading(false);
       }
@@ -312,19 +306,15 @@ export default function ProvincialDocumentsPage() {
   const handleUploadInitial = async (e) => {
     e.preventDefault();
     if (!selectedReservationId) {
-      toast.error("Please select a booking/reservation first.");
+      toast.error("Please select a reservation first.");
       return;
     }
     if (!showInitialForm) {
       toast.error(
         isSportsComplex
-          ? "Official Receipt is not available for upload on this booking."
-          : "Billing Statement and Official Receipt are not available for upload on this booking."
+          ? "Official Receipt is not available for upload on this reservation."
+          : "Billing Statement and Official Receipt are not available for upload on this reservation."
       );
-      return;
-    }
-    if (isSportsComplex && !isFullyPaid) {
-      toast.error("Receipt can only be uploaded after the reservation is fully paid.");
       return;
     }
 
@@ -388,7 +378,7 @@ export default function ProvincialDocumentsPage() {
     e.preventDefault();
     if (isSportsComplex) return;
     if (!selectedReservationId) {
-      toast.error("Please select a booking/reservation first.");
+      toast.error("Please select a reservation first.");
       return;
     }
     if (!phase.initialApproved) {
@@ -461,7 +451,7 @@ export default function ProvincialDocumentsPage() {
   const handleResubmit = async (e) => {
     e.preventDefault();
     if (!selectedReservationId) {
-      toast.error("Please select a booking/reservation first.");
+      toast.error("Please select a reservation first.");
       return;
     }
     if (!resubmitTypeId) {
@@ -542,7 +532,7 @@ export default function ProvincialDocumentsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Documents</h2>
         <p className="text-muted-foreground text-sm">
-          Select a booking to view and submit documents. {isSportsComplex ? "Only the Official Receipt is required for Sports Complex reservations, and can only be uploaded after the reservation is fully paid." : "Billing Statement and Official Receipt come first for Cultural Center; Certification and Contract of Lease unlock after LTOO approval."}
+          Select a reservation to view and submit documents. {isSportsComplex ? "Only the Official Receipt is required for Sports Complex reservations." : "Billing Statement and Official Receipt come first for Cultural Center; Certification and Contract of Lease unlock after LTOO approval."}
         </p>
       </div>
 
@@ -575,8 +565,8 @@ export default function ProvincialDocumentsPage() {
                 <SelectValue
                   placeholder={
                     bookingsLoading
-                      ? "Loading bookings..."
-                      : "Select a booking/reservation"
+                      ? "Loading reservations..."
+                      : "Select a reservation"
                   }
                 />
               </SelectTrigger>
@@ -609,7 +599,7 @@ export default function ProvincialDocumentsPage() {
       {!selectedReservationId ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            Select a booking/reservation to view and upload documents.
+            Select a reservation to view and upload documents.
           </CardContent>
         </Card>
       ) : (
@@ -666,7 +656,7 @@ export default function ProvincialDocumentsPage() {
               <CardTitle>Document Progress</CardTitle>
               <CardDescription>
                 {isSportsComplex
-                  ? "Submit the Official Receipt after the reservation is fully paid."
+                  ? "Submit the Official Receipt for LTOO verification."
                   : "Step 1: Billing Statement + Official Receipt (LTOO). Step 2 unlocks after both are verified."}
               </CardDescription>
             </CardHeader>
@@ -685,18 +675,14 @@ export default function ProvincialDocumentsPage() {
                 <CardDescription>
                   {showInitialForm
                     ? "Upload the Official Receipt for LTOO verification."
-                    : isFullyPaid
-                      ? "Official Receipt already submitted or pending review."
-                      : "Receipt upload is only available after the reservation is fully paid."}
+                    : "Official Receipt already submitted or pending review."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {!showInitialForm ? (
                   <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground flex items-start gap-2">
                     <Lock className="size-4 mt-0.5 shrink-0" />
-                    {!isFullyPaid
-                      ? "The reservation must be fully paid before the Official Receipt can be uploaded."
-                      : "Official Receipt is already submitted or pending review."}
+                    Official Receipt is already submitted or pending review.
                   </div>
                 ) : (
                   <form onSubmit={handleUploadInitial} className="space-y-4">
@@ -1004,7 +990,7 @@ export default function ProvincialDocumentsPage() {
             <CardHeader>
               <CardTitle>Submitted Documents</CardTitle>
               <CardDescription>
-                Documents linked to the selected booking/reservation.
+                Documents linked to the selected reservation.
               </CardDescription>
             </CardHeader>
             <CardContent>
