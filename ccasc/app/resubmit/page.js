@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Building2, Upload, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND } from "@/lib/constants";
+import { uploadIdProof } from "@/lib/upload-id-proof";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -99,25 +100,13 @@ export default function ResubmitPage() {
     setIdProofPreview(URL.createObjectURL(file));
     setUploading(true);
 
-    const uploadFormData = new FormData();
-    uploadFormData.append("file", file);
-
     try {
-      const res = await fetch("/api/upload/id-proof", {
-        method: "POST",
-        body: uploadFormData,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setIdProofData(data.url);
-      } else {
-        toast.error(data.error || "Failed to upload image");
-        setIdProofFile(null);
-        setIdProofPreview(null);
-        e.target.value = "";
-      }
+      // Direct browser → Vercel Blob upload on Vercel (up to 50MB);
+      // falls back to the disk-based endpoint on localhost.
+      const url = await uploadIdProof(file);
+      setIdProofData(url);
     } catch (error) {
-      toast.error("Failed to upload image");
+      toast.error(error.message || "Failed to upload image");
       setIdProofFile(null);
       setIdProofPreview(null);
       e.target.value = "";

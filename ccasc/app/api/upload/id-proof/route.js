@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { handleUpload } from "@vercel/blob/client";
+
+const ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/jpg",
+];
+// Raised from 5MB to 50MB; on Vercel this is enforced by the Blob direct
+// upload (the file never passes through the serverless function body).
+const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request) {
   try {
@@ -15,8 +27,7 @@ export async function POST(request) {
     }
 
     // Validate file type
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
-    if (!validTypes.includes(file.type)) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
         { error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed." },
         { status: 400 }
@@ -24,13 +35,33 @@ export async function POST(request) {
     }
 
     // Validate file size (max 50MB)
-    if (file.size > 50 * 1024 * 1024) {
+    if (file.size > MAX_SIZE_BYTES) {
       return NextResponse.json(
         { error: "File size too large. Maximum is 50MB." },
         { status: 400 }
       );
     }
 
+    // On Vercel (BLOB_READ_WRITE_TOKEN configured) the browser uploads the
+    // file directly to Blob storage — this handler only brokers a short-lived
+    // upload URL, so large files never hit the serverless body limit.
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const json = await handleUpload({
+        body: formData,
+        request,
+        onBeforeGenerateToken: async () => ({
+          allowedContentTypes: ALLOWED_TYPES,
+          maximumSizeInBytes: MAX_SIZE_BYTES,
+          addRandomSuffix: true,
+        }),
+        onUploadCompleted: async () => {
+          // Nothing to record; the client receives the blob URL directly.
+        },
+      });
+      return NextResponse.json(json);
+    }
+
+    // Local-dev fallback: write the file to public/uploads (no Blob token).
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
@@ -57,7 +88,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Failed to upload file:", error);
     return NextResponse.json(
-      { error: "Failed to upload file" },
+      { error: error.message || "Failed to upload file" },
       { status: 500 }
     );
   }
