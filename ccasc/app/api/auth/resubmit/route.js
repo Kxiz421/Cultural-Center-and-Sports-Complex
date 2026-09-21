@@ -30,24 +30,30 @@ export async function POST(request) {
       );
     }
 
-    // Handle organization
+    // Handle organization: a typed custom name gets its own org row (dedupe
+    // case-insensitively); no shared generic "Other" bucket is created.
     let orgId;
     let otherOrgValue = null;
     if (organizationId && organizationId !== "other") {
       orgId = parseInt(organizationId, 10);
     } else {
-      // Use a single generic "Other" entry — find or create it once
-      const OTHER_ORG_NAME = "Other";
-      let otherOrg = await prisma.clientOrganization.findFirst({
-        where: { organizationName: OTHER_ORG_NAME },
+      const typedName = String(otherOrganization || "").trim();
+      if (!typedName) {
+        return NextResponse.json(
+          { error: "Please enter your organization name" },
+          { status: 400 }
+        );
+      }
+      let existingOrg = await prisma.clientOrganization.findFirst({
+        where: { organizationName: { equals: typedName, mode: "insensitive" } },
       });
-      if (!otherOrg) {
-        otherOrg = await prisma.clientOrganization.create({
-          data: { organizationName: OTHER_ORG_NAME },
+      if (!existingOrg) {
+        existingOrg = await prisma.clientOrganization.create({
+          data: { organizationName: typedName },
         });
       }
-      orgId = otherOrg.clientOrgId;
-      otherOrgValue = otherOrganization; // store custom name on the client record
+      orgId = existingOrg.clientOrgId;
+      otherOrgValue = existingOrg.organizationName;
     }
 
     // Update client: reset verification to Pending, update org, other org name, and idProof
