@@ -553,8 +553,17 @@ export default function UserManagementPage() {
     setPage(1);
   };
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginatedUsers = filtered.slice(
+  // When "All Roles" is picked, display from oldest to newest by account
+  // creation date instead of the API's role-grouped order.
+  const ordered =
+    roleFilter === "all"
+      ? [...filtered].sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+        )
+      : filtered;
+
+  const totalPages = Math.ceil(ordered.length / PAGE_SIZE);
+  const paginatedUsers = ordered.slice(
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE
   );

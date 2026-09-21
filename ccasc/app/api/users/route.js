@@ -61,7 +61,13 @@ export async function GET() {
         email: c.email,
         contact: c.contactNumber,
         role: c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName,
-        organization: c.clientOrg.organizationName,
+        // When a client registered via "Other", the org row is literally
+        // "Other" — show the custom name they typed instead.
+        organization:
+          c.clientOrg?.organizationName === "Other" && c.otherOrganization
+            ? c.otherOrganization
+            : c.clientOrg?.organizationName,
+        otherOrganization: c.otherOrganization ?? null,
         status: c.accountStatus,
         dbId: c.clientId,
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
