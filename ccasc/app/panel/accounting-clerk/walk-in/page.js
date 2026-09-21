@@ -30,7 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -55,6 +55,7 @@ import {
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
+import OrderOfPaymentDocument from "@/components/order-of-payment-document";
 import {
   getMinEventDate,
   getMinEventDateKey,
@@ -189,6 +190,8 @@ export default function WalkInReservationPage() {
 
   // Dialog and submission
   const [showOrder, setShowOrder] = React.useState(false);
+  // Order of Payment generated for the walk-in client after a successful save.
+  const [savedOrder, setSavedOrder] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [eventDates, setEventDates] = React.useState([]);
   const [selectedDates, setSelectedDates] = React.useState(new Set());
@@ -1093,6 +1096,38 @@ export default function WalkInReservationPage() {
       const data = await res.json();
       toast.success(`Reservation ${data.id} created successfully!${isExistingUser && selectedClient ? ` Linked to ${selectedClient.fullName}.` : ''}`);
 
+      // Build the Order of Payment for the walk-in client before the form
+      // resets — this is what gets printed and handed to them.
+      setSavedOrder({
+        controlNumber: data.id,
+        date: new Date().toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }),
+        clientName:
+          isExistingUser && selectedClient
+            ? selectedClient.fullName
+            : clientName || "Walk-in Client",
+        contactNumber:
+          isExistingUser && selectedClient
+            ? selectedClient.contact || ""
+            : clientContact || "",
+        activityName: eventType,
+        activityDate: sortedDates
+          .map((d) =>
+            new Date(`${d}T00:00:00`).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })
+          )
+          .join(", "),
+        chargeLines: summaryLines,
+        totalAmount: total,
+        eventDates: sortedDates,
+      });
+
       // Reset form
       setShowOrder(false);
       setVenueId("");
@@ -1372,6 +1407,46 @@ const renderPerDateFacilities = (date, cust) => {
           Create reservations on behalf of walk-in clients. Toggle to search for existing users or enter new client details manually.
         </p>
       </div>
+
+      {/* Order of Payment — generated once the reservation is saved */}
+      {savedOrder && (
+        <div className="flex flex-col gap-4">
+          <div className="no-print flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+            <div>
+              <p className="font-medium">
+                Order of Payment ready — {savedOrder.controlNumber}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Print this and hand it to the client for payment at the
+                Accounting Office.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setSavedOrder(null)}>
+                Close
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="mr-2 size-4" />
+                Print Order of Payment
+              </Button>
+            </div>
+          </div>
+
+          <OrderOfPaymentDocument
+            controlNumber={savedOrder.controlNumber}
+            date={savedOrder.date}
+            clientName={savedOrder.clientName}
+            address=""
+            contactNumber={savedOrder.contactNumber}
+            activityName={savedOrder.activityName}
+            activityDate={savedOrder.activityDate}
+            participants=""
+            chargeLines={savedOrder.chargeLines}
+            totalAmount={savedOrder.totalAmount}
+            eventDates={savedOrder.eventDates}
+          />
+        </div>
+      )}
 
       {/* Toggle: Existing User or Walk-in */}
       <Card>
