@@ -32,10 +32,11 @@ export async function uploadIdProof(file) {
   // Fallback: classic multipart upload handled server-side (localhost).
   // NOTE: on Vercel this path fails above ~4.5MB (platform body limit).
   let data = null;
+  let res = null;
   try {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch("/api/upload/id-proof", {
+    res = await fetch("/api/upload/id-proof", {
       method: "POST",
       body: formData,
     });
