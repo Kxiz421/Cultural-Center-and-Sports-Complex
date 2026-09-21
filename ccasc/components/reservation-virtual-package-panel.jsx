@@ -1,6 +1,8 @@
 "use client";
 
+import * as React from "react";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -26,6 +28,83 @@ import {
 } from "@/lib/reservation-package-select";
 import { TIME_SLOT, isDaySlot, isNightSlot, isWholeDaySlot } from "@/lib/time-slots";
 
+const SHOT_CLOCK_ADDON = 500;
+
+/**
+ * Basketball game type selection with an "Add Shot Clock" toggle.
+ * Day = ₱1,000 (₱1,500 w/ shot clock), Night = ₱1,500 (₱2,000 w/ shot
+ * clock), Whole Day = ₱2,500 (₱3,500 w/ shot clock). The selected slot
+ * determines the session; the button toggles the shot clock add-on.
+ */
+function BasketballGamePanel({
+  particulars,
+  particularQuantities,
+  onParticularQuantitiesChange,
+  timeSlotId,
+  compact = false,
+}) {
+  const encodedQty = Number(
+    getBasketballEncodedQty(particulars, particularQuantities) || 0
+  );
+  const baseValue = isWholeDaySlot(timeSlotId)
+    ? 6
+    : isNightSlot(timeSlotId)
+      ? 4
+      : 2;
+  const withShotClock = encodedQty === baseValue + 1;
+  const activeValue = withShotClock ? baseValue + 1 : baseValue;
+  const activeOpt = BASKETBALL_OPTIONS.find((o) => o.value === activeValue);
+
+  // Keep the encoded selection in sync with the slot: auto-select the base
+  // rate when nothing is chosen, and remap (keeping shot-clock state) when
+  // the session changes (e.g. Day → Night).
+  React.useEffect(() => {
+    if (encodedQty === baseValue || encodedQty === baseValue + 1) return;
+    const wasShotClock = [3, 5, 7].includes(encodedQty);
+    onParticularQuantitiesChange(
+      applyBasketballEncodedSelection(
+        particulars,
+        particularQuantities,
+        wasShotClock ? baseValue + 1 : baseValue
+      )
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encodedQty, baseValue]);
+
+  const toggleShotClock = () =>
+    onParticularQuantitiesChange(
+      applyBasketballEncodedSelection(
+        particulars,
+        particularQuantities,
+        withShotClock ? baseValue : baseValue + 1
+      )
+    );
+
+  return (
+    <div className="space-y-2">
+      <Label className={compact ? "text-xs" : ""}>Basketball Game Type</Label>
+      <div className="flex flex-col gap-2 rounded-md border p-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className={`font-medium ${compact ? "text-xs" : "text-sm"}`}>
+            {activeOpt?.label || "Basketball Game"}
+          </p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            ₱{(activeOpt?.price || 0).toLocaleString()}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={withShotClock ? "default" : "outline"}
+          size="sm"
+          onClick={toggleShotClock}
+        >
+          {withShotClock ? "Shot Clock Added ✓" : `Add Shot Clock (+₱${SHOT_CLOCK_ADDON.toLocaleString()})`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ReservationVirtualPackagePanel({
   packageId,
   particulars,
@@ -38,40 +117,14 @@ export function ReservationVirtualPackagePanel({
 }) {
   if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
     if (!hasBasketballPackageOption(particulars)) return null;
-    const encodedQty = getBasketballEncodedQty(particulars, particularQuantities);
-    const slotOptions = BASKETBALL_OPTIONS.filter((opt) => {
-      if (isWholeDaySlot(timeSlotId)) return opt.value === 6 || opt.value === 7;
-      if (isNightSlot(timeSlotId)) return opt.value === 4 || opt.value === 5;
-      return opt.value === 2 || opt.value === 3;
-    });
-
     return (
-      <div className="space-y-2">
-        <Label className={compact ? "text-xs" : ""}>Basketball Game Type</Label>
-        <Select
-          value={encodedQty > 0 ? String(encodedQty) : ""}
-          onValueChange={(val) =>
-            onParticularQuantitiesChange(
-              applyBasketballEncodedSelection(
-                particulars,
-                particularQuantities,
-                parseInt(val, 10)
-              )
-            )
-          }
-        >
-          <SelectTrigger className={compact ? "text-xs" : ""}>
-            <SelectValue placeholder="Select game type" />
-          </SelectTrigger>
-          <SelectContent>
-            {slotOptions.map((opt) => (
-              <SelectItem key={opt.value} value={String(opt.value)}>
-                {opt.label} — ₱{opt.price.toLocaleString()}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <BasketballGamePanel
+        particulars={particulars}
+        particularQuantities={particularQuantities}
+        onParticularQuantitiesChange={onParticularQuantitiesChange}
+        timeSlotId={timeSlotId}
+        compact={compact}
+      />
     );
   }
 

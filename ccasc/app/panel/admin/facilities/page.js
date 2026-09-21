@@ -388,7 +388,7 @@ export default function FacilitiesPage() {
               <TableRow>
                 <TableHead>Facility</TableHead>
                 <TableHead>Day Rate</TableHead>
-                <TableHead>Night Rate</TableHead>
+                {!hideCapacity && <TableHead>Night Rate</TableHead>}
                 {!hideCapacity && <TableHead>Capacity</TableHead>}
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -398,7 +398,7 @@ export default function FacilitiesPage() {
               {facilitiesList.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={hideCapacity ? 5 : 6}
+                    colSpan={hideCapacity ? 4 : 6}
                     className="text-center text-muted-foreground py-6"
                   >
                     No facilities in this venue
@@ -413,9 +413,11 @@ export default function FacilitiesPage() {
                       <TableCell className="tabular-nums">
                         {formatPhp(f.rateHourly)}
                       </TableCell>
-                      <TableCell className="tabular-nums">
-                        {formatPhp(f.rateDaily)}
-                      </TableCell>
+                      {!hideCapacity && (
+                        <TableCell className="tabular-nums">
+                          {formatPhp(f.rateDaily)}
+                        </TableCell>
+                      )}
                       {!hideCapacity && <TableCell>{f.capacity || "—"}</TableCell>}
                       <TableCell>
                         <Badge
@@ -591,6 +593,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                {addForm.venueId !== "2" && (
                 <div className="space-y-2">
                   <Label htmlFor="add-rate-day">Night Rate (₱)</Label>
                   <Input
@@ -605,6 +608,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-status">Status</Label>
@@ -895,6 +899,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                {editForm.venueId !== "2" && (
                 <div className="space-y-2">
                   <Label htmlFor="edit-rate-day">Night Rate (₱)</Label>
                   <Input
@@ -908,6 +913,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-status">Status</Label>
@@ -1034,12 +1040,14 @@ export default function FacilitiesPage() {
                   ₱{parseFloat(editForm.rateHourly || 0).toLocaleString()}
                 </span>
               </div>
+              {editFacility?.venueId !== 2 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Night Rate:</span>
                 <span className="font-medium text-right">
                   ₱{parseFloat(editForm.rateDaily || 0).toLocaleString()}
                 </span>
               </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Capacity:</span>
                 <span className="font-medium text-right">

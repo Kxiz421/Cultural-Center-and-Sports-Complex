@@ -53,6 +53,8 @@ const MONTHS = ["January", "February", "March", "April", "May", "June",
 function getFacilityRateBySlot(facility, timeSlotId) {
   const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
   const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  // Sports Complex facilities are always billed at the day rate.
+  if (Number(facility?.venueId) === 2) return dayRate;
   const slot = String(timeSlotId || "1");
   if (slot === "2") return nightRate > 0 ? nightRate : dayRate;       // Night
   if (slot === "3") return dayRate + nightRate;                        // Whole Day = Day + Night
@@ -1353,8 +1355,8 @@ const renderPerDateFacilities = (date, cust) => {
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
 
-              {/* Customize Per Date Button - only shown when multiple dates selected for Cultural Center */}
-              {selectedDates.size > 1 && !isSportsComplex && (
+              {/* Customize Per Date Button - available for Cultural Center, even for a single date */}
+              {selectedDates.size > 0 && !isSportsComplex && (
                 <div className="flex items-center gap-2 pt-2">
                   <Button
                     type="button"

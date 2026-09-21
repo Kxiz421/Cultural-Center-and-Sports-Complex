@@ -224,10 +224,13 @@ export function getVenueRentalParticular(particulars, timeSlotId) {
 /**
  * Slot-aware facility rate.
  * Day (1) = day rate, Night (2) = night rate, Whole Day (3) = day + night.
+ * Sports Complex facilities (venueId 2) are always billed at the day rate,
+ * regardless of the selected time slot.
  */
 export function getFacilityRateForSlot(facility, timeSlotId) {
   const dayRate = Number(facility?.rateDay ?? facility?.rateHourly ?? 0);
   const nightRate = Number(facility?.rateNight ?? facility?.rateDaily ?? 0);
+  if (Number(facility?.venueId) === 2) return dayRate;
   const slot = timeSlotKey(timeSlotId || TIME_SLOT.DAY);
   if (slot === TIME_SLOT.NIGHT) return nightRate > 0 ? nightRate : dayRate;
   if (slot === TIME_SLOT.WHOLE_DAY) return dayRate + nightRate;
