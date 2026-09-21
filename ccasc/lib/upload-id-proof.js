@@ -21,6 +21,13 @@ export async function uploadIdProof(file) {
     });
     return blob.url;
   } catch (blobError) {
+    // Surface the real reason so it's easy to diagnose (e.g. token missing
+    // on the deployment, route returning 500, CORS issues in dev).
+    console.error(
+      "[uploadIdProof] Vercel Blob direct upload failed:",
+      blobError?.message || blobError
+    );
+  }
     console.warn(
       "Blob upload unavailable, falling back to server upload:",
       blobError

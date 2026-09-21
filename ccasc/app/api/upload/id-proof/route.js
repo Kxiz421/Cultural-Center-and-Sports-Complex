@@ -24,20 +24,33 @@ export async function POST(request) {
     // Blob storage — large files never pass through this serverless function.
     if (contentType.includes("application/json")) {
       const body = await request.json();
-      const json = await handleUpload({
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        request,
-        body,
-        onBeforeGenerateToken: async () => ({
-          allowedContentTypes: ALLOWED_TYPES,
-          maximumSizeInBytes: MAX_SIZE_BYTES,
-          addRandomSuffix: true,
-        }),
-        onUploadCompleted: async () => {
-          // Nothing to record; the client receives the blob URL directly.
-        },
-      });
-      return NextResponse.json(json);
+      try {
+        const json = await handleUpload({
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+          request,
+          body,
+          onBeforeGenerateToken: async () => ({
+            allowedContentTypes: ALLOWED_TYPES,
+            maximumSizeInBytes: MAX_SIZE_BYTES,
+            addRandomSuffix: true,
+          }),
+          onUploadCompleted: async () => {
+            // Nothing to record; the client receives the blob URL directly.
+          },
+        });
+        return NextResponse.json(json);
+      } catch (handleError) {
+        console.error("[upload/id-proof] handleUpload failed:", handleError);
+        return NextResponse.json(
+          {
+            error:
+              process.env.BLOB_READ_WRITE_TOKEN
+                ? "Blob token is configured but the upload handshake failed."
+                : "Large-file Blob uploads require BLOB_READ_WRITE_TOKEN on this deployment.",
+          },
+          { status: 500 }
+        );
+      }
     }
 
     // Fallback (multipart, local dev only): validate and write to disk.
