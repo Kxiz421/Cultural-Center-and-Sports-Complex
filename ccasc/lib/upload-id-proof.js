@@ -28,11 +28,6 @@ export async function uploadIdProof(file) {
       blobError?.message || blobError
     );
   }
-    console.warn(
-      "Blob upload unavailable, falling back to server upload:",
-      blobError
-    );
-  }
 
   // Fallback: classic multipart upload handled server-side (localhost).
   // NOTE: on Vercel this path fails above ~4.5MB (platform body limit).
