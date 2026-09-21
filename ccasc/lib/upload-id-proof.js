@@ -18,6 +18,7 @@ export async function uploadIdProof(file) {
     const blob = await upload(pathname, file, {
       handleUploadUrl: "/api/upload/id-proof",
       contentType: file.type,
+      access: "public",
     });
     return blob.url;
   } catch (blobError) {
