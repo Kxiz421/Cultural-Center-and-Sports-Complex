@@ -13,8 +13,11 @@ import { upload } from "@vercel/blob/client";
 export async function uploadIdProof(file) {
   // Fast path: direct browser → Vercel Blob upload (up to 50MB).
   try {
-    const blob = await upload(file, {
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const pathname = `id-proofs/${Date.now()}-${safeName}`;
+    const blob = await upload(pathname, file, {
       handleUploadUrl: "/api/upload/id-proof",
+      contentType: file.type,
     });
     return blob.url;
   } catch (blobError) {
