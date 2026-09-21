@@ -16,6 +16,31 @@ const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request) {
   try {
+    const contentType = request.headers.get("content-type") || "";
+
+    // The Vercel Blob client `upload()` first sends a JSON handshake to this
+    // route ({ type: "blob.generate-client-token", payload }). We respond with
+    // a short-lived client token so the browser can PUT the file directly to
+    // Blob storage — large files never pass through this serverless function.
+    if (contentType.includes("application/json")) {
+      const body = await request.json();
+      const json = await handleUpload({
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+        request,
+        body,
+        onBeforeGenerateToken: async () => ({
+          allowedContentTypes: ALLOWED_TYPES,
+          maximumSizeInBytes: MAX_SIZE_BYTES,
+          addRandomSuffix: true,
+        }),
+        onUploadCompleted: async () => {
+          // Nothing to record; the client receives the blob URL directly.
+        },
+      });
+      return NextResponse.json(json);
+    }
+
+    // Fallback (multipart, local dev only): validate and write to disk.
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -42,26 +67,6 @@ export async function POST(request) {
       );
     }
 
-    // On Vercel (BLOB_READ_WRITE_TOKEN configured) the browser uploads the
-    // file directly to Blob storage — this handler only brokers a short-lived
-    // upload URL, so large files never hit the serverless body limit.
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const json = await handleUpload({
-        body: formData,
-        request,
-        onBeforeGenerateToken: async () => ({
-          allowedContentTypes: ALLOWED_TYPES,
-          maximumSizeInBytes: MAX_SIZE_BYTES,
-          addRandomSuffix: true,
-        }),
-        onUploadCompleted: async () => {
-          // Nothing to record; the client receives the blob URL directly.
-        },
-      });
-      return NextResponse.json(json);
-    }
-
-    // Local-dev fallback: write the file to public/uploads (no Blob token).
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
