@@ -32,7 +32,14 @@ function OrderOfPaymentContent() {
       try {
         const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
         const res = await fetch(`/api/reservations?clientId=${clientId}`);
-        const reservations = await res.json();
+        const payload = await res.json();
+        // The API normally returns an array, but error responses return an
+        // object (e.g. { error }) — never call .find on those.
+        const reservations = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.reservations)
+            ? payload.reservations
+            : [];
         const found = reservations.find((r) => r.id === reservationId);
         if (!cancelled) {
           if (found) setData(found);

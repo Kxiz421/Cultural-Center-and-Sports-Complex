@@ -259,8 +259,10 @@ export default function OrderOfPaymentDocument({
   const packageLines = lines.filter(isPackageLine);
   const particularLines = lines.filter((line) => !isPackageLine(line));
 
-  const total = Number(totalAmount) || 0;
-  const deposit = total * OOP_DEPOSIT_RATE;
+  const baseTotal = Number(totalAmount) || 0;
+  const deposit = baseTotal * OOP_DEPOSIT_RATE;
+  // The printed grand total includes the 10% deposit.
+  const total = baseTotal + deposit;
   const packageTotal = packageLines.reduce(
     (sum, line) => sum + (Number(line.amount) || 0),
     0
@@ -354,7 +356,7 @@ export default function OrderOfPaymentDocument({
                   colSpan={2}
                   className="border border-black px-1.5 py-0.5 text-right font-bold uppercase"
                 >
-                  Total Amount
+                  Total Amount (including 10% deposit)
                 </td>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
                   {formatPeso(total)}
