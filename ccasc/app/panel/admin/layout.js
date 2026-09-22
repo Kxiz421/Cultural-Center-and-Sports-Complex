@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AppSidebarCCASC } from "@/components/app-sidebar-ccasc";
 import { SiteHeaderCCASC } from "@/components/site-header-ccasc";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -24,11 +25,15 @@ function AdminAuthShell({ children }) {
   const router = useRouter();
   const [ready, setReady] = React.useState(false);
   const [displayName, setDisplayName] = React.useState("");
+  const { data: session, status } = useSession();
 
   React.useEffect(() => {
+    if (status === "loading") return;
+
     try {
-      const userId = window.localStorage.getItem("user_id");
-      const role = window.localStorage.getItem("role");
+      // Identity comes from the signed session cookie (proxy.js gates first).
+      const userId = session?.user?.userId ?? null;
+      const role = session?.user?.type ?? null;
       
       if (!userId || role !== "admin") {
         router.replace("/login");
@@ -36,8 +41,8 @@ function AdminAuthShell({ children }) {
       }
       
       // Move display name logic outside setReady to prevent cascade
-      const first = window.localStorage.getItem("firstname") ?? "";
-      const last = window.localStorage.getItem("lastname") ?? "";
+      const first = session?.user?.firstName ?? "";
+      const last = session?.user?.lastName ?? "";
       const name = `${first} ${last}`.trim() || "Administrator";
       
       requestAnimationFrame(() => {
@@ -48,7 +53,7 @@ function AdminAuthShell({ children }) {
       router.replace("/login");
       return;
     } 
-  }, [router]);
+  }, [router, session, status]);
 
   if (!ready) {
     return (

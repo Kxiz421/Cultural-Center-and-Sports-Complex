@@ -3,9 +3,13 @@ import prisma from "@/lib/prisma";
 import { CULTURAL_CENTER_VENUE_IDS } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");

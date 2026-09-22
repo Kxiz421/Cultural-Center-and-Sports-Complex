@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
 
+import { requireApiAuth } from "@/lib/api-auth";
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { userId, verificationStatus, remarks } = await request.json();
 

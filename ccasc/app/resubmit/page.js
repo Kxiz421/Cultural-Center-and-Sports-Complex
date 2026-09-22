@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { signOut, useSession } from "next-auth/react";
 import { Building2, Upload, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND } from "@/lib/constants";
 import { uploadIdProof } from "@/lib/upload-id-proof";
@@ -50,21 +51,21 @@ export default function ResubmitPage() {
   const [idProofPreview, setIdProofPreview] = useState(null);
   const [idProofData, setIdProofData] = useState(null);
 
-  const [clientId, setClientId] = useState(null);
   const [clientEmail, setClientEmail] = useState(null);
+  const { data: session, status: sessionStatus } = useSession();
 
-  // Fetch organizations and client info on mount
+  // Fetch organizations and the signed-in client's own account info
   useEffect(() => {
-    async function init() {
-      const cid = localStorage.getItem("resubmit_client_id");
-      const cemail = localStorage.getItem("resubmit_email");
-      setClientId(cid);
-      setClientEmail(cemail);
+    if (sessionStatus === "loading") return;
 
-      if (!cid) {
+    async function init() {
+      // Identity comes from the signed session cookie, never localStorage.
+      if (sessionStatus !== "authenticated" || !session?.user) {
         router.push("/login");
         return;
       }
+
+      setClientEmail(session.user.email ?? null);
 
       try {
         const res = await fetch("/api/client-organizations");
@@ -77,7 +78,7 @@ export default function ResubmitPage() {
       }
     }
     init();
-  }, [router]);
+  }, [router, session, sessionStatus]);
 
   const handleIdProofUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -136,7 +137,6 @@ export default function ResubmitPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
           organizationId: formData.organizationId,
           otherOrganization: formData.otherOrganization,
           idProof: idProofData,
@@ -151,11 +151,9 @@ export default function ResubmitPage() {
         return;
       }
 
-      // Clear stored data
-      localStorage.removeItem("resubmit_client_id");
-      localStorage.removeItem("resubmit_email");
-
       toast.success("Resubmission successful! Please wait for admin approval.");
+      // The restricted session has done its job - end it explicitly.
+      await signOut({ redirect: false });
       router.push("/login");
     } catch (error) {
       toast.error("An error occurred during resubmission.");

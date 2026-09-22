@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import bcrypt from "bcryptjs";
+import { requireApiAuth } from "@/lib/api-auth";
+import { USER_TYPE } from "@/lib/auth-roles";
 
 export async function POST(request) {
-  try {
-    const { clientId, organizationId, otherOrganization, idProof } = await request.json();
+  // A declined client's restricted session is the only caller allowed here.
+  const guard = await requireApiAuth([USER_TYPE.RESUBMIT_ONLY]);
+  if (guard.response) return guard.response;
 
-    if (!clientId) {
-      return NextResponse.json(
-        { error: "Client ID is required" },
-        { status: 400 }
-      );
-    }
+  try {
+    const { organizationId, otherOrganization, idProof } = await request.json();
 
     if (!organizationId && !otherOrganization) {
       return NextResponse.json(
@@ -20,13 +18,34 @@ export async function POST(request) {
       );
     }
 
-    const prefix = clientId.split("-")[0];
-    const id = parseInt(clientId.split("-")[1], 10);
+    // The client id comes from the signed session, never from the request
+    // body - previously anyone could resubmit on behalf of any CLT-<id>.
+    const id = guard.user.clientId;
 
-    if (prefix !== "CLT" || isNaN(id)) {
+    if (!id) {
       return NextResponse.json(
-        { error: "Invalid client ID" },
+        { error: "Invalid client session" },
         { status: 400 }
+      );
+    }
+
+    const existing = await prisma.client.findUnique({
+      where: { clientId: id },
+      select: { verificationStatus: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    // Only a currently-declined submission may be replaced.
+    if (existing.verificationStatus !== "Declined") {
+      return NextResponse.json(
+        {
+          error:
+            "This account is not awaiting resubmission. Please sign in again.",
+        },
+        { status: 409 }
       );
     }
 

@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const STATUS_NAMES = {
   1: "Available",
   2: "Unavailable",
@@ -15,6 +16,9 @@ function getStatusName(id) {
 }
 
 export async function GET() {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const packages = await prisma.package.findMany({
       include: {
@@ -59,8 +63,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, timeSlotId, inclusions, performedBy, performedByName } = await request.json();
+    const { packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, timeSlotId, inclusions } = await request.json();
 
     if (!packageName || !packageName.trim()) {
       return NextResponse.json({ error: "Package name is required" }, { status: 400 });
@@ -98,8 +106,8 @@ export async function POST(request) {
         action: "CREATED",
         targetUserId: `PKG-${created.packageId}`,
         targetName: created.packageName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Package created: name="${created.packageName}"`,
       },
     });
@@ -125,8 +133,12 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { packageId, packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, statusId, inclusions, performedBy, performedByName } = await request.json();
+    const { packageId, packageName, description, dayRate, nightRate, ledWallDayRate, ledWallNightRate, statusId, inclusions } = await request.json();
 
     if (!packageId) {
       return NextResponse.json({ error: "Package ID is required" }, { status: 400 });
@@ -202,8 +214,8 @@ export async function PUT(request) {
           action: "UPDATED",
           targetUserId: `PKG-${updated.packageId}`,
           targetName: updated.packageName,
-          performedById: performedBy || "system",
-          performedByName: performedByName || "System",
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Package updated: ${changes.join("; ")}`,
         },
       });

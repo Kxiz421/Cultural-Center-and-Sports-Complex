@@ -4,13 +4,20 @@ import { formatDbDate } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const rawClientId = searchParams.get("clientId");
     const venueId = searchParams.get("venueId");
-    const ownEventsOnly = rawClientId !== null;
-    const mineClientId = parseInt(String(rawClientId || "").replace(/^CLT-/i, ""), 10);
+    // Client-role sessions are pinned to their own events: a crafted
+    // ?clientId= can no longer expose another client's calendar.
+    const scopedClientId = resolveClientScope(guard.user, rawClientId);
+    const ownEventsOnly = scopedClientId !== null;
+    const mineClientId = scopedClientId === null ? NaN : scopedClientId;
 
     // Current time for filtering out ended events (time-specific)
     const now = new Date();

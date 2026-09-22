@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,9 +35,11 @@ export default function ClientLayout({ children }) {
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const { unreadCount } = useUnreadNotificationCount("client");
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     localStorage.clear();
     setLogoutOpen(false);
+    // Destroy the signed session cookie, not just the local mirrors.
+    await signOut({ redirect: false });
     toast.success("You have been logged out.");
     router.push("/login");
   };

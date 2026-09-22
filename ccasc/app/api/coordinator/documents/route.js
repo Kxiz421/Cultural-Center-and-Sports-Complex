@@ -5,6 +5,7 @@ import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 
@@ -18,6 +19,9 @@ const CULTURAL_TYPES = [2, 3];
 const SPORTS_TYPES = [5];
 
 export async function GET() {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const documents = await prisma.document.findMany({
       where: {

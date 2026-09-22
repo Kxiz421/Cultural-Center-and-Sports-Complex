@@ -22,6 +22,7 @@ import {
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, resolveClientScope, ownClientId } from "@/lib/api-auth";
 function parsePackageId(value) {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -126,14 +127,16 @@ function computeCalendarVisible(totalAmount, payments) {
 }
 
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
-    let clientId = searchParams.get("clientId");
-    if (clientId) clientId = clientId.replace("CLT-", "");
-    const parsedClientId = clientId ? parseInt(clientId, 10) : null;
+    // Client-role sessions are pinned to their own reservations.
+    const scopedClientId = resolveClientScope(guard.user, searchParams.get("clientId"));
 
     const reservations = await prisma.reservation.findMany({
-      where: parsedClientId ? { clientId: parsedClientId } : {},
+      where: scopedClientId ? { clientId: scopedClientId } : {},
       include: {
         venue: { select: { venue: true } },
         timeSlot: { select: { startTime: true, endTime: true } },
@@ -244,6 +247,9 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const body = await request.json();
     const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars, chargeLines: rawChargeLines } = body;
@@ -367,6 +373,15 @@ export async function POST(request) {
 
     const isWalkIn = notes && notes.startsWith("Walk-in client:");
     const parsedClientId = parseInt(clientId, 10);
+
+    // Client-role sessions may only create reservations for their own account.
+    const ownReservationClientId = ownClientId(guard.user);
+    if (ownReservationClientId != null && parsedClientId !== ownReservationClientId) {
+      return NextResponse.json(
+        { error: "You can only create reservations for your own account." },
+        { status: 403 }
+      );
+    }
     const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
     const venueName = venueNames[parsedVenueId] || "Unknown Venue";
 

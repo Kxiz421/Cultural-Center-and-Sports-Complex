@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const STATUS_NAMES = {
   1: "Available",
   2: "Unavailable",
@@ -14,6 +15,9 @@ function getStatusName(id) {
 }
 
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const transactionsFor = searchParams.get("transactionsFor");
@@ -61,8 +65,12 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { particularName, description, category, quantityAvailable, performedBy, performedByName } = await request.json();
+    const { particularName, description, category, quantityAvailable } = await request.json();
 
     if (!particularName || !particularName.trim()) {
       return NextResponse.json(
@@ -124,8 +132,8 @@ export async function POST(request) {
         action: "CREATED",
         targetUserId: `PART-${created.particularId}`,
         targetName: created.particularName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Particular created: name="${created.particularName}", category="${created.category}", quantity=${qty || 0}`,
       },
     });
@@ -151,8 +159,12 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { particularId, particularName, description, category, statusId, quantityAvailable, performedBy, performedByName } = await request.json();
+    const { particularId, particularName, description, category, statusId, quantityAvailable } = await request.json();
 
     if (!particularId) {
       return NextResponse.json(
@@ -258,8 +270,8 @@ export async function PUT(request) {
           action: "UPDATED",
           targetUserId: `PART-${updated.particularId}`,
           targetName: updated.particularName,
-          performedById: performedBy || "system",
-          performedByName: performedByName || "System",
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Particular updated: ${changes.join("; ")}`,
         },
       });
@@ -286,8 +298,12 @@ export async function PUT(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { particularId, action, quantity, performedBy, performedByName } = await request.json();
+    const { particularId, action, quantity } = await request.json();
 
     if (!particularId) {
       return NextResponse.json(
@@ -371,8 +387,8 @@ export async function PATCH(request) {
         particularId: parseInt(particularId, 10),
         transactionType: action,
         quantity: qty,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
       },
     });
 
@@ -388,8 +404,8 @@ export async function PATCH(request) {
         action: actionLabel,
         targetUserId: `PART-${particularId}`,
         targetName: existing.particularName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: detailText,
       },
     });
@@ -408,11 +424,13 @@ export async function PATCH(request) {
   }
 }
 export async function DELETE(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const { searchParams } = new URL(request.url);
     const particularId = searchParams.get("id");
-    const performedBy = searchParams.get("performedBy") || "";
-    const performedByName = searchParams.get("performedByName") || "";
 
     if (!particularId) {
       return NextResponse.json(
@@ -452,8 +470,8 @@ export async function DELETE(request) {
         action: "DELETED",
         targetUserId: `PART-${particularId}`,
         targetName: existing.particularName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Particular deleted: name="${existing.particularName}", category="${existing.category || ""}"`,
       },
     });

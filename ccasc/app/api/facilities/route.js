@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 const CULTURAL_CENTER_VENUE_ID = 1;
 
 /**
@@ -64,6 +65,9 @@ async function syncFacilityToVenueRental(facility, rate) {
 }
 
 export async function GET() {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const facilities = await prisma.facility.findMany({
       include: {
@@ -104,6 +108,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const data = await request.json();
     
@@ -162,6 +169,9 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const data = await request.json();
     const { facilityId, name, description, capacity, rateId, statusId, venueId, rateDay, rateNight, images } = data;
@@ -269,6 +279,9 @@ export async function PUT(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const data = await request.json();
     const { facilityId, statusId } = data;

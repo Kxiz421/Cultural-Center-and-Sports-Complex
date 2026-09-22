@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AppSidebarAccounting } from "@/components/app-sidebar-accounting";
 import { SiteHeaderCCASC } from "@/components/site-header-ccasc";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -20,19 +21,23 @@ function AccountingAuthShell({ children }) {
   const router = useRouter();
   const [ready, setReady] = React.useState(false);
   const [displayName, setDisplayName] = React.useState("");
+  const { data: session, status } = useSession();
 
   React.useEffect(() => {
+    if (status === "loading") return;
+
     try {
-      const userId = window.localStorage.getItem("user_id");
-      const role = window.localStorage.getItem("role");
+      // Identity comes from the signed session cookie (proxy.js gates first).
+      const userId = session?.user?.userId ?? null;
+      const role = session?.user?.type ?? null;
 
       if (!userId || role !== "accounting clerk") {
         router.replace("/login");
         return;
       }
 
-      const first = window.localStorage.getItem("firstname") ?? "";
-      const last = window.localStorage.getItem("lastname") ?? "";
+      const first = session?.user?.firstName ?? "";
+      const last = session?.user?.lastName ?? "";
       const name = `${first} ${last}`.trim() || "Accounting Clerk";
 
       requestAnimationFrame(() => {
@@ -43,7 +48,7 @@ function AccountingAuthShell({ children }) {
       router.replace("/login");
       return;
     }
-  }, [router]);
+  }, [router, session, status]);
 
   if (!ready) {
     return (

@@ -3,7 +3,11 @@ import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export async function GET() {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+
   try {
     // Fetch both staff and clients
     const [staff, clients] = await Promise.all([
@@ -95,6 +99,10 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const data = await request.json();
 
@@ -138,9 +146,6 @@ export async function POST(request) {
       }
     }
 
-    const performedBy = data.performedBy || "system";
-    const performedByName = data.performedByName || "System";
-
     if (data.roleType === "staff") {
       const staff = await prisma.staff.create({
         data: {
@@ -165,8 +170,8 @@ export async function POST(request) {
           action: "CREATED",
           targetUserId: userId,
           targetName: `${data.firstName} ${data.lastName}`,
-          performedById: performedBy,
-          performedByName: performedByName,
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Account created as ${data.roleType}`,
         },
       });
@@ -197,8 +202,8 @@ export async function POST(request) {
           action: "CREATED",
           targetUserId: userId,
           targetName: `${data.firstName} ${data.lastName}`,
-          performedById: performedBy,
-          performedByName: performedByName,
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Account created as ${data.roleType}`,
         },
       });
@@ -215,8 +220,12 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { userId, status, verificationStatus, performedBy, performedByName } = await request.json();
+    const { userId, status, verificationStatus } = await request.json();
 
     if (!userId) {
       return NextResponse.json(
@@ -268,8 +277,8 @@ export async function PATCH(request) {
             action,
             targetUserId: userId,
             targetName,
-            performedById: performedBy || "system",
-            performedByName: performedByName || "System",
+            performedById: acting.performedBy,
+            performedByName: acting.performedByName,
             details: `Verification status changed to ${verificationStatus}, account status set to ${newStatus}`,
           },
         });
@@ -304,8 +313,8 @@ export async function PATCH(request) {
           action,
           targetUserId: userId,
           targetName,
-          performedById: performedBy || "system",
-          performedByName: performedByName || "System",
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Account status changed to ${status}`,
         },
       });
@@ -324,9 +333,13 @@ export async function PATCH(request) {
 }
 
 export async function PUT(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
-    const { userId, firstName, middleName, lastName, email, contact, password, performedBy, performedByName } = body;
+    const { userId, firstName, middleName, lastName, email, contact, password } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -392,8 +405,8 @@ export async function PUT(request) {
         action: "UPDATED",
         targetUserId: userId,
         targetName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details,
       },
     });

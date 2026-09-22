@@ -3,9 +3,16 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get("clientId");
+  const requestedClientId = searchParams.get("clientId");
+
+  // Client-role sessions may only ever read their own bookings.
+  const clientId = resolveClientScope(guard.user, requestedClientId);
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const statusFilter = searchParams.get("status");

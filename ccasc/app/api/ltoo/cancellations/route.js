@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 
 export async function GET() {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const bookings = await prisma.booking.findMany({
       where: {
@@ -106,9 +110,13 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
-    const { bookingId, performedBy, performedByName } = body;
+    const { bookingId } = body;
 
     if (!bookingId) {
       return NextResponse.json(
@@ -170,8 +178,8 @@ export async function POST(request) {
         action: isForfeiture ? "BOOKING_CANCELLED_FORFEITED" : "BOOKING_CANCELLED",
         targetUserId: `BKG-${bookingId}`,
         targetName: clientName,
-        performedById: performedBy || "LTOO",
-        performedByName: performedByName || "Local Treasury Operations Officer",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: isForfeiture
           ? `Booking #${bookingId} for ${clientName} cancelled within 30-day window. Payments forfeited (non-refundable). Records preserved for audit.`
           : `Booking #${bookingId} for ${clientName} has been cancelled. Payments are eligible for refund.`,

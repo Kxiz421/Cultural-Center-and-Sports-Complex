@@ -30,6 +30,10 @@ setInterval(() => {
     record.timestamps = record.timestamps.filter((t) => now - t < 1_800_000);
     if (record.timestamps.length === 0) passwordResetAttempts.delete(key);
   }
+  for (const [key, record] of otpVerifyAttempts) {
+    record.timestamps = record.timestamps.filter((t) => now - t < OTP_WINDOW_MS);
+    if (record.timestamps.length === 0) otpVerifyAttempts.delete(key);
+  }
 }, CLEANUP_MS);
 
 // Avoid memory leak if the Node process exits
@@ -136,4 +140,52 @@ export function recordPasswordReset(ip) {
     passwordResetAttempts.set(ip, record);
   }
   record.timestamps.push(Date.now());
+}
+
+// ---------------------------------------------------------------------------
+// OTP VERIFICATION – failed-attempt tracking (keyed by IP + email)
+//
+// Without this, a 6-digit code could be brute-forced: PATCH/PUT had no limit
+// at all, so guessing the code granted a full password reset.
+// ---------------------------------------------------------------------------
+
+const OTP_WINDOW_MS = 900_000; // 15 minutes
+const OTP_MAX = 5;
+
+/** @type {Map<string, { timestamps: number[] }>} */
+const otpVerifyAttempts = new Map();
+
+/**
+ * Check whether OTP verification is currently blocked for this key.
+ * @returns {{ allowed: true } | { allowed: false, retryAfter: number }}
+ */
+export function checkOtpVerifyRateLimit(key) {
+  const record = otpVerifyAttempts.get(key);
+  if (!record) return { allowed: true };
+
+  const now = Date.now();
+  record.timestamps = record.timestamps.filter((t) => now - t < OTP_WINDOW_MS);
+
+  if (record.timestamps.length >= OTP_MAX) {
+    const oldest = record.timestamps[0];
+    const waitMs = OTP_WINDOW_MS - (now - oldest);
+    return { allowed: false, retryAfter: Math.ceil(waitMs / 1000) };
+  }
+
+  return { allowed: true };
+}
+
+/** Record a failed OTP verification attempt. */
+export function recordOtpVerifyFailure(key) {
+  let record = otpVerifyAttempts.get(key);
+  if (!record) {
+    record = { timestamps: [] };
+    otpVerifyAttempts.set(key, record);
+  }
+  record.timestamps.push(Date.now());
+}
+
+/** Clear failed OTP attempts (called after a successful password reset). */
+export function clearOtpVerifyAttempts(key) {
+  otpVerifyAttempts.delete(key);
 }

@@ -6,7 +6,11 @@ import {
   ADVANCE_BOOKING_REASON,
 } from "@/lib/reservation-advance-booking";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { requireApiAuth } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");

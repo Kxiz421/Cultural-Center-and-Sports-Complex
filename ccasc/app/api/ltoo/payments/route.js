@@ -23,6 +23,7 @@ import { getPackageBillingRate } from "@/lib/reservation-package-select";
 import { getBasketballPrice } from "@/lib/particular-options";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 function getBookingDeposit(bookings) {
@@ -82,15 +83,28 @@ function fetchPackageCatalog() {
 }
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin","provincial-agency"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const bookingsOnly = searchParams.get("bookings");
+    // Client-role sessions only ever see their own payment/booking records.
+    const ownScopeId = ownClientId(guard.user);
+    if (ownScopeId != null && bookingsOnly !== "true") {
+      // The transaction-history and legacy payment lists are staff reports.
+      return noCacheJson(
+        { error: "Not available for this account type." },
+        { status: 403 }
+      );
+    }
 
     if (bookingsOnly === "true") {
       // Fetch reservations without client include to avoid orphaned FK errors
       const reservations = await prisma.reservation.findMany({
         where: {
           reservationStatus: { notIn: ["Cancelled"] },
+          ...(ownScopeId != null ? { clientId: ownScopeId } : {}),
         },
         include: {
           package: {
@@ -428,6 +442,10 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin","provincial-agency"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
     const {
@@ -441,8 +459,6 @@ export async function POST(request) {
       amountPaid,
       selectedBookingId,
       paymentType,
-      performedBy,
-      performedByName,
       applyDiscount,
       discountMode,
       discountPeso,
@@ -703,7 +719,7 @@ export async function POST(request) {
           reservationId: reservationId,
           bookingStatusId: statusToUse === "Fully Paid" ? 2 : 1, // Booked or Pending
           confirmationDate: new Date(),
-          staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+          staffId: acting.performedBy ? parseInt(acting.performedBy.replace("STF-", "")) || null : null,
         },
       });
     }
@@ -743,7 +759,7 @@ export async function POST(request) {
         amountPaid: amount,
         paymentStatusId: paymentStatusRecord.statusId,
         bookingId: bookingId,
-        staffId: performedBy ? parseInt(performedBy.replace("STF-", "")) || null : null,
+        staffId: acting.performedBy ? parseInt(acting.performedBy.replace("STF-", "")) || null : null,
         baseAmount: paymentBaseAmount,
         discountAmount: paymentDiscountAmount,
         discountPercent: paymentDiscountPercent,
@@ -751,8 +767,8 @@ export async function POST(request) {
       },
     });
 
-    const staffIdNum = performedBy
-      ? parseInt(String(performedBy).replace("STF-", ""), 10) || null
+    const staffIdNum = acting.performedBy
+      ? parseInt(String(acting.performedBy).replace("STF-", ""), 10) || null
       : null;
 
     let linkedDeposit = null;
@@ -785,7 +801,7 @@ export async function POST(request) {
         data: {
           receiptNumber: "",
           paymentDate: new Date(),
-          recordedBy: performedByName || "LTOO",
+          recordedBy: acting.performedByName,
           paymentId: payment.paymentId,
           depositId: linkedDeposit?.depositId ?? null,
           entryType: "payment",
@@ -805,8 +821,8 @@ export async function POST(request) {
         action: isDiscountOnly ? "DISCOUNT_APPLIED" : "PAYMENT_RECORDED",
         targetUserId: `PAY-${payment.paymentId}`,
         targetName: clientName,
-        performedById: performedBy || "LTOO",
-        performedByName: performedByName || "Local Treasury Operations Officer",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: isDiscountOnly
           ? `Discount of ${formatPhp(discountAmount)} applied. New total after discount: ${formatPhp(paymentAmountAfterDiscount || 0)}. Status: ${statusToUse}`
           : paymentDiscountAmount > 0
@@ -846,6 +862,10 @@ export async function POST(request) {
 
 }
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin","provincial-agency"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
     const {
@@ -853,8 +873,6 @@ export async function PATCH(request) {
       discountMode,
       discountPeso,
       discountPercent,
-      performedBy,
-      performedByName,
     } = body;
 
     if (!paymentId) {
@@ -996,8 +1014,8 @@ export async function PATCH(request) {
         action: "DISCOUNT_UPDATED",
         targetUserId: `PAY-${paymentId}`,
         targetName: "",
-        performedById: performedBy || "LTOO",
-        performedByName: performedByName || "Local Treasury Operations Officer",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Discount updated from ${formatPhp(oldDiscountAmount)} to ${formatPhp(newDiscountAmount)}.`,
       },
     });

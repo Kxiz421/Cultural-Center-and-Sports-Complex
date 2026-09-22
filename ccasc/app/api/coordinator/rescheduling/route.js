@@ -8,9 +8,13 @@ import {
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");
@@ -87,6 +91,9 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { requestId, action, declineReason } = await request.json();
 

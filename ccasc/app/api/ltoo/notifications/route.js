@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const history = searchParams.get("history");
@@ -91,9 +95,13 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
-    const { bookingId, clientType, clientId, staffId, performedBy, performedByName } = body;
+    const { bookingId, clientType, clientId, staffId } = body;
 
     if (!bookingId) {
       return NextResponse.json(
@@ -145,8 +153,8 @@ export async function POST(request) {
           action: "NOTIFICATION_SENT",
           targetUserId: `BKG-${bookingId}`,
           targetName: clientName,
-          performedById: performedBy || "LTOO",
-          performedByName: performedByName || "Local Treasury Operations Officer",
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
           details: `Notification sent to provincial agency: ${clientName} for booking #${bookingId}`,
         },
       });
@@ -158,8 +166,8 @@ export async function POST(request) {
         action: "NOTIFICATION_SENT",
         targetUserId: `BKG-${bookingId}`,
         targetName: clientName,
-        performedById: performedBy || "LTOO",
-        performedByName: performedByName || "Local Treasury Operations Officer",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Document release notification sent to ${clientName}`,
       },
     });

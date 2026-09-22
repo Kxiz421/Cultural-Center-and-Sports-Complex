@@ -8,6 +8,7 @@ import {
   pulloutDeposit,
 } from "@/lib/deposit-utils";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 function parseStaffId(performedBy) {
@@ -40,6 +41,10 @@ async function findBookingId(reservationId) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
     const {
@@ -47,8 +52,6 @@ export async function POST(request) {
       reservationId,
       amount,
       reason,
-      performedBy,
-      performedByName,
     } = body;
 
     const parsedReservationId = parseInt(reservationId, 10);
@@ -61,8 +64,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "No booking found for this reservation." }, { status: 404 });
     }
 
-    const staffId = parseStaffId(performedBy);
-    const recordedBy = performedByName || "LTOO";
+    const staffId = parseStaffId(acting.performedBy);
+    const recordedBy = acting.performedByName || "LTOO";
 
     if (action === "consume") {
       const result = await consumeDeposit(prisma, {
@@ -80,7 +83,7 @@ export async function POST(request) {
           action: "DEPOSIT_CONSUMED",
           targetUserId: `DEP-${result.deposit.depositId}`,
           targetName: booking.reservation?.eventType || "Deposit",
-          performedById: performedBy || "LTOO",
+          performedById: acting.performedBy,
           performedByName: recordedBy,
           details: `Deducted ${formatPhp(result.deduction.amount)} from the 10% deposit. Reason: ${reason}`,
         },
@@ -115,7 +118,7 @@ export async function POST(request) {
           action: "DEPOSIT_PULLED_OUT",
           targetUserId: `DEP-${result.deposit.depositId}`,
           targetName: booking.reservation?.eventType || "Deposit",
-          performedById: performedBy || "LTOO",
+          performedById: acting.performedBy,
           performedByName: recordedBy,
           details: `Pulled out remaining deposit of ${formatPhp(result.releaseAmount)}.`,
         },

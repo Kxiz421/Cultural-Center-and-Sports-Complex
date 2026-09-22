@@ -15,6 +15,7 @@ import {
 } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, ownClientId } from "@/lib/api-auth";
 const DOC_TYPE = {
   BILLING_STATEMENT: 1,
   CONTRACT_OF_LEASE: 2,
@@ -308,11 +309,17 @@ async function createDocuments(tx, items) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const formData = await request.formData();
     const reservationId = formData.get("reservationId");
     const bookingIdRaw = formData.get("bookingId");
-    const clientId = parseId(formData.get("clientId"));
+    const rawClientId = parseId(formData.get("clientId"));
+    // Client-role sessions may only act on their own documents.
+    const scopedDocClientId = ownClientId(guard.user);
+    const clientId = scopedDocClientId != null ? scopedDocClientId : rawClientId;
     const documentTypeIdRaw = formData.get("documentTypeId");
     const mode = String(formData.get("mode") || "single").toLowerCase();
 
@@ -644,6 +651,9 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const documentTypeId = searchParams.get("documentTypeId");
@@ -841,6 +851,11 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
+  // Verifying/declining documents is staff-only; a client must never be able
+  // to approve their own billing documents.
+  const guard = await requireApiAuth(["admin", "local treasury operations officer", "program coordinator cultural", "program coordinator sports"]);
+  if (guard.response) return guard.response;
+
   try {
     const { documentId, status, remarks } = await request.json();
 

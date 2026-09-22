@@ -4,8 +4,12 @@ import { isCoordinatorInboxNotification } from "@/lib/panel-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth, resolveClientScope, isClientRole } from "@/lib/api-auth";
 // Send notification
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { userId, clientId, staffId, message, type } = await request.json();
 
@@ -38,14 +42,19 @@ export async function POST(request) {
 
 // Get notifications for a client
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get("clientId");
-    const staffId = searchParams.get("staffId");
+    // Client-role sessions can only ever read their own notifications.
+    const scopedClient = isClientRole(guard.user);
+    const clientId = resolveClientScope(guard.user, searchParams.get("clientId"));
+    const staffId = scopedClient ? null : searchParams.get("staffId");
     const scope = searchParams.get("scope");
 
     let whereClause = {};
-    if (clientId) whereClause.clientId = parseInt(clientId, 10);
+    if (clientId) whereClause.clientId = clientId;
     if (staffId) whereClause.staffId = parseInt(staffId, 10);
 
     if (searchParams.get("unreadCountOnly") === "true") {
@@ -116,6 +125,9 @@ export async function GET(request) {
 
 // Mark notification as read
 export async function PUT(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { notificationId } = await request.json();
 

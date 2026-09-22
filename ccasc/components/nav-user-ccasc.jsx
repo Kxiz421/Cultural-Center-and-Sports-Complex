@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,14 +24,21 @@ export function NavUserCCASC() {
   const router = useRouter();
   const [logoutOpen, setLogoutOpen] = React.useState(false);
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     if (typeof window === "undefined") return;
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("role");
-    localStorage.removeItem("firstname");
-    localStorage.removeItem("lastname");
-    localStorage.removeItem("token");
+    // Drop the display-only mirrors, then destroy the real session cookie.
+    [
+      "user_id",
+      "user_name",
+      "role",
+      "userType",
+      "firstname",
+      "lastname",
+      "email",
+      "token", // legacy value left behind by the pre-Auth.js build
+    ].forEach((key) => localStorage.removeItem(key));
     setLogoutOpen(false);
+    await signOut({ redirect: false });
     toast.success("You have been logged out.");
     router.push("/login");
   };

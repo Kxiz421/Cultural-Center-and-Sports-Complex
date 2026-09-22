@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
 
 export async function GET() {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const items = await prisma.inventory.findMany({
       where: {
@@ -38,6 +42,9 @@ export async function GET() {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { itemId, quantity } = await request.json();
 

@@ -5,10 +5,14 @@ import { documentEventDateKey } from "@/lib/document-event-date";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
 const SPORTS_VENUE_IDS = [2];
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const history = searchParams.get("history");
@@ -144,6 +148,10 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
     const { reservationId, action } = body;
@@ -210,8 +218,6 @@ export async function PATCH(request) {
 
       return NextResponse.json({ success: true, message: "Booking confirmed. The client has been notified." });
     } else if (action === "pay_and_confirm") {
-      const { performedBy, performedByName } = body;
-
       const existing = await prisma.reservation.findUnique({
         where: { reservationId: id },
         select: { reservationStatus: true, clientId: true, totalAmount: true },
@@ -233,7 +239,7 @@ export async function PATCH(request) {
           reservationId: id,
           confirmationDate: new Date(),
           bookingStatusId: 2, // Confirmed
-          staffId: performedBy ? parseInt(performedBy, 10) || null : null,
+          staffId: acting.performedBy ? parseInt(acting.performedBy, 10) || null : null,
         },
       });
 
@@ -244,7 +250,7 @@ export async function PATCH(request) {
           amountPaid: paidAmount,
           baseAmount: paidAmount,
           amountAfterDiscount: paidAmount,
-          staffId: performedBy ? parseInt(performedBy.replace("STF-", ""), 10) || null : null,
+          staffId: acting.performedBy ? parseInt(acting.performedBy.replace("STF-", ""), 10) || null : null,
           paymentStatusId: 5, // Fully Paid
         },
       });

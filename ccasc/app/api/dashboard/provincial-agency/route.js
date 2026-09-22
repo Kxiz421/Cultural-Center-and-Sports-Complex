@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth(["provincial-agency","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get("clientId");
+    const requestedClientId = searchParams.get("clientId");
+
+    // Client-role sessions are pinned to their own record: a crafted
+    // ?clientId= can no longer expose another agency's dashboard.
+    const clientId = resolveClientScope(guard.user, requestedClientId);
 
     if (!clientId) {
       return noCacheJson(

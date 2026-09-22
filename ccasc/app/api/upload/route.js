@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export async function POST(request) {
+  const guard = await requireApiAuth(["admin","accounting clerk","local treasury operations officer","program coordinator cultural","program coordinator sports"]);
+  if (guard.response) return guard.response;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");

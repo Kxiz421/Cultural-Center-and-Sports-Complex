@@ -3,7 +3,11 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth } from "@/lib/api-auth";
 export async function GET() {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const blocks = await prisma.calendarBlock.findMany({
       include: {
@@ -40,6 +44,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { title, blockDate, blockType, venueId, notes } = await request.json();
 
@@ -113,6 +120,9 @@ export async function POST(request) {
 }
 
 export async function DELETE(request) {
+  const guard = await requireApiAuth(["admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { blockId } = await request.json();
 

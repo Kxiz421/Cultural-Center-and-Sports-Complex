@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 
+import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 /**
@@ -10,12 +11,16 @@ export const dynamic = "force-dynamic";
  * Cancel a reservation by a client or provincial agency.
  * Only allowed if the event date is at least 30 days away.
  *
- * Body: { reservationId, reason?, performedBy?, performedByName? }
+ * Body: { reservationId, reason? }
  */
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
     const body = await request.json();
-    const { reservationId, reason, performedBy, performedByName } = body;
+    const { reservationId, reason } = body;
 
     if (!reservationId) {
       return NextResponse.json(
@@ -58,6 +63,18 @@ export async function POST(request) {
       );
     }
 
+    // Client-role sessions may only cancel their own reservation.
+    const ownCancelClientId = ownClientId(guard.user);
+    if (
+      ownCancelClientId != null &&
+      reservation.client?.clientId !== ownCancelClientId
+    ) {
+      return NextResponse.json(
+        { error: "You do not have access to this reservation." },
+        { status: 403 }
+      );
+    }
+
     // Check the 30-day cancellation rule
     const eventDate = reservation.eventDate
       ? new Date(reservation.eventDate)
@@ -83,9 +100,9 @@ export async function POST(request) {
     }
 
     const clientName = reservation.client.firstName + " " + reservation.client.lastName;
-    const performerId = performedBy || "CLT-" + reservation.client.clientId;
+    const performerId = acting.performedBy || "CLT-" + reservation.client.clientId;
     const performerName =
-      performedByName || clientName || "Client";
+      acting.performedByName || clientName || "Client";
 
     // Cancel only the reservation (bookings are left untouched)
     await prisma.$transaction(async (tx) => {

@@ -5,6 +5,7 @@ import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 const LTOO_DOCUMENT_TYPES = [1, 5];
@@ -69,6 +70,9 @@ function groupStatus(dateGroups) {
 }
 
 export async function GET() {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const documents = await prisma.document.findMany({
       where: {

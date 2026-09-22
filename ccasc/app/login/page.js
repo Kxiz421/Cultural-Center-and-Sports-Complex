@@ -25,10 +25,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { getSession, signIn } from "next-auth/react";
+import { USER_TYPE, homeForUserType } from "@/lib/auth-roles";
 import { MOCK_ADMIN_USER } from "@/lib/data/admin-mock";
 
 const OTP_LENGTH = 6;
 const DEMO_RESET_PW_KEY = "ccasc_demo_reset_password";
+
+/**
+ * Auth.js returns a machine-readable `code` (see the CredentialsSignin
+ * subclasses in auth.js). Codes never contain account details.
+ */
+const LOGIN_ERROR_MESSAGES = {
+  invalid_credentials: "Invalid email/username or password.",
+  account_deactivated:
+    "Your account has been deactivated. Contact the administrator.",
+  verification_pending:
+    "Your registration is still pending verification. Please wait for admin approval.",
+  rate_limited:
+    "Too many failed sign-in attempts. Please wait a few minutes and try again.",
+  CredentialsSignin: "Invalid email/username or password.",
+  Configuration:
+    "Sign-in is temporarily unavailable. Please contact the administrator.",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -125,55 +144,59 @@ export default function LoginPage() {
     setLoginLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+      // Single authentication point: Auth.js verifies the credentials,
+      // enforces the IP rate limit, and issues the signed httpOnly session
+      // cookie. Identity is never derived from localStorage again.
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password,
+        redirect: false,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.needsResubmission) {
-          toast.error(data.error);
-          setLoginLoading(false);
-          // Store client info and redirect to resubmission
-          localStorage.setItem("resubmit_client_id", data.clientId);
-          localStorage.setItem("resubmit_email", email.trim());
-          window.location.href = "/resubmit";
-          return;
-        }
-        toast.error(data.error || "Invalid email or password");
+      if (!result?.ok) {
+        const message =
+          LOGIN_ERROR_MESSAGES[result?.code] ??
+          LOGIN_ERROR_MESSAGES[result?.error] ??
+          "Invalid email/username or password.";
+        toast.error(message);
         setLoginLoading(false);
         return;
       }
 
-      localStorage.setItem("user_id", data.id);
-      localStorage.setItem("user_name", `${data.firstName} ${data.lastName}`);
-      localStorage.setItem("role", data.type);
-      localStorage.setItem("userType", data.type);
-      localStorage.setItem("firstname", data.firstName);
-      localStorage.setItem("lastname", data.lastName);
-      localStorage.setItem("email", data.email);
-      localStorage.setItem("token", "demo-token-ccasc");
+      const session = await getSession();
+      const user = session?.user;
+
+      if (!user?.type) {
+        toast.error("Could not start your session. Please try again.");
+        setLoginLoading(false);
+        return;
+      }
+
+      // Display-only mirrors (panel headers + audit trail) - no longer a
+      // security boundary; proxy.js and lib/api-auth.js enforce access.
+      localStorage.setItem("user_id", user.userId ?? "");
+      localStorage.setItem(
+        "user_name",
+        `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim(),
+      );
+      localStorage.setItem("role", user.type);
+      localStorage.setItem("userType", user.type);
+      localStorage.setItem("firstname", user.firstName ?? "");
+      localStorage.setItem("lastname", user.lastName ?? "");
+      localStorage.setItem("email", user.email ?? "");
+
+      // Declined Certificate of Employment -> restricted session (resubmit only)
+      if (user.type === USER_TYPE.RESUBMIT_ONLY) {
+        const reason = user.remarks ? ` Reason: ${user.remarks}` : "";
+        toast.error(
+          `Your Certificate of Employment has been declined. Please resubmit a valid document.${reason}`,
+        );
+        window.location.href = "/resubmit";
+        return;
+      }
 
       toast.success("Logged in successfully.");
-
-      // Route based on role
-      const roleType = data.type;
-      if (roleType === "accounting clerk") {
-        window.location.href = "/panel/accounting-clerk/dashboard";
-      } else if (roleType === "local treasury operations officer") {
-        window.location.href = "/panel/local-treasury-officer/dashboard";
-      } else if (roleType === "provincial-agency") {
-        window.location.href = "/panel/provincial-agency/dashboard";
-      } else if (roleType === "client") {
-        window.location.href = "/panel/client/dashboard";
-      } else if (roleType === "program coordinator cultural" || roleType === "program coordinator sports") {
-        window.location.href = "/panel/program-coordinator/dashboard";
-      } else {
-        window.location.href = "/panel/admin/dashboard";
-      }
+      window.location.href = homeForUserType(user.type);
     } catch (err) {
       toast.error("An error occurred during login. Please try again.");
     } finally {

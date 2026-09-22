@@ -17,6 +17,7 @@ import {
 } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth, resolveClientScope, isClientRole, ownClientId } from "@/lib/api-auth";
 function normalizeDateChanges(body, reservation) {
   const primaryKey = formatDbDate(reservation.eventDate);
   let raw = Array.isArray(body.dateChanges) ? body.dateChanges : null;
@@ -103,6 +104,9 @@ function normalizeDateChanges(body, reservation) {
 }
 
 export async function POST(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const body = await request.json();
     const { reservationId, reason } = body;
@@ -117,7 +121,9 @@ export async function POST(request) {
     const trimmedReason = String(reason).trim();
 
     const reservation = await prisma.reservation.findUnique({
-      where: { reservationId: parseInt(reservationId, 10) },
+      where: {
+        reservationId: parseInt(String(reservationId).replace(/^RES-/i, ""), 10),
+      },
       include: {
         additionalDates: {
           select: { reservationDateId: true, eventDate: true },
@@ -129,6 +135,18 @@ export async function POST(request) {
 
     if (!reservation) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+    }
+
+    // Client-role sessions may only reschedule their own reservation.
+    const ownRescheduleClientId = ownClientId(guard.user);
+    if (
+      ownRescheduleClientId != null &&
+      reservation.client?.clientId !== ownRescheduleClientId
+    ) {
+      return NextResponse.json(
+        { error: "You do not have access to this reservation." },
+        { status: 403 }
+      );
     }
 
     const eventDate = new Date(reservation.eventDate);
@@ -176,7 +194,7 @@ export async function POST(request) {
 
     const rescheduleRequest = await prisma.rescheduleRequest.create({
       data: {
-        reservationId: parseInt(reservationId, 10),
+        reservationId: parseInt(String(reservationId).replace(/^RES-/i, ""), 10),
         requestedDate: toDateOnly(primaryChange.requestedDate),
         reason: trimmedReason,
         status: "Pending",
@@ -226,6 +244,11 @@ export async function POST(request) {
 }
 
 export async function PUT(request) {
+  // Approving/declining a reschedule is staff-only; a client must never be
+  // able to approve their own request.
+  const guard = await requireApiAuth(["admin", "accounting clerk", "local treasury operations officer", "program coordinator cultural", "program coordinator sports"]);
+  if (guard.response) return guard.response;
+
   try {
     const { rescheduleId, status } = await request.json();
 
@@ -268,18 +291,24 @@ export async function PUT(request) {
 }
 
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const reservationId = searchParams.get("reservationId");
-    const clientId = searchParams.get("clientId");
+    // Client-role sessions are pinned to their own reschedule requests.
+    const clientId = resolveClientScope(guard.user, searchParams.get("clientId"));
 
     const where = {};
-    if (reservationId) {
+    if (isClientRole(guard.user)) {
+      // Always scoped to the caller's own client; reservationId refines it.
+      where.reservation = { clientId: ownClientId(guard.user) };
+      if (reservationId) where.reservationId = parseInt(reservationId, 10);
+    } else if (reservationId) {
       where.reservationId = parseInt(reservationId, 10);
     } else if (clientId) {
-      where.reservation = {
-        clientId: parseInt(String(clientId).replace(/^CLT-/, ""), 10),
-      };
+      where.reservation = { clientId };
     } else {
       return noCacheJson(
         { error: "Reservation ID or client ID required" },

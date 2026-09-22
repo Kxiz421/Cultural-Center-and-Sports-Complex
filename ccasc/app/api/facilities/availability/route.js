@@ -7,11 +7,15 @@ import {
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 /**
  * GET /api/facilities/availability?venueId=2&dates=2026-09-20,2026-09-21
  * Returns which facilities are already reserved on each requested date.
  */
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");

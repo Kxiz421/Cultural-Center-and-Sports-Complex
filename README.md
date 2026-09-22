@@ -22,11 +22,21 @@ bun dev
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 
-Default credentials of admin:
-``
-username: admin
-password: 1234
-``
+## Authentication
+
+Sign-in goes through Auth.js (NextAuth v5) with a signed, httpOnly session
+cookie — the browser never holds a usable token and panel access is checked
+server-side in `ccasc/proxy.js`.
+
+Set `AUTH_SECRET` and `DATABASE_URL` in `ccasc/.env` before running the app:
+
+```bash
+AUTH_SECRET="<output of: node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\">"
+```
+
+Account credentials are managed inside the app (Admin → User Management) or in
+the `Staff` / `Client` tables. Role → portal mapping lives in
+`ccasc/lib/auth-roles.js`.
 
 You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
 

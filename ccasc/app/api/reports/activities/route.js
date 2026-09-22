@@ -3,6 +3,7 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import { resolvePeriodRange } from "@/lib/report-period";
 import { buildActivitiesReport, buildActivityRows } from "@/lib/report-activities";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 /**
@@ -25,6 +26,9 @@ export const dynamic = "force-dynamic";
 const EXCLUDED_STATUSES = ["Cancelled", "Declined"];
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["admin","accounting clerk","local treasury operations officer","program coordinator cultural","program coordinator sports"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "m";

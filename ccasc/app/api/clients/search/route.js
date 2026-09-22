@@ -3,7 +3,11 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth(["accounting clerk","program coordinator cultural","program coordinator sports","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q");

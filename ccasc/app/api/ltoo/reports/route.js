@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 
 export async function GET(request) {
+  const guard = await requireApiAuth(["local treasury operations officer","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const month = parseInt(searchParams.get("month") || String(new Date().getMonth()));

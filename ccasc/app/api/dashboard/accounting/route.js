@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
+import { requireApiAuth } from "@/lib/api-auth";
 export async function GET() {
+  const guard = await requireApiAuth(["accounting clerk","admin"]);
+  if (guard.response) return guard.response;
+
   try {
     // Total reservations
     const totalReservations = await prisma.reservation.count();

@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { sendOtpEmail } from "@/lib/email";
 
 
 import prisma from "@/lib/prisma";
 import {
-  getClientIP,
+  checkOtpVerifyRateLimit,
   checkPasswordResetRateLimit,
+  clearOtpVerifyAttempts,
+  getClientIP,
+  recordOtpVerifyFailure,
   recordPasswordReset,
 } from "@/lib/rate-limit";
 
@@ -47,8 +51,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Generate OTP (6-digit code)
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate OTP (6-digit code) with a CSPRNG - Math.random() is predictable.
+    const otp = String(randomInt(100000, 1000000));
     const otpExpiration = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     if (userType === 'client') {
@@ -99,6 +103,16 @@ export async function PATCH(request) {
       );
     }
 
+    // Throttle code guessing (5 tries / 15 min per IP + account).
+    const limiterKey = `${getClientIP(request)}:${String(email).toLowerCase()}`;
+    const limit = checkOtpVerifyRateLimit(limiterKey);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many incorrect codes. Please request a new code later." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
+      );
+    }
+
     // Search for user in both Client and Staff models
     let user = await prisma.client.findUnique({ where: { email } });
     let userType = 'client';
@@ -114,6 +128,7 @@ export async function PATCH(request) {
 
     // Check if OTP matches and is not expired
     if (user.otp !== otp || !user.otpExpiration || user.otpExpiration < new Date()) {
+      recordOtpVerifyFailure(limiterKey);
       return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
     }
 
@@ -138,6 +153,16 @@ export async function PUT(request) {
       );
     }
 
+    // Throttle code guessing (5 tries / 15 min per IP + account).
+    const limiterKey = `${getClientIP(request)}:${String(email).toLowerCase()}`;
+    const limit = checkOtpVerifyRateLimit(limiterKey);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many incorrect codes. Please request a new code later." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
+      );
+    }
+
     // Search for user in both Client and Staff models
     let user = await prisma.client.findUnique({ where: { email } });
     let userType = 'client';
@@ -153,6 +178,7 @@ export async function PUT(request) {
 
     // Check if OTP matches and is not expired
     if (user.otp !== otp || !user.otpExpiration || user.otpExpiration < new Date()) {
+      recordOtpVerifyFailure(limiterKey);
       return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
     }
 
@@ -179,6 +205,8 @@ export async function PUT(request) {
         },
       });
     }
+
+    clearOtpVerifyAttempts(limiterKey);
 
     return NextResponse.json({ message: "Password reset successful" });
   } catch (error) {

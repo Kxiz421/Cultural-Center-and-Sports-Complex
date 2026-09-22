@@ -3,7 +3,11 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
+import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export async function GET(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search");
 
@@ -45,8 +49,12 @@ export async function GET(request) {
 }
 
 export async function PUT(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+  const acting = actingAs(guard.user);
+
   try {
-    const { itemId, itemName, unitCost, quantityAvailable, statusId, performedBy, performedByName } = await request.json();
+    const { itemId, itemName, unitCost, quantityAvailable, statusId } = await request.json();
 
     if (!itemId) {
       return NextResponse.json(
@@ -86,8 +94,8 @@ export async function PUT(request) {
         action: "UPDATED",
         targetUserId: `INV-${updated.itemId}`,
         targetName: updated.itemName,
-        performedById: performedBy || "system",
-        performedByName: performedByName || "System",
+        performedById: acting.performedBy,
+        performedByName: acting.performedByName,
         details: `Inventory item updated: ${changes.join(", ")}`,
       },
     });
@@ -113,6 +121,9 @@ export async function PUT(request) {
 }
 
 export async function PATCH(request) {
+  const guard = await requireApiAuth();
+  if (guard.response) return guard.response;
+
   try {
     const { itemId, statusId } = await request.json();
 
