@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# local DB dumps / dumps of any kind
+backups/
+
+# uploaded client ID documents (PII) - never commit
+public/uploads/id-proofs/
