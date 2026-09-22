@@ -153,21 +153,19 @@ export default function LoginPage() {
         redirect: false,
       });
 
-      if (!result?.ok) {
-        const message =
-          LOGIN_ERROR_MESSAGES[result?.code] ??
-          LOGIN_ERROR_MESSAGES[result?.error] ??
-          "Invalid email/username or password.";
-        toast.error(message);
-        setLoginLoading(false);
-        return;
-      }
-
+      // Auth.js's response shape varies by version and can omit `code`, so
+      // success is decided from the session itself, not from `result.ok`.
       const session = await getSession();
       const user = session?.user;
 
       if (!user?.type) {
-        toast.error("Could not start your session. Please try again.");
+        // No session means the credentials were rejected (or auth is
+        // misconfigured). Report the specific reason when the code is known.
+        const message =
+          LOGIN_ERROR_MESSAGES[result?.code] ??
+          LOGIN_ERROR_MESSAGES[result?.error] ??
+          LOGIN_ERROR_MESSAGES.CredentialsSignin;
+        toast.error(message);
         setLoginLoading(false);
         return;
       }
