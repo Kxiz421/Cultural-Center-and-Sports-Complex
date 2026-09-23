@@ -7,6 +7,14 @@ import {
 } from "@/lib/reservation-advance-booking";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { requireApiAuth } from "@/lib/api-auth";
+import {
+  ACTIVE_STATUSES,
+  buildReservedFacilitiesByDate,
+} from "@/lib/facility-reservation-availability";
+
+/** Shown when every Sports Complex facility is already taken on a date. */
+const FULLY_RESERVED_REASON = "All facilities are already reserved";
+
 export async function GET(request) {
   const guard = await requireApiAuth();
   if (guard.response) return guard.response;
@@ -69,6 +77,51 @@ export async function GET(request) {
           },
         });
 
+    // Sports Complex is booked per facility, so a reservation does not block the
+    // calendar day. A date only becomes unavailable once every facility of the
+    // venue is taken — those dates must not be selectable anymore.
+    const fullyReservedDates = new Set();
+    if (isSportsComplex) {
+      const [venueFacilities, facilityReservations] = await Promise.all([
+        prisma.facility.findMany({
+          where: { venueId: parsedVenueId },
+          select: { facilityId: true },
+        }),
+        prisma.reservation.findMany({
+          where: {
+            venueId: parsedVenueId,
+            reservationStatus: { in: ACTIVE_STATUSES },
+            ...(excludeId ? { reservationId: { not: excludeId } } : {}),
+            OR: [
+              { eventDate: { gte: startDate, lte: endDate } },
+              {
+                additionalDates: {
+                  some: { eventDate: { gte: startDate, lte: endDate } },
+                },
+              },
+            ],
+          },
+          select: {
+            notes: true,
+            eventDate: true,
+            additionalDates: { select: { eventDate: true } },
+            schedules: { select: { facilityId: true } },
+          },
+        }),
+      ]);
+
+      const facilityIds = venueFacilities.map((f) => String(f.facilityId));
+      if (facilityIds.length > 0) {
+        const reservedByDate = buildReservedFacilitiesByDate(facilityReservations);
+        for (const [dateKey, reservedIds] of Object.entries(reservedByDate)) {
+          const reserved = new Set((reservedIds || []).map(String));
+          if (facilityIds.every((id) => reserved.has(id))) {
+            fullyReservedDates.add(dateKey);
+          }
+        }
+      }
+    }
+
     // Fetch calendar blocks for this venue in the month
     const calendarBlocks = await prisma.calendarBlock.findMany({
       where: {
@@ -87,6 +140,13 @@ export async function GET(request) {
       for (const ad of r.additionalDates) {
         const adKey = formatDbDate(ad.eventDate);
         blockedDates.set(adKey, "Booked");
+      }
+    }
+
+    // Fully-booked Sports Complex dates (every facility reserved)
+    for (const key of fullyReservedDates) {
+      if (!blockedDates.has(key)) {
+        blockedDates.set(key, FULLY_RESERVED_REASON);
       }
     }
 
