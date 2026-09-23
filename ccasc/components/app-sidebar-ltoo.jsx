@@ -7,6 +7,7 @@ import {
   XCircle,
   FileText,
   FileBarChart,
+  Megaphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const navMain = [
   {
@@ -35,6 +37,12 @@ const navMain = [
     title: "Notifications",
     url: "/panel/local-treasury-officer/notifications",
     icon: BellRing,
+  },
+  {
+    title: "Announcements",
+    url: "/panel/local-treasury-officer/announcements",
+    icon: Megaphone,
+    showBadge: true,
   },
   {
     title: "Booking Cancellation",
@@ -54,6 +62,13 @@ const navMain = [
 ];
 
 export function AppSidebarLTOO(props) {
+  const { unreadCount } = useUnreadNotificationCount("staff");
+
+  const navItems = navMain.map((item) =>
+    item.url === "/panel/local-treasury-officer/announcements"
+      ? { ...item, showBadge: true, badgeCount: unreadCount }
+      : item
+  );
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -71,7 +86,7 @@ export function AppSidebarLTOO(props) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUserCCASC />

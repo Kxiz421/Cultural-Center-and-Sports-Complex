@@ -13,6 +13,7 @@ const TITLES = {
   "/panel/accounting-clerk/calendar": "Facility Calendar",
   "/panel/accounting-clerk/cultural": "Cultural Calendar",
   "/panel/accounting-clerk/walk-in": "Walk-In Reservation",
+  "/panel/accounting-clerk/notifications": "Notifications",
   "/panel/accounting-clerk/reports": "Report Generation",
 };
 

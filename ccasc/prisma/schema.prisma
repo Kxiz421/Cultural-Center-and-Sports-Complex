@@ -526,10 +526,13 @@ model Notification {
   isRead         Boolean  @default(false) @map("is_read")
   sentAt         DateTime @map("sent_at")
   staffId        Int      @map("staff_id")
-  clientId       Int      @map("client_id")
+  // Related client when the notification is client-facing. NULL for
+  // staff-targeted notifications (e.g. an announcement broadcast to a staff
+  // role), where staffId is the recipient instead of the sender.
+  clientId       Int?     @map("client_id")
 
-  staff  Staff  @relation("StaffNotifications", fields: [staffId], references: [staffId])
-  client Client @relation(fields: [clientId], references: [clientId])
+  staff  Staff   @relation("StaffNotifications", fields: [staffId], references: [staffId])
+  client Client? @relation(fields: [clientId], references: [clientId])
 
   @@map("Notification")
 }

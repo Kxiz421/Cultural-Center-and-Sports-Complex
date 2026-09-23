@@ -21,11 +21,15 @@ import {
   CreditCard,
   RefreshCw,
   ClipboardCheck,
+  Megaphone,
 } from "lucide-react";
 import {
+  ANNOUNCEMENT_MESSAGE_LABEL,
+  ANNOUNCEMENT_TITLE_LABEL,
   categorizeNotificationType,
   displayNotificationTypeLabel,
   notifyPanelNotificationsUpdated,
+  parseAnnouncementBody,
 } from "@/lib/panel-notifications";
 
 export function PanelNotificationsInbox({
@@ -109,6 +113,7 @@ export function PanelNotificationsInbox({
     }
     if (category === "document") return <FileText className="size-4" />;
     if (category === "reschedule") return <RefreshCw className="size-4" />;
+    if (category === "announcement") return <Megaphone className="size-4" />;
     if (category === "payment") return <CreditCard className="size-4" />;
     if (String(type || "").toLowerCase() === "alert") {
       return <AlertTriangle className="size-4" />;
@@ -123,6 +128,9 @@ export function PanelNotificationsInbox({
       return "bg-blue-100 text-blue-700 border-blue-300";
     }
     if (category === "document") return "bg-amber-100 text-amber-700 border-amber-300";
+    if (category === "announcement") {
+      return "bg-indigo-100 text-indigo-700 border-indigo-300";
+    }
     if (category === "payment") return "bg-green-100 text-green-700 border-green-300";
     if (String(type || "").toLowerCase() === "alert") {
       return "bg-red-100 text-red-700 border-red-300";
@@ -154,9 +162,18 @@ export function PanelNotificationsInbox({
     if (category === "reservation") return "Reservation update";
     if (category === "booking") return "Booking update";
     if (category === "document") return "Document update";
+    if (category === "announcement") return "Announcement from the administration";
     if (category === "payment") return "Payment update";
     return "General notification";
   })();
+
+  // Announcements carry a labelled body - show title and message as separate
+  // fields instead of one run-on block of text.
+  const selectedNotifBody =
+    selectedNotif &&
+    categorizeNotificationType(selectedNotif.type) === "announcement"
+      ? parseAnnouncementBody(selectedNotif.message)
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -210,42 +227,81 @@ export function PanelNotificationsInbox({
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredNotifications.map((notif) => (
-                <div
-                  key={notif.id}
-                  className={`flex items-start gap-4 rounded-lg border p-4 transition-colors cursor-pointer hover:bg-muted/50 ${
-                    notif.isRead ? "bg-background" : "bg-muted/30 border-primary/20"
-                  }`}
-                  onClick={() => handleNotificationClick(notif)}
-                >
-                  <div className="mt-0.5 text-muted-foreground">
-                    {getIcon(notif.type)}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium flex-1 whitespace-pre-wrap">
-                        {notif.message}
-                      </p>
-                      {!notif.isRead && (
-                        <Badge variant="secondary" className="text-[10px] shrink-0">
-                          New
+              {filteredNotifications.map((notif) => {
+                const announcementBody =
+                  categorizeNotificationType(notif.type) === "announcement"
+                    ? parseAnnouncementBody(notif.message)
+                    : null;
+                return (
+                  <div
+                    key={notif.id}
+                    className={`flex items-start gap-4 rounded-lg border p-4 transition-colors cursor-pointer hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring ${
+                      notif.isRead ? "bg-background" : "bg-muted/30 border-primary/20"
+                    }`}
+                    onClick={() => handleNotificationClick(notif)}
+                  >
+                    <div className="mt-0.5 shrink-0 text-muted-foreground">
+                      {getIcon(notif.type)}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          {announcementBody ? (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium break-words">
+                                <span className="text-muted-foreground">
+                                  {ANNOUNCEMENT_TITLE_LABEL} :{" "}
+                                </span>
+                                {announcementBody.title}
+                              </p>
+                              <p className="text-sm whitespace-pre-wrap break-words">
+                                <span className="text-muted-foreground">
+                                  {ANNOUNCEMENT_MESSAGE_LABEL} :{" "}
+                                </span>
+                                {announcementBody.content}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm font-medium whitespace-pre-wrap break-words">
+                              {notif.message}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!notif.isRead && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              New
+                            </Badge>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleNotificationClick(notif);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(notif.sentAt).toLocaleString()}
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${getTypeColor(notif.type)}`}
+                        >
+                          {displayNotificationTypeLabel(notif.type)}
                         </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(notif.sentAt).toLocaleString()}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${getTypeColor(notif.type)}`}
-                      >
-                        {displayNotificationTypeLabel(notif.type)}
-                      </Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -267,12 +323,33 @@ export function PanelNotificationsInbox({
           </DialogHeader>
           {selectedNotif && (
             <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label className="text-muted-foreground text-xs">Message</Label>
-                <p className="text-sm bg-muted/30 rounded-md p-3 whitespace-pre-wrap">
-                  {selectedNotif.message}
-                </p>
-              </div>
+              {selectedNotifBody ? (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs">
+                      {ANNOUNCEMENT_TITLE_LABEL}
+                    </Label>
+                    <p className="text-sm bg-muted/30 rounded-md p-3 break-words">
+                      {selectedNotifBody.title}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs">
+                      {ANNOUNCEMENT_MESSAGE_LABEL}
+                    </Label>
+                    <p className="text-sm bg-muted/30 rounded-md p-3 whitespace-pre-wrap break-words">
+                      {selectedNotifBody.content}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">Message</Label>
+                  <p className="text-sm bg-muted/30 rounded-md p-3 whitespace-pre-wrap break-words">
+                    {selectedNotif.message}
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-xs">Type</Label>

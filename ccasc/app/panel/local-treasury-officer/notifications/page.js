@@ -293,7 +293,7 @@ export default function LTOONotificationsPage() {
                 <div key={n.notificationId || n.id} className="flex items-start gap-3 rounded-lg border p-3">
                   <BellRing className="size-4 text-blue-500 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{n.message}</p>
+                    <p className="text-sm font-medium whitespace-pre-wrap break-words">{n.message}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {new Date(n.sentAt || n.createdAt).toLocaleDateString("en-US", {
                         year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",

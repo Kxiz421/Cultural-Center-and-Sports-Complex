@@ -7,6 +7,7 @@ import {
   UserPlus,
   FileBarChart,
   Trophy,
+  Bell,
 } from "lucide-react";
 import {
   Sidebar,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const navMain = [
   {
@@ -42,6 +44,12 @@ const navMain = [
     icon: UserPlus,
   },
   {
+    title: "Notifications",
+    url: "/panel/accounting-clerk/notifications",
+    icon: Bell,
+    showBadge: true,
+  },
+  {
     title: "Report Generation",
     url: "/panel/accounting-clerk/reports",
     icon: FileBarChart,
@@ -49,6 +57,14 @@ const navMain = [
 ];
 
 export function AppSidebarAccounting(props) {
+  const { unreadCount } = useUnreadNotificationCount("staff");
+
+  const navItems = navMain.map((item) =>
+    item.url === "/panel/accounting-clerk/notifications"
+      ? { ...item, showBadge: true, badgeCount: unreadCount }
+      : item
+  );
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -66,7 +82,7 @@ export function AppSidebarAccounting(props) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUserCCASC />
