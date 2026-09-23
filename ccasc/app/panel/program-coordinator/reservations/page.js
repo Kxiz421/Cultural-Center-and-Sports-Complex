@@ -1335,38 +1335,39 @@ export default function CoordinatorReservationsPage() {
                       availableIds.length > 0 && selectedAvailable.length === availableIds.length;
                     const someSelected =
                       selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
-                    const selectAllDisabled = customizePerDate || selectedDates.size === 0;
+                    const selectAllDisabled =
+                      customizePerDate || selectedDates.size === 0 || availableIds.length === 0;
                     return (
-                      <div
+                      <label
                         className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
                           selectAllDisabled
                             ? "cursor-not-allowed opacity-60"
                             : "cursor-pointer hover:bg-muted/40"
                         }`}
-                        onClick={() => {
-                          if (selectAllDisabled) return;
-                          if (allSelected) {
-                            // Deselect all available: set each to 0
-                            setFacilityQuantities((prev) => {
-                              const next = { ...prev };
-                              availableIds.forEach((id) => delete next[id]);
-                              return next;
-                            });
-                          } else {
-                            // Select all available: set each to 1 (or keep existing qty if already > 0)
-                            setFacilityQuantities((prev) => {
-                              const next = { ...prev };
-                              availableIds.forEach((id) => {
-                                if (!next[id] || Number(next[id]) <= 0) next[id] = 1;
-                              });
-                              return next;
-                            });
-                          }
-                        }}
                       >
                         <Checkbox
                           checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
                           disabled={selectAllDisabled}
+                          onCheckedChange={(checked) => {
+                            if (selectAllDisabled) return;
+                            if (checked) {
+                              // Select all available: set each to 1 (or keep existing qty if already > 0)
+                              setFacilityQuantities((prev) => {
+                                const next = { ...prev };
+                                availableIds.forEach((id) => {
+                                  if (!next[id] || Number(next[id]) <= 0) next[id] = 1;
+                                });
+                                return next;
+                              });
+                            } else {
+                              // Deselect all available
+                              setFacilityQuantities((prev) => {
+                                const next = { ...prev };
+                                availableIds.forEach((id) => delete next[id]);
+                                return next;
+                              });
+                            }
+                          }}
                         />
                         <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground">
                           Select All
@@ -1376,7 +1377,7 @@ export default function CoordinatorReservationsPage() {
                             {selectedAvailable.length}/{availableIds.length} available
                           </span>
                         )}
-                      </div>
+                      </label>
                     );
                   })()}
                   {facilities.map((f) => {
@@ -1670,33 +1671,40 @@ export default function CoordinatorReservationsPage() {
                           const selectedAvailable = availableIds.filter((id) => Number(dateQtyMap[id] || 0) > 0);
                           const allSelected = availableIds.length > 0 && selectedAvailable.length === availableIds.length;
                           const someSelected = selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+                          const selectAllDisabled = availableIds.length === 0;
                           return (
-                            <div
-                              className="flex items-center gap-3 px-3 py-2 text-sm border-b cursor-pointer hover:bg-muted/40"
-                              onClick={() => {
-                                if (allSelected) {
-                                  setDateCustomizations((prev) => {
-                                    const next = { ...prev };
-                                    if (next[date]) {
-                                      const nextQty = { ...(next[date]?.facilityQuantities || {}) };
-                                      availableIds.forEach((id) => delete nextQty[id]);
-                                      next[date] = { ...next[date], facilityQuantities: nextQty };
-                                    }
-                                    return next;
-                                  });
-                                } else {
-                                  setDateCustomizations((prev) => {
-                                    const nextQty = { ...(prev[date]?.facilityQuantities || {}) };
-                                    availableIds.forEach((id) => {
-                                      if (!nextQty[id] || Number(nextQty[id]) <= 0) nextQty[id] = 1;
-                                    });
-                                    return { ...prev, [date]: { ...prev[date], facilityQuantities: nextQty } };
-                                  });
-                                }
-                              }}
+                            <label
+                              className={`flex items-center gap-3 px-3 py-2 text-sm border-b ${
+                                selectAllDisabled
+                                  ? "cursor-not-allowed opacity-60"
+                                  : "cursor-pointer hover:bg-muted/40"
+                              }`}
                             >
                               <Checkbox
-                                checked={someSelected ? "indeterminate" : allSelected}
+                                checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
+                                disabled={selectAllDisabled}
+                                onCheckedChange={(checked) => {
+                                  if (selectAllDisabled) return;
+                                  if (checked) {
+                                    setDateCustomizations((prev) => {
+                                      const nextQty = { ...(prev[date]?.facilityQuantities || {}) };
+                                      availableIds.forEach((id) => {
+                                        if (!nextQty[id] || Number(nextQty[id]) <= 0) nextQty[id] = 1;
+                                      });
+                                      return { ...prev, [date]: { ...prev[date], facilityQuantities: nextQty } };
+                                    });
+                                  } else {
+                                    setDateCustomizations((prev) => {
+                                      const next = { ...prev };
+                                      if (next[date]) {
+                                        const nextQty = { ...(next[date]?.facilityQuantities || {}) };
+                                        availableIds.forEach((id) => delete nextQty[id]);
+                                        next[date] = { ...next[date], facilityQuantities: nextQty };
+                                      }
+                                      return next;
+                                    });
+                                  }
+                                }}
                               />
                               <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground text-xs">
                                 Select All
@@ -1704,7 +1712,7 @@ export default function CoordinatorReservationsPage() {
                               <span className="shrink-0 text-xs text-muted-foreground">
                                 {selectedAvailable.length}/{availableIds.length} available
                               </span>
-                            </div>
+                            </label>
                           );
                         })()}
                         {facilities.map((f) => {

@@ -73,10 +73,38 @@ function buildFacilitySummaryLines({
   facilities,
   facilityQuantities,
   selectedDatesCount,
+  customizePerDate,
+  dateCustomizations,
   timeSlotId,
 }) {
   const lines = [];
   const numDays = Math.max(1, selectedDatesCount || 1);
+
+  // Per-date mode picks facilities for each date, so every date gets its own line.
+  if (customizePerDate && Object.keys(dateCustomizations || {}).length > 0) {
+    for (const [date, cust] of Object.entries(dateCustomizations)) {
+      const qtyMap = cust?.facilityQuantities || {};
+      const explicitIds = normalizeFacilityIds(cust?.facilityIds ?? cust?.facilityId);
+      const qtyIds = Object.keys(qtyMap).filter((id) => Number(qtyMap[id]) > 0);
+      const facilityIds = [...new Set([...explicitIds, ...qtyIds])];
+      for (const id of facilityIds) {
+        const parsedQty = Math.max(1, Number(qtyMap[id] || 1));
+        const facility = facilities.find((f) => String(f.facilityId) === String(id));
+        if (!facility) continue;
+        const slot = cust?.morning?.timeSlotId || cust?.timeSlotId || timeSlotId || "1";
+        const rate = getFacilityRateBySlot(facility, slot);
+        lines.push({
+          date,
+          label: parsedQty > 1 ? `${facility.name} × ${parsedQty}` : facility.name,
+          amount: rate * parsedQty,
+          facilityId: String(facility.facilityId),
+          quantity: parsedQty,
+        });
+      }
+    }
+    return lines;
+  }
+
   for (const [id, qty] of Object.entries(facilityQuantities || {})) {
     const parsedQty = Number(qty) || 0;
     if (parsedQty <= 0) continue;
@@ -254,6 +282,17 @@ export default function ClientReservationsPage() {
     setSelectedFacilityIds((prev) => {
       const next = prev.filter((id) => !reservedOnAny.has(String(id)));
       return next.length === prev.length ? prev : next;
+    });
+    setFacilityQuantities((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        if (reservedOnAny.has(String(id))) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
   }, [reservedByDate, selectedDates, form.venueId]);
 
@@ -784,6 +823,8 @@ export default function ClientReservationsPage() {
         facilities,
         facilityQuantities,
         selectedDatesCount: selectedDates.size,
+        customizePerDate,
+        dateCustomizations,
         timeSlotId: form.timeSlotId,
       })
     : buildReservationSummaryLines({
@@ -830,11 +871,25 @@ export default function ClientReservationsPage() {
       return;
     }
 
-    // Sports Complex validation: require at least one facility
-    if (isSportsComplex && selectedFacilityIds.length === 0) {
-      toast.error("Please select at least one facility.");
-      submitLockRef.current = false;
-      return;
+    // Sports Complex validation: in per-date mode every date needs a facility,
+    // otherwise at least one facility has to be selected overall.
+    if (isSportsComplex) {
+      const hasPerDateSettings =
+        customizePerDate && Object.keys(dateCustomizations).length > 0;
+      if (hasPerDateSettings) {
+        const allDatesCovered = [...selectedDates].every(
+          (date) => (dateCustomizations[date]?.facilityIds || []).length > 0
+        );
+        if (!allDatesCovered) {
+          toast.error("Please select at least one facility for every date.");
+          submitLockRef.current = false;
+          return;
+        }
+      } else if (selectedFacilityIds.length === 0) {
+        toast.error("Please select at least one facility.");
+        submitLockRef.current = false;
+        return;
+      }
     }
 
     // Cultural Center validation: virtual package entries
@@ -1143,6 +1198,7 @@ const renderPerDateFacilities = (date, cust) => {
     const selectedAvailable = availableIds.filter((id) => dateFacilityIds.includes(id));
     const allSelected = availableIds.length > 0 && selectedAvailable.length === availableIds.length;
     const someSelected = selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
+    const selectAllDisabled = availableIds.length === 0;
 
     return (
       <div className="space-y-2 mb-4">
@@ -1153,32 +1209,38 @@ const renderPerDateFacilities = (date, cust) => {
           <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
             {/* Select All */}
             <label
-              className="flex items-center gap-3 px-3 py-2 text-sm border-b cursor-pointer hover:bg-muted/40"
-              onClick={() => {
-                if (allSelected) {
-                  setDateCustomizations((prev) => ({
-                    ...prev,
-                    [date]: {
-                      ...prev[date],
-                      facilityIds: (prev[date]?.facilityIds || []).filter(
-                        (id) => !availableIds.includes(String(id))
-                      ),
-                    },
-                  }));
-                } else {
-                  setDateCustomizations((prev) => {
-                    const existing = new Set((prev[date]?.facilityIds || []).map(String));
-                    availableIds.forEach((id) => existing.add(id));
-                    return {
-                      ...prev,
-                      [date]: { ...prev[date], facilityIds: [...existing] },
-                    };
-                  });
-                }
-              }}
+              className={`flex items-center gap-3 px-3 py-2 text-sm border-b ${
+                selectAllDisabled
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer hover:bg-muted/40"
+              }`}
             >
               <Checkbox
-                checked={someSelected ? "indeterminate" : allSelected}
+                checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
+                disabled={selectAllDisabled}
+                onCheckedChange={(checked) => {
+                  if (selectAllDisabled) return;
+                  if (checked) {
+                    setDateCustomizations((prev) => {
+                      const existing = new Set((prev[date]?.facilityIds || []).map(String));
+                      availableIds.forEach((id) => existing.add(id));
+                      return {
+                        ...prev,
+                        [date]: { ...prev[date], facilityIds: [...existing] },
+                      };
+                    });
+                  } else {
+                    setDateCustomizations((prev) => ({
+                      ...prev,
+                      [date]: {
+                        ...prev[date],
+                        facilityIds: (prev[date]?.facilityIds || []).filter(
+                          (id) => !availableIds.includes(String(id))
+                        ),
+                      },
+                    }));
+                  }
+                }}
               />
               <span className="flex-1 min-w-0 font-medium truncate text-muted-foreground text-xs">
                 Select All
@@ -1200,18 +1262,21 @@ const renderPerDateFacilities = (date, cust) => {
                       ? "cursor-not-allowed opacity-60"
                       : "cursor-pointer hover:bg-muted/40"
                   }`}
-                  onClick={() => {
-                    if (dateReserved) return;
-                    setDateCustomizations((prev) => {
-                      const existing = prev[date]?.facilityIds || [];
-                      const next = existing.includes(id)
-                        ? existing.filter((x) => x !== id)
-                        : [...existing, id];
-                      return { ...prev, [date]: { ...prev[date], facilityIds: next } };
-                    });
-                  }}
                 >
-                  <Checkbox checked={checked} disabled={dateReserved} />
+                  <Checkbox
+                    checked={checked}
+                    disabled={dateReserved}
+                    onCheckedChange={() => {
+                      if (dateReserved) return;
+                      setDateCustomizations((prev) => {
+                        const existing = prev[date]?.facilityIds || [];
+                        const next = existing.includes(id)
+                          ? existing.filter((x) => x !== id)
+                          : [...existing, id];
+                        return { ...prev, [date]: { ...prev[date], facilityIds: next } };
+                      });
+                    }}
+                  />
                   <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
                   {dateReserved ? (
                     <span className="shrink-0 text-xs text-destructive">Reserved</span>
@@ -1392,6 +1457,13 @@ const renderPerDateFacilities = (date, cust) => {
                     ? " Facilities already reserved on a selected date cannot be chosen."
                     : " Select dates first to see which facilities are available."}
                 </p>
+                {customizePerDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Facilities are set per date. Use{" "}
+                    <span className="font-medium text-foreground">Edit Per-Date Details</span> to
+                    choose the facilities for each date.
+                  </p>
+                )}
                 {facilitiesLoading || (selectedDates.size > 0 && facilityAvailLoading) ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                     <Loader2 className="size-4 animate-spin" />
@@ -1400,7 +1472,11 @@ const renderPerDateFacilities = (date, cust) => {
                 ) : facilities.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
                 ) : (
-                  <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
+                  <div
+                    className={`rounded-md border divide-y max-h-64 overflow-y-auto ${
+                      customizePerDate ? "opacity-60 pointer-events-none" : ""
+                    }`}
+                  >
                     {/* Select All */}
                     {(() => {
                       const availableFacilities = facilities.filter(
@@ -1414,7 +1490,8 @@ const renderPerDateFacilities = (date, cust) => {
                         availableIds.length > 0 && selectedAvailable.length === availableIds.length;
                       const someSelected =
                         selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
-                      const selectAllDisabled = selectedDates.size === 0;
+                      const selectAllDisabled =
+                        selectedDates.size === 0 || availableIds.length === 0;
                       return (
                         <label
                           className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
@@ -1433,10 +1510,24 @@ const renderPerDateFacilities = (date, cust) => {
                                   availableIds.forEach((id) => next.add(id));
                                   return Array.from(next);
                                 });
+                                // Quantities drive the summary and the Order of
+                                // Payment, so mirror the selection there too.
+                                setFacilityQuantities((prev) => {
+                                  const next = { ...prev };
+                                  availableIds.forEach((id) => {
+                                    if (!(Number(next[id]) > 0)) next[id] = 1;
+                                  });
+                                  return next;
+                                });
                               } else {
                                 setSelectedFacilityIds((prev) =>
                                   prev.filter((id) => !availableIds.includes(String(id)))
                                 );
+                                setFacilityQuantities((prev) => {
+                                  const next = { ...prev };
+                                  availableIds.forEach((id) => delete next[id]);
+                                  return next;
+                                });
                               }
                             }}
                             disabled={selectAllDisabled}

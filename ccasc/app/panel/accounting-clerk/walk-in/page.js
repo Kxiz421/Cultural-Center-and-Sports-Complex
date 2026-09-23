@@ -1755,7 +1755,8 @@ const renderPerDateFacilities = (date, cust) => {
                         availableIds.length > 0 && selectedAvailable.length === availableIds.length;
                       const someSelected =
                         selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
-                      const selectAllDisabled = selectedDates.size === 0;
+                      const selectAllDisabled =
+                        selectedDates.size === 0 || availableIds.length === 0;
                       return (
                         <label
                           className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
@@ -1774,10 +1775,24 @@ const renderPerDateFacilities = (date, cust) => {
                                   availableIds.forEach((id) => next.add(id));
                                   return Array.from(next);
                                 });
+                                // Quantities drive the Order of Payment, so mirror
+                                // the selection into that map as well.
+                                setFacilityQuantities((prev) => {
+                                  const next = { ...prev };
+                                  availableIds.forEach((id) => {
+                                    if (!(Number(next[id]) > 0)) next[id] = 1;
+                                  });
+                                  return next;
+                                });
                               } else {
                                 setSelectedFacilityIds((prev) =>
                                   prev.filter((id) => !availableIds.includes(String(id)))
                                 );
+                                setFacilityQuantities((prev) => {
+                                  const next = { ...prev };
+                                  availableIds.forEach((id) => delete next[id]);
+                                  return next;
+                                });
                               }
                             }}
                             disabled={selectAllDisabled}
