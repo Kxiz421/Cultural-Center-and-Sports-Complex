@@ -39,6 +39,12 @@ const SAFETY_MS = 4000;
  * without leaving a user stuck behind an opaque overlay.
  */
 const SAFETY_HARD_MS = 8000;
+/**
+ * How long the overlay stays mounted after `active` flips back to false, so
+ * the exit fade still has time to play before it leaves the DOM. Keep just
+ * above the exit transition in globals.css (460ms).
+ */
+const EXIT_MS = 560;
 
 /** Human-readable copy per destination, used when a caller passes no label. */
 const ROUTE_LABELS = {
@@ -72,10 +78,29 @@ function toPathname(href) {
   return href.split(/[?#]/)[0];
 }
 
+/** Run `fn` after the next paint, so CSS has a starting value to animate from. */
+function onNextFrame(fn) {
+  if (typeof window === "undefined") return;
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(fn);
+    return;
+  }
+  setTimeout(fn, 16);
+}
+
 export function RouteTransitionProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [active, setActive] = React.useState(false);
+  /**
+   * The overlay is only in the DOM while a transition is (or just was)
+   * running. Keeping a full-screen fixed layer mounted at all times means its
+   * visibility depends entirely on CSS arriving — and if that CSS does not
+   * (a stale stylesheet, a cached asset), the seal sits centred over the
+   * whole app with no way to hide it. Mounting on demand removes that failure
+   * mode: with no transition running there is nothing to hide.
+   */
+  const [rendered, setRendered] = React.useState(false);
   const [label, setLabel] = React.useState("");
 
   // Kept in refs so the callbacks and timers always read fresh values without
@@ -84,13 +109,27 @@ export function RouteTransitionProvider({ children }) {
   const destinationRef = React.useRef(null);
   const hardRef = React.useRef(false);
   const timersRef = React.useRef([]);
+  const exitTimerRef = React.useRef(null);
 
   const clearTimers = React.useCallback(() => {
     for (const id of timersRef.current) clearTimeout(id);
     timersRef.current = [];
   }, []);
 
-  React.useEffect(() => clearTimers, [clearTimers]);
+  const clearExitTimer = React.useCallback(() => {
+    if (exitTimerRef.current !== null) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(
+    () => () => {
+      clearTimers();
+      clearExitTimer();
+    },
+    [clearTimers, clearExitTimer],
+  );
 
   const hide = React.useCallback(() => {
     clearTimers();
@@ -98,7 +137,13 @@ export function RouteTransitionProvider({ children }) {
     destinationRef.current = null;
     hardRef.current = false;
     setActive(false);
-  }, [clearTimers]);
+    // Unmount only once the exit fade has played out.
+    clearExitTimer();
+    exitTimerRef.current = setTimeout(() => {
+      exitTimerRef.current = null;
+      setRendered(false);
+    }, EXIT_MS);
+  }, [clearExitTimer, clearTimers]);
 
   /**
    * Raise the curtain and navigate.
@@ -136,19 +181,32 @@ export function RouteTransitionProvider({ children }) {
       fromRef.current = pathname;
       destinationRef.current = target;
       hardRef.current = hard;
+      clearExitTimer();
       setLabel(customLabel ?? ROUTE_LABELS[target] ?? "Loading…");
-      setActive(true);
-
-      timersRef.current.push(
-        setTimeout(() => {
-          if (hard) window.location.assign(href);
-          else router.push(href);
-        }, COVER_MS),
-        setTimeout(hide, hard ? SAFETY_HARD_MS : SAFETY_MS),
-      );
+      // Mount the overlay in its hidden state, then flip it active on the next
+      // frame: an element that *starts* active has no opacity to transition
+      // from, so the veil would pop in instead of fading.
+      setRendered(true);
+      let activated = false;
+      const activate = () => {
+        if (activated) return;
+        activated = true;
+        setActive(true);
+        timersRef.current.push(
+          setTimeout(() => {
+            if (hard) window.location.assign(href);
+            else router.push(href);
+          }, COVER_MS),
+          setTimeout(hide, hard ? SAFETY_HARD_MS : SAFETY_MS),
+        );
+      };
+      onNextFrame(activate);
+      // Safety net: frames are throttled while a tab is in the background, and
+      // a click that silently never navigates would look like a dead link.
+      timersRef.current.push(setTimeout(activate, 80));
       return true;
     },
-    [hide, pathname, router],
+    [clearExitTimer, hide, pathname, router],
   );
 
   // The route arrived — hold the curtain just long enough for the new page to
@@ -172,43 +230,45 @@ export function RouteTransitionProvider({ children }) {
     <RouteTransitionContext.Provider value={value}>
       {children}
 
-      <div
-        className="route-curtain fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-neutral-950/60"
-        data-state={active ? "active" : "idle"}
-        aria-hidden={!active}
-      >
+      {rendered ? (
         <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/3 size-[30rem] -translate-x-1/2 rounded-full bg-blue-500/25 blur-[130px]"
-        />
+          className="route-curtain fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-neutral-950/60"
+          data-state={active ? "active" : "idle"}
+          aria-hidden={!active}
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/3 size-[30rem] -translate-x-1/2 rounded-full bg-blue-500/25 blur-[130px]"
+          />
 
-        <div className="route-curtain__content relative flex flex-col items-center gap-5 px-6 text-center">
-          <span className="relative flex items-center justify-center">
-            <span
-              aria-hidden
-              className="route-curtain__halo absolute inset-0 border border-blue-300/50"
-            />
-            <Image
-              src={PAGE_LOGO}
-              alt=""
-              width={96}
-              height={96}
-              className="relative size-20 drop-shadow-[0_12px_28px_rgba(0,0,0,0.55)] md:size-24"
-            />
-          </span>
+          <div className="route-curtain__content relative flex flex-col items-center gap-5 px-6 text-center">
+            <span className="relative flex items-center justify-center">
+              <span
+                aria-hidden
+                className="route-curtain__halo absolute inset-0 border border-blue-300/50"
+              />
+              <Image
+                src={PAGE_LOGO}
+                alt=""
+                width={96}
+                height={96}
+                className="relative size-20 drop-shadow-[0_12px_28px_rgba(0,0,0,0.55)] md:size-24"
+              />
+            </span>
 
-          <p role="status" className="text-base font-medium text-white/80">
-            {active ? label : ""}
-          </p>
+            <p role="status" className="text-base font-medium text-white/80">
+              {active ? label : ""}
+            </p>
 
-          {/* Indeterminate light sweep instead of a spinner: the overlay is a
-              hand-off, not a loading screen, and a bar that never fills says
-              that better than a rotating ring. */}
-          <span aria-hidden className="route-curtain__track h-[3px] w-40">
-            <span className="route-curtain__track-bar" />
-          </span>
+            {/* Indeterminate light sweep instead of a spinner: the overlay is a
+                hand-off, not a loading screen, and a bar that never fills says
+                that better than a rotating ring. */}
+            <span aria-hidden className="route-curtain__track h-[3px] w-40">
+              <span className="route-curtain__track-bar" />
+            </span>
+          </div>
         </div>
-      </div>
+      ) : null}
     </RouteTransitionContext.Provider>
   );
 }
