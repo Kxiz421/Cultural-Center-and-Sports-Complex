@@ -62,6 +62,15 @@ export const VENUES = [
   },
 ];
 
+/**
+ * Facilities and their reference rates.
+ *
+ * `wholeDayOnly` marks the Sports Complex facilities: the system bills them at
+ * their single day rate for the whole day — the slot picked in the form does
+ * not change the price, and their night rate is stored as 0
+ * (`prisma/seed.mjs` rateId 5/6, `scripts/add-sports-complex-migration.mjs`).
+ * Cultural Center facilities are still priced per Day and per Night slot.
+ */
 export const FACILITIES = [
   {
     name: "Gymnasium & Cultural Center",
@@ -89,23 +98,26 @@ export const FACILITIES = [
     name: "Basketball Court",
     venue: "Sports Complex",
     description: "Court for basketball games with shot clock support.",
+    wholeDayOnly: true,
     dayRate: 1500,
-    nightRate: 2000,
+    nightRate: null,
   },
   {
     name: "Track Oval",
     venue: "Sports Complex",
     description: "Standard oval for jogging, sprints and athletics.",
+    wholeDayOnly: true,
     dayRate: 3000,
-    nightRate: 3000,
+    nightRate: null,
   },
   {
     name: "Boxing Ring",
     venue: "Sports Complex",
     description:
       "Professional ring with ropes and padded corners for matches and training.",
+    wholeDayOnly: true,
     dayRate: 2000,
-    nightRate: 3000,
+    nightRate: null,
   },
 ];
 
@@ -118,6 +130,11 @@ export const ADD_ONS = [
   { name: "Aircon compressor", note: "Up to 10 units" },
 ];
 
+/**
+ * The steps a booking goes through, mirroring the client panel:
+ * reservation -> Order of Payment -> document submission (Documents module)
+ * -> coordinator confirmation.
+ */
 export const STEPS = [
   {
     title: "Create your account",
@@ -134,9 +151,14 @@ export const STEPS = [
       "An Order of Payment is issued for your reservation. Settle it, including the 10% deposit that secures your slot, through the Provincial Treasurer's Office.",
   },
   {
+    title: "Submit your documents",
+    description:
+      "Upload the documents for verification from your dashboard: the Official Receipt for a Sports Complex booking, or the Billing Statement and Official Receipt for the Cultural Center followed by its Certification and Contract of Lease.",
+  },
+  {
     title: "Booking confirmed",
     description:
-      "As soon as your payment is recorded the booking is confirmed, and a notification lands in your inbox with the details.",
+      "Once your payment and documents are verified the booking is confirmed, and a notification lands in your inbox with the details.",
   },
 ];
 

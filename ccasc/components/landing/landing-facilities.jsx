@@ -24,8 +24,9 @@ export function LandingFacilities() {
             Facilities and reference rates
           </h2>
           <p className="mt-3 text-base text-muted-foreground">
-            Day and night slots are priced separately, and every rate includes
-            the basic light and sound system.
+            Cultural Center facilities are priced per Day and per Night slot,
+            while every Sports Complex facility is booked and billed for the
+            whole day. All rates include the basic light and sound system.
           </p>
         </Reveal>
 
@@ -47,20 +48,32 @@ export function LandingFacilities() {
               <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
                 {facility.description}
               </p>
-              <dl className="mt-4 grid grid-cols-2 gap-2 border-t pt-4 text-sm">
-                <div>
-                  <dt className="text-xs text-muted-foreground">Day</dt>
+              {facility.wholeDayOnly ? (
+                /* Sports Complex: one whole-day rate, whatever slot is picked. */
+                <dl className="mt-4 border-t pt-4 text-sm">
+                  <dt className="text-xs text-muted-foreground">
+                    Whole Day (8:00 AM – 10:00 PM)
+                  </dt>
                   <dd className="font-semibold tabular-nums">
                     {formatPeso(facility.dayRate)}
                   </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Night</dt>
-                  <dd className="font-semibold tabular-nums">
-                    {formatPeso(facility.nightRate)}
-                  </dd>
-                </div>
-              </dl>
+                </dl>
+              ) : (
+                <dl className="mt-4 grid grid-cols-2 gap-2 border-t pt-4 text-sm">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Day</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatPeso(facility.dayRate)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Night</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatPeso(facility.nightRate)}
+                    </dd>
+                  </div>
+                </dl>
+              )}
               </div>
             </Reveal>
           ))}

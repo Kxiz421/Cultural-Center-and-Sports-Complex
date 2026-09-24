@@ -5,6 +5,7 @@ import {
   CalendarPlus,
   ClipboardCheck,
   Clock,
+  FileCheck2,
   ReceiptText,
   UserPlus,
   Wallet,
@@ -12,7 +13,13 @@ import {
 import { DEPOSIT_RATE, MIN_LEAD_TIME, STEPS } from "@/lib/landing-content";
 import { Reveal } from "@/components/landing/reveal";
 
-const STEP_ICONS = [UserPlus, CalendarPlus, ReceiptText, BadgeCheck];
+const STEP_ICONS = [
+  UserPlus,
+  CalendarPlus,
+  ReceiptText,
+  FileCheck2,
+  BadgeCheck,
+];
 
 export function LandingHowItWorks() {
   return (
@@ -37,7 +44,7 @@ export function LandingHowItWorks() {
             From reservation to confirmation
           </h2>
           <p className="mt-3 text-base text-muted-foreground">
-            The same four steps every booking goes through, with the status of
+            The same five steps every booking goes through, with the status of
             yours visible in your dashboard the whole way.
           </p>
         </Reveal>
@@ -48,14 +55,14 @@ export function LandingHowItWorks() {
             aria-hidden
             className="pointer-events-none absolute inset-x-0 top-10 hidden h-px bg-gradient-to-r from-transparent via-blue-200 to-transparent lg:block"
           />
-          <ol className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <ol className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {STEPS.map((step, index) => {
             const Icon = STEP_ICONS[index] ?? ClipboardCheck;
             return (
               <Reveal
                 key={step.title}
                 as="li"
-                delay={Math.min(index * 80, 240)}
+                delay={Math.min(index * 80, 320)}
                 direction={index % 2 === 0 ? "left" : "right"}
               >
                 <div className="flex h-full flex-col rounded-3xl bg-card p-5 shadow-sm ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
