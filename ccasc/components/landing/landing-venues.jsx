@@ -3,9 +3,14 @@
 import { Building2, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/landing/reveal";
+import { useLandingFacilities } from "@/components/landing/use-facilities";
 import { VENUES } from "@/lib/landing-content";
 
 export function LandingVenues() {
+  // Facility names come from the same records the admin Facility Management
+  // screen lists, so a venue card can never advertise a facility that is gone.
+  const { byVenue } = useLandingFacilities();
+
   return (
     <section
       id="venues"
@@ -34,12 +39,18 @@ export function LandingVenues() {
         </Reveal>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2">
-          {VENUES.map((venue, index) => (
-            <Reveal
-              key={venue.name}
-              delay={index * 120}
-              direction={index % 2 === 0 ? "left" : "right"}
-            >
+          {VENUES.map((venue, index) => {
+            const facilityNames = (
+              byVenue.find((group) => group.venueId === venue.venueId)
+                ?.facilities ?? []
+            ).map((facility) => facility.name);
+
+            return (
+              <Reveal
+                key={venue.name}
+                delay={index * 120}
+                direction={index % 2 === 0 ? "left" : "right"}
+              >
               <article
                 className="flex h-full flex-col rounded-3xl bg-card p-6 shadow-sm ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
               >
@@ -60,15 +71,22 @@ export function LandingVenues() {
                 {venue.description}
               </p>
               <div className="mt-4 flex flex-wrap gap-1.5 border-t pt-4">
-                {venue.facilities.map((facility) => (
-                  <Badge key={facility} variant="secondary">
-                    {facility}
-                  </Badge>
-                ))}
+                {facilityNames.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">
+                    Loading facilities…
+                  </span>
+                ) : (
+                  facilityNames.map((name) => (
+                    <Badge key={name} variant="secondary">
+                      {name}
+                    </Badge>
+                  ))
+                )}
               </div>
             </article>
             </Reveal>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

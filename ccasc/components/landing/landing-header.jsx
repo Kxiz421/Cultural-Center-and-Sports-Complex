@@ -7,6 +7,7 @@ import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { TransitionLink } from "@/components/route-transition";
 import { HERO_STATS, NAV_LINKS } from "@/lib/landing-content";
+import { useLandingFacilities } from "@/components/landing/use-facilities";
 
 /**
  * Sticky top navigation. Frosted and light so it stays readable over both the
@@ -65,6 +66,9 @@ function LandingHeader() {
 }
 
 function LandingHero() {
+  // The "Facilities" stat is counted from the facility records, not hard-coded.
+  const { facilities, loading } = useLandingFacilities();
+
   return (
     <section
       aria-labelledby="landing-hero-title"
@@ -150,7 +154,11 @@ function LandingHero() {
             <div key={stat.label}>
               <dt className="text-xs text-white/70">{stat.label}</dt>
               <dd className="text-2xl font-bold tabular-nums text-white">
-                {stat.value}
+                {stat.countFacilities
+                  ? loading
+                    ? "…"
+                    : facilities.length
+                  : stat.value}
               </dd>
             </div>
           ))}
