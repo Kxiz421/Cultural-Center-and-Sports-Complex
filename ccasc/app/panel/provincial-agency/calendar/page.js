@@ -143,7 +143,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
           {DAYS_OF_WEEK.map((day) => (
             <div
               key={day}
-              className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground"
             >
               {day}
             </div>
@@ -170,7 +170,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
                     } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}`}
                   >
                     <div
-                      className={`mb-1 flex size-5 items-center justify-center rounded-full text-[11px] font-medium ${
+                      className={`mb-1 flex size-5 items-center justify-center rounded-full text-xs font-medium ${
                         isToday
                           ? "bg-blue-500 text-white"
                           : cell.currentMonth
@@ -186,7 +186,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
                         return (
                           <div
                             key={ev.id}
-                            className={`truncate rounded-sm px-1 py-0.5 text-[10px] font-medium leading-tight cursor-pointer hover:opacity-80 ${colors.bg} ${colors.text}`}
+                            className={`truncate rounded-sm px-1 py-0.5 text-xs font-medium leading-tight cursor-pointer hover:opacity-80 ${colors.bg} ${colors.text}`}
                             title={`${ev.title}${ev.clientName ? ` - ${ev.clientName}` : ""}${ev.blockType ? ` (${ev.blockType})` : ""}`}
                             onClick={() => onEventClick && onEventClick(ev)}
                           >
@@ -195,7 +195,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
                         );
                       })}
                       {dayEvents.length > 2 && (
-                        <div className="text-[10px] font-medium text-muted-foreground">
+                        <div className="text-xs font-medium text-muted-foreground">
                           +{dayEvents.length - 2}
                         </div>
                       )}
@@ -208,7 +208,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick }) {
         </div>
 
           {/* Color Legend */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-xs text-muted-foreground">
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-indigo-100 dark:bg-indigo-900/40" /> Ongoing</div>

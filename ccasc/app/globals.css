@@ -7,7 +7,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /*
+   * `--font-geist-sans` is provided by `next/font` (see `app/layout.js`).
+   * The comma fallback inside `var()` keeps text in a sans-serif when the font
+   * cannot be downloaded (offline machine, behind a proxy). Without it the
+   * whole declaration would be invalid and the page would fall back to the
+   * browser's default serif font.
+   */
+  --font-sans: var(--font-geist-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif);
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -46,6 +53,47 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Global type scale.
+ *
+ * Every `text-*` utility in the app — including the shadcn/ui primitives in
+ * `components/ui` — resolves through these tokens, so raising them here makes
+ * the whole interface easier to read from a single place. Only the type scale
+ * is touched: spacing utilities keep their own `--spacing` scale, so padding,
+ * gaps and fixed heights are not re-flowed.
+ *
+ * Line heights are kept at the original ratio so icon-button, badge and
+ * calendar-dot heights (`h-5`, `h-8`, `size-5`) still fit their text.
+ */
+@theme {
+  --text-xs: 0.875rem; /* 14px — was 12px */
+  --text-xs--line-height: 1.25rem;
+
+  --text-sm: 1rem; /* 16px — was 14px */
+  --text-sm--line-height: 1.5rem;
+
+  --text-base: 1.0625rem; /* 17px — was 16px */
+  --text-base--line-height: 1.625rem;
+
+  --text-lg: 1.25rem; /* 20px — was 18px */
+  --text-lg--line-height: 1.75rem;
+
+  --text-xl: 1.375rem; /* 22px — was 20px */
+  --text-xl--line-height: 1.875rem;
+
+  --text-2xl: 1.625rem; /* 26px — was 24px */
+  --text-2xl--line-height: 2.125rem;
+
+  --text-3xl: 2rem; /* 32px — was 30px */
+  --text-3xl--line-height: 2.5rem;
+
+  --text-4xl: 2.5rem; /* 40px — was 36px */
+  --text-4xl--line-height: 2.75rem;
+
+  --text-5xl: 3.25rem; /* 52px — was 48px */
+  --text-5xl--line-height: 1;
 }
 
 :root {
@@ -141,5 +189,190 @@
   }
   [data-slot="table-head"] {
     @apply text-foreground font-semibold;
+  }
+}
+
+/*
+ * Scroll reveal.
+ *
+ * `app/layout.js` adds the `js` class to <html> before the first paint, so
+ * these rules only hide anything when scripting is actually available:
+ *
+ * - no JavaScript  -> the `js` class never lands, content is simply visible
+ * - reduced motion -> the media query below never applies, so no motion
+ * - everyone else  -> elements travel in from a direction and fade in once as
+ *                      they scroll into view
+ *
+ * Left unlayered so it reliably wins over utility classes without needing
+ * `!important`.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html.js [data-reveal] {
+    transition:
+      opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 700ms cubic-bezier(0.22, 1, 0.36, 1),
+      filter 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html.js [data-reveal="out"] {
+    opacity: 0;
+    transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, 24px), 0)
+      scale(var(--reveal-scale, 1));
+    filter: blur(var(--reveal-blur, 0px));
+  }
+
+  html.js [data-reveal="in"] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0px);
+  }
+
+  /*
+   * The hero sits above the fold, so rather than waiting on a scroll trigger
+   * it plays a staggered entrance on load. Same easing family as the scroll
+   * reveals so the two read as one motion system.
+   */
+  html.js .hero-enter {
+    animation: hero-enter 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes hero-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 24px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+}
+
+/*
+ * Route transition curtain (see `components/route-transition.jsx`).
+ *
+ * The overlay is mounted once in `app/layout.js` so it stays mounted while the
+ * route changes underneath it: `TransitionLink` raises it, the navigation
+ * happens behind it, and `RouteTransitionProvider` lowers it on arrival.
+ *
+ * Only the state-driven bits live here — layout and coloring stay in Tailwind
+ * utilities in the component, matching `Reveal`. `data-state` drives both
+ * directions, and the reduced-motion guard above both blocks means a user who
+ * asked for less motion never sees a fade (the provider skips the curtain
+ * entirely in that case, so the rules below simply never run).
+ */
+/*
+ * The veil is translucent and blurs/dims whatever is behind it, so the page
+ * being left recedes out of focus instead of being replaced by a loading
+ * screen. `backdrop-filter` is doing the work here rather than a transform on
+ * <body>: a transformed/filtered body would become the containing block for
+ * every `position: fixed` descendant (sidebars, the dialogs portaled into
+ * <body>), which shifts them mid-navigation.
+ */
+.route-curtain {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  backdrop-filter: blur(0px) saturate(1) brightness(1);
+}
+
+.route-curtain[data-state="active"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  backdrop-filter: blur(20px) saturate(1.05) brightness(0.5);
+}
+
+.route-curtain__content {
+  opacity: 0;
+  transform: translate3d(0, 16px, 0) scale(0.94);
+}
+
+.route-curtain[data-state="active"] .route-curtain__content {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+/* Ring that breathes outward from behind the seal. */
+.route-curtain__halo {
+  border-radius: 9999px;
+}
+
+.route-curtain__track {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: oklch(1 0 0 / 12%);
+}
+
+/* Indeterminate sweep along the track — reads as progress, not as a spinner. */
+.route-curtain__track-bar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 40%;
+  border-radius: 9999px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.7 0.17 255 / 90%),
+    transparent
+  );
+}
+
+@keyframes route-curtain-halo {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.82);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.24);
+  }
+}
+
+@keyframes route-curtain-sweep {
+  from {
+    transform: translate3d(-105%, 0, 0);
+  }
+  to {
+    transform: translate3d(255%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .route-curtain__halo {
+    animation: route-curtain-halo 1800ms cubic-bezier(0.22, 1, 0.36, 1)
+      infinite;
+  }
+
+  .route-curtain__track-bar {
+    animation: route-curtain-sweep 1300ms cubic-bezier(0.65, 0, 0.35, 1)
+      infinite;
+  }
+
+  /* Raised quickly, released slowly: the veil finishes dissolving over the
+     page that has already arrived, which is what makes the hand-off read as a
+     cross-fade rather than a cut. `visibility` is stepped, with the delay on
+     the way out so the fade is allowed to finish. */
+  .route-curtain {
+    transition:
+      opacity 460ms cubic-bezier(0.22, 1, 0.36, 1),
+      backdrop-filter 460ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 480ms;
+  }
+
+  .route-curtain[data-state="active"] {
+    transition:
+      opacity 380ms cubic-bezier(0.22, 1, 0.36, 1),
+      backdrop-filter 380ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0s;
+  }
+
+  .route-curtain__content {
+    transition:
+      opacity 520ms cubic-bezier(0.22, 1, 0.36, 1) 60ms,
+      transform 560ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
   }
 }

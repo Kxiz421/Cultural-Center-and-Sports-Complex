@@ -40,7 +40,7 @@ export function NavMain({ items, unreadBadgeCount = 0 }) {
                     <span>{item.title}</span>
                     {showBadge && (
                       <span
-                        className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                        className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
                         aria-label={`${badgeCount} pending items`}
                       >
                         {badgeCount > 99 ? "99+" : badgeCount}

@@ -512,7 +512,7 @@ export default function PackagesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{pkg.timeSlot}</TableCell>
-                      <TableCell className="text-sm max-w-[150px]">
+                      <TableCell className="text-sm max-w-[150px] whitespace-normal">
                         <ul className="list-inside list-disc text-xs">
                           {pkg.inclusions.map((inc, i) => (
                             <li key={i}>{inc.itemName} (x{inc.quantityAvailable})</li>

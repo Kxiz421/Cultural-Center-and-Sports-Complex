@@ -741,7 +741,7 @@ export default function ClientDocumentsPage() {
                         <span className="font-medium">
                           {formatEventDateLabel(date)}
                         </span>
-                        <span className="text-[11px] opacity-80">
+                        <span className="text-xs opacity-80">
                           {count}/4 documents
                         </span>
                       </Button>

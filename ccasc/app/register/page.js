@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { uploadIdProof } from "@/lib/upload-id-proof";
+import {
+  TransitionLink,
+  useRouteTransition,
+} from "@/components/route-transition";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,7 +28,7 @@ import {
 } from "@/components/ui/select";
 
 export default function RegisterPage() {
-  const router = useRouter();
+  const { start: startRouteTransition } = useRouteTransition();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -193,7 +195,10 @@ export default function RegisterPage() {
       }
 
       toast.success("Registration submitted! Please wait for admin verification before signing in.");
-      router.push("/login");
+      // Covered transition into the sign-in page (see
+      // `components/route-transition.jsx`); the success toast still shows
+      // because sonner renders above the curtain.
+      startRouteTransition("/login");
     } catch (error) {
       toast.error("An error occurred during registration.");
       setLoading(false);
@@ -214,13 +219,13 @@ export default function RegisterPage() {
       <div className="absolute inset-0 bg-black/55" aria-hidden />
 
       <div className="relative z-10 w-full max-w-lg">
-        <Link
+        <TransitionLink
           href="/"
           className="mb-4 flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
         >
           <ArrowLeft className="size-4" />
           Back to home
-        </Link>
+        </TransitionLink>
 
         <div className="mb-6 flex flex-col items-center px-2 text-center">
           <Image
@@ -518,9 +523,9 @@ export default function RegisterPage() {
               </Button>
               <p className="mt-3 text-center text-sm text-muted-foreground">
                 Already have an account?{" "}
-                <Link href="/login" className="text-primary hover:underline font-medium">
+                <TransitionLink href="/login" className="text-primary hover:underline font-medium">
                   Sign in
-                </Link>
+                </TransitionLink>
               </p>
             </div>
           </form>

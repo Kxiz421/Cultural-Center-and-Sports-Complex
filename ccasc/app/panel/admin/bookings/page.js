@@ -224,7 +224,7 @@ export default function BookingsPage() {
                     >
                       <TableCell className="max-w-[160px] truncate">
                         <span className="font-medium">{b.clientName}</span>
-                        <span className="block text-[11px] text-muted-foreground">
+                        <span className="block text-xs text-muted-foreground">
                           {b.clientOrg}
                         </span>
                       </TableCell>
@@ -298,7 +298,7 @@ export default function BookingsPage() {
                     >
                       <TableCell className="max-w-[160px] truncate">
                         <span className="font-medium">{b.clientName}</span>
-                        <span className="block text-[11px] text-muted-foreground">
+                        <span className="block text-xs text-muted-foreground">
                           {b.clientOrg}
                         </span>
                       </TableCell>

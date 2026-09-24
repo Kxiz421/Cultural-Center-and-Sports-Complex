@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
+import { useRouteTransition } from "@/components/route-transition";
 import {
   Card,
   CardContent,
@@ -50,7 +50,7 @@ const LOGIN_ERROR_MESSAGES = {
 };
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { start: startRouteTransition } = useRouteTransition();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loginLoading, setLoginLoading] = React.useState(false);
@@ -194,7 +194,13 @@ export default function LoginPage() {
       }
 
       toast.success("Logged in successfully.");
-      window.location.href = homeForUserType(user.type);
+      // Hard navigation on purpose: the panel needs a fresh session inside
+      // SessionProvider, which a client-side push would not provide. The
+      // curtain still covers the hand-off, instead of leaving the sign-in form
+      // on screen while the dashboard downloads.
+      startRouteTransition(homeForUserType(user.type), "Signing you in…", {
+        hard: true,
+      });
     } catch (err) {
       toast.error("An error occurred during login. Please try again.");
     } finally {
@@ -655,14 +661,14 @@ export default function LoginPage() {
           <Button
             variant="outline"
             className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
-            onClick={() => router.push("/")}
+            onClick={() => startRouteTransition("/")}
           >
             ← Back to Home
           </Button>
           <Button
             variant="outline"
             className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
-            onClick={() => router.push("/register")}
+            onClick={() => startRouteTransition("/register")}
           >
             Register →
           </Button>

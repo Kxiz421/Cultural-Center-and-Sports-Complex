@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
-import { toast } from "sonner";
 import { Building2, Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,14 +31,14 @@ export default function ProvincialAgencyLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const { unreadCount } = useUnreadNotificationCount("client");
+  const logout = useLogout();
 
   const confirmLogout = async () => {
     localStorage.clear();
     setLogoutOpen(false);
-    // Destroy the signed session cookie, not just the local mirrors.
-    await signOut({ redirect: false });
-    toast.success("You have been logged out.");
-    router.push("/login");
+    // Cookie destroyed, then the curtain-covered landing page (see
+    // `hooks/use-logout.js`).
+    await logout();
   };
 
   return (
@@ -93,7 +92,7 @@ export default function ProvincialAgencyLayout({ children }) {
                 {item.label}
                 {item.showBadge && unreadCount > 0 && (
                   <span
-                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
                     aria-label={`${unreadCount} unread notifications`}
                   >
                     {unreadCount > 99 ? "99+" : unreadCount}

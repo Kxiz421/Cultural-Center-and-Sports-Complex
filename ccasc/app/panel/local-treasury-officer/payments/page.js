@@ -221,7 +221,7 @@ function EventDatesDisplay({ eventDate, eventDates, className, iconSize = 3 }) {
           <span className={`inline-flex items-center gap-1 cursor-default ${className || ""}`}>
             <CalendarDays className={`size-${iconSize} text-muted-foreground shrink-0`} />
             <span>{primary}</span>
-            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 font-normal leading-none">
+            <Badge variant="secondary" className="text-xs px-1 py-0 h-4 font-normal leading-none">
               +{extraCount}
             </Badge>
           </span>
@@ -231,7 +231,7 @@ function EventDatesDisplay({ eventDate, eventDates, className, iconSize = 3 }) {
             {dates.map((d, i) => (
               <li key={d + i} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
                 {i === 0 && (
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Primary: </span>
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground/70">Primary: </span>
                 )}
                 {d}
               </li>

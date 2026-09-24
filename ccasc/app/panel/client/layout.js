@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
-import { toast } from "sonner";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
+import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,14 +33,15 @@ export default function ClientLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const { unreadCount } = useUnreadNotificationCount("client");
+  const logout = useLogout();
 
   const confirmLogout = async () => {
     localStorage.clear();
     setLogoutOpen(false);
-    // Destroy the signed session cookie, not just the local mirrors.
-    await signOut({ redirect: false });
-    toast.success("You have been logged out.");
-    router.push("/login");
+    // Cookie destroyed, then the curtain-covered landing page (see
+    // `hooks/use-logout.js`). Never `/login`: a signed-out visitor belongs on
+    // the public page, not on a form they just left.
+    await logout();
   };
 
   return (
@@ -95,7 +95,7 @@ export default function ClientLayout({ children }) {
                 {item.label}
                 {item.showBadge && unreadCount > 0 && (
                   <span
-                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
                     aria-label={`${unreadCount} unread notifications`}
                   >
                     {unreadCount > 99 ? "99+" : unreadCount}

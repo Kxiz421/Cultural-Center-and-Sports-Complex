@@ -73,9 +73,9 @@ export function RescheduleEventDatesPanel({
                     <CalendarDays className="size-4 text-muted-foreground shrink-0" />
                     {reservation.eventType || "Event"}
                     {entry.isPrimary ? (
-                      <Badge variant="outline" className="text-[10px]">Primary day</Badge>
+                      <Badge variant="outline" className="text-xs">Primary day</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs">
                         Day {idx + 1}
                       </Badge>
                     )}
@@ -93,7 +93,7 @@ export function RescheduleEventDatesPanel({
                   )}
                 </div>
                 {changed && (
-                  <Badge className="text-[10px] shrink-0">Date changed</Badge>
+                  <Badge className="text-xs shrink-0">Date changed</Badge>
                 )}
               </div>
 

@@ -433,7 +433,7 @@ const activeAudienceCount = React.useMemo(() => {
                                 {user.email}
                               </span>
                             </span>
-                            <Badge variant="outline" className="text-[10px]">
+                            <Badge variant="outline" className="text-xs">
                               {user.role}
                             </Badge>
                           </label>
@@ -506,9 +506,14 @@ const activeAudienceCount = React.useMemo(() => {
                     <TableCell className="text-sm whitespace-nowrap">
                       {new Date(announcement.postedAt).toLocaleString()}
                     </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{announcement.title}</div>
-                      <div className="text-muted-foreground max-w-md text-xs">
+                    <TableCell className="whitespace-normal">
+                      <div
+                        className="max-w-md truncate font-medium"
+                        title={announcement.title}
+                      >
+                        {announcement.title}
+                      </div>
+                      <div className="text-muted-foreground line-clamp-2 max-w-md text-xs">
                         {announcement.content}
                       </div>
                     </TableCell>

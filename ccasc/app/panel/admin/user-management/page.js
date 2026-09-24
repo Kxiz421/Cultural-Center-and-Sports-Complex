@@ -1418,7 +1418,7 @@ export default function UserManagementPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {u.organization || "—"}
                     </TableCell>
-                    <TableCell className="max-w-[200px] text-sm">
+                    <TableCell className="max-w-[200px] text-sm whitespace-normal">
                       {u.role}
                     </TableCell>
                     <TableCell>

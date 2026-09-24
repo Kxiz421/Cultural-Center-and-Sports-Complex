@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
-import { toast } from "sonner";
 import { LogOut } from "lucide-react";
+import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,26 +19,14 @@ import {
 } from "@/components/ui/sidebar";
 
 export function NavUserCCASC() {
-  const router = useRouter();
+  const logout = useLogout();
   const [logoutOpen, setLogoutOpen] = React.useState(false);
 
   const confirmLogout = async () => {
-    if (typeof window === "undefined") return;
-    // Drop the display-only mirrors, then destroy the real session cookie.
-    [
-      "user_id",
-      "user_name",
-      "role",
-      "userType",
-      "firstname",
-      "lastname",
-      "email",
-      "token", // legacy value left behind by the pre-Auth.js build
-    ].forEach((key) => localStorage.removeItem(key));
     setLogoutOpen(false);
-    await signOut({ redirect: false });
-    toast.success("You have been logged out.");
-    router.push("/login");
+    // Mirrors cleared, cookie destroyed, then a curtain-covered landing page —
+    // all inside `useLogout` (see `hooks/use-logout.js`).
+    await logout();
   };
 
   return (

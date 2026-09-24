@@ -205,7 +205,7 @@ export function PanelNotificationsInbox({
                     {f.label}
                     <Badge
                       variant={active ? "secondary" : "outline"}
-                      className="text-[10px] px-1.5 py-0 h-5 min-w-5 justify-center"
+                      className="text-xs px-1.5 py-0 h-5 min-w-5 justify-center"
                     >
                       {count}
                     </Badge>
@@ -269,7 +269,7 @@ export function PanelNotificationsInbox({
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {!notif.isRead && (
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-xs">
                               New
                             </Badge>
                           )}
@@ -293,7 +293,7 @@ export function PanelNotificationsInbox({
                         </p>
                         <Badge
                           variant="outline"
-                          className={`text-[10px] ${getTypeColor(notif.type)}`}
+                          className={`text-xs ${getTypeColor(notif.type)}`}
                         >
                           {displayNotificationTypeLabel(notif.type)}
                         </Badge>

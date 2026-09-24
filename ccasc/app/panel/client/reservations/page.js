@@ -1573,7 +1573,7 @@ const renderPerDateFacilities = (date, cust) => {
                           )}
                           {checked && (
                             <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <span className="text-[10px] text-muted-foreground mr-1">Qty:</span>
+                              <span className="text-xs text-muted-foreground mr-1">Qty:</span>
                               <button
                                 type="button"
                                 className="size-6 rounded border border-input bg-background text-xs font-medium hover:bg-accent disabled:opacity-30"
@@ -1676,14 +1676,14 @@ const renderPerDateFacilities = (date, cust) => {
                                     <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
                                   )}
                                   {isBasketball && (
-                                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                       {basketballOptions.map((o) => (
                                         <div key={o.value}>{o.label} = P{o.price.toLocaleString()}</div>
                                       ))}
                                     </div>
                                   )}
                                   {isAircon && (
-                                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                                       {airconTiers.map((t) => (
                                         <div key={t.qty}>{t.qty} units = P{t.price.toLocaleString()} ({t.label})</div>
                                       ))}
@@ -1923,7 +1923,7 @@ const renderPerDateFacilities = (date, cust) => {
                                               <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
                                             )}
                                             {!isBasketball && !isAircon && (
-                                              <p className="text-[10px] text-muted-foreground">
+                                              <p className="text-xs text-muted-foreground">
                                                 {hasInventory ? `Available: ${maxQty}` : "No inventory record"}
                                               </p>
                                             )}
