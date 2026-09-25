@@ -43,6 +43,7 @@ import {
   Archive,
   ArchiveRestore,
   CheckCircle2,
+  Eye,
   Loader2,
   Megaphone,
   Search,
@@ -75,6 +76,7 @@ export default function AnnouncementsPage() {
   const [directory, setDirectory] = React.useState([]);
   const [directoryLoading, setDirectoryLoading] = React.useState(false);
   const [archivingId, setArchivingId] = React.useState(null);
+  const [selectedAnnouncement, setSelectedAnnouncement] = React.useState(null);
 
   const loadAnnouncements = React.useCallback(async () => {
     try {
@@ -263,6 +265,12 @@ const activeAudienceCount = React.useMemo(() => {
           : "Announcement restored to the active feed."
       );
       await loadAnnouncements();
+      // Keep the open detail dialog in sync with the saved state.
+      setSelectedAnnouncement((prev) =>
+        prev && prev.id === announcement.id
+          ? { ...prev, archived: Boolean(data.archived) }
+          : prev
+      );
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to update announcement");
@@ -471,8 +479,9 @@ const activeAudienceCount = React.useMemo(() => {
         <CardHeader>
           <CardTitle>History</CardTitle>
           <CardDescription>
-            Every announcement sent, with how many accounts were notified. Archive
-            rows to retire them from the record while keeping them recoverable.
+            Every announcement sent, with how many accounts were notified. Select a
+            row to read the full notice, or archive rows to retire them from the
+            record while keeping them recoverable.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -502,7 +511,11 @@ const activeAudienceCount = React.useMemo(() => {
               </TableHeader>
               <TableBody>
                 {items.map((announcement) => (
-                  <TableRow key={announcement.id}>
+                  <TableRow
+                    key={announcement.id}
+                    className="cursor-pointer transition-colors hover:bg-muted/50"
+                    onClick={() => setSelectedAnnouncement(announcement)}
+                  >
                     <TableCell className="text-sm whitespace-nowrap">
                       {new Date(announcement.postedAt).toLocaleString()}
                     </TableCell>
@@ -531,23 +544,37 @@ const activeAudienceCount = React.useMemo(() => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={archivingId === announcement.id}
-                        onClick={() =>
-                          setArchived(announcement, !announcement.archived)
-                        }
-                      >
-                        {archivingId === announcement.id ? (
-                          <Loader2 className="mr-2 size-4 animate-spin" />
-                        ) : announcement.archived ? (
-                          <ArchiveRestore className="mr-2 size-4" />
-                        ) : (
-                          <Archive className="mr-2 size-4" />
-                        )}
-                        {announcement.archived ? "Restore" : "Archive"}
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedAnnouncement(announcement);
+                          }}
+                        >
+                          <Eye className="mr-2 size-4" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={archivingId === announcement.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setArchived(announcement, !announcement.archived);
+                          }}
+                        >
+                          {archivingId === announcement.id ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                          ) : announcement.archived ? (
+                            <ArchiveRestore className="mr-2 size-4" />
+                          ) : (
+                            <Archive className="mr-2 size-4" />
+                          )}
+                          {announcement.archived ? "Restore" : "Archive"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -556,6 +583,129 @@ const activeAudienceCount = React.useMemo(() => {
           )}
         </CardContent>
       </Card>
+
+      {/* Announcement Detail Dialog */}
+      <Dialog
+        open={selectedAnnouncement !== null}
+        onOpenChange={(next) => {
+          if (!next) setSelectedAnnouncement(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedAnnouncement?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedAnnouncement
+                ? `ANN-${selectedAnnouncement.id} — posted ${new Date(
+                    selectedAnnouncement.postedAt
+                  ).toLocaleString()}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAnnouncement && (
+            <>
+              <div className="space-y-6 py-2">
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Delivery
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Posted
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {new Date(selectedAnnouncement.postedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Author
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {selectedAnnouncement.authorName}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Recipients
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {selectedAnnouncement.recipientType}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Notified
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {selectedAnnouncement.notified} account
+                        {selectedAnnouncement.notified === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        State
+                      </Label>
+                      <Badge
+                        variant={
+                          selectedAnnouncement.archived ? "secondary" : "outline"
+                        }
+                      >
+                        {selectedAnnouncement.archived ? "Archived" : "Active"}
+                      </Badge>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Announcement ID
+                      </Label>
+                      <p className="text-sm font-medium">
+                        ANN-{selectedAnnouncement.id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Message
+                  </h4>
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <p className="text-sm whitespace-pre-wrap">
+                      {selectedAnnouncement.content}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={archivingId === selectedAnnouncement.id}
+                  onClick={() =>
+                    setArchived(
+                      selectedAnnouncement,
+                      !selectedAnnouncement.archived
+                    )
+                  }
+                >
+                  {archivingId === selectedAnnouncement.id ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : selectedAnnouncement.archived ? (
+                    <ArchiveRestore className="mr-2 size-4" />
+                  ) : (
+                    <Archive className="mr-2 size-4" />
+                  )}
+                  {selectedAnnouncement.archived ? "Restore" : "Archive"}
+                </Button>
+                <Button type="button" onClick={() => setSelectedAnnouncement(null)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
