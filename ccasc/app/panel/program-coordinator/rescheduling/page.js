@@ -143,7 +143,8 @@ export default function CoordinatorReschedulingPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Rescheduling</h2>
         <p className="text-muted-foreground text-sm">
-          Handle client requests to change event dates or times.
+          Handle client requests to change event dates, facilities, particulars
+          or times.
         </p>
       </div>
 
@@ -206,10 +207,15 @@ export default function CoordinatorReschedulingPage() {
                     {req.venue} &middot; {req.eventType}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    {(req.dateChanges || [{ originalDate: req.currentDate, requestedDate: req.requestedDate }])
+                    {(req.dateChanges || [])
                       .map((c) => `${c.originalDate} → ${c.requestedDate}`)
-                      .join(" · ")}
+                      .join(" · ") || "No date change"}
                   </p>
+                  {req.scopeChangeText && (
+                    <p className="text-xs text-muted-foreground">
+                      Scope change: {req.scopeChangeText}
+                    </p>
+                  )}
                   {req.declineReason && (
                     <p className="text-xs text-red-600 mt-1">
                       Decline reason: {req.declineReason}
@@ -255,19 +261,84 @@ export default function CoordinatorReschedulingPage() {
                 <div>
                   <span className="text-muted-foreground text-xs">Date changes</span>
                   <div className="mt-1 space-y-1">
-                    {(selectedRequest.dateChanges || [
-                      {
-                        originalDate: selectedRequest.currentDate,
-                        requestedDate: selectedRequest.requestedDate,
-                        isPrimary: true,
-                      },
-                    ]).map((c, idx) => (
-                      <p key={idx} className="font-medium text-sm">
-                        {c.originalDate} → {c.requestedDate}
-                        {c.isPrimary ? " (primary)" : ""}
+                    {(selectedRequest.dateChanges || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No date change — the same date is kept.
                       </p>
-                    ))}
+                    ) : (
+                      selectedRequest.dateChanges.map((c, idx) => (
+                        <p key={idx} className="font-medium text-sm">
+                          {c.originalDate} → {c.requestedDate}
+                          {c.isPrimary ? " (primary)" : ""}
+                        </p>
+                      ))
+                    )}
                   </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">
+                    Facilities / Particulars / Time Slot changes
+                  </span>
+                  {selectedRequest.scopeChange ? (
+                    <div className="mt-1 space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">Time slot: </span>
+                        <span className="font-medium">
+                          {selectedRequest.scopeChange.timeSlotLabel || "unchanged"}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          (was {selectedRequest.timeSlot})
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Facilities: </span>
+                        {selectedRequest.scopeChange.facilities.length === 0 ? (
+                          <span className="font-medium">none</span>
+                        ) : (
+                          selectedRequest.scopeChange.facilities
+                            .map((f) => `${f.name} × ${f.quantity}`)
+                            .join(", ")
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Was:{" "}
+                        {selectedRequest.currentFacilities.length === 0
+                          ? "none"
+                          : selectedRequest.currentFacilities
+                              .map((f) => f.name)
+                              .join(", ")}
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Particulars: </span>
+                        {selectedRequest.scopeChange.particulars.length === 0 ? (
+                          <span className="font-medium">none</span>
+                        ) : (
+                          selectedRequest.scopeChange.particulars
+                            .map((p) => `${p.name} × ${p.quantity}`)
+                            .join(", ")
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Was:{" "}
+                        {selectedRequest.currentParticulars.length === 0
+                          ? "none"
+                          : selectedRequest.currentParticulars
+                              .map((p) => `${p.name} × ${p.quantity}`)
+                              .join(", ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        The reservation amount is recalculated from the approved
+                        scope (currently ₱
+                        {Number(selectedRequest.totalAmount || 0).toLocaleString()}
+                        ).
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      No facility, particular or time slot change.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">Client&apos;s Reason</span>
@@ -306,7 +377,7 @@ export default function CoordinatorReschedulingPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {confirmAction === "approve"
-                      ? "This will apply all requested date changes and notify the client."
+                      ? "This will apply all requested date changes and any facility, particular or time slot changes, recalculate the amount, and notify the client."
                       : "This will reject the request and notify the client."}
                   </p>
                   {confirmAction === "decline" && (

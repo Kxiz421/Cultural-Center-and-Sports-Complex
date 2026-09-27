@@ -1,71 +1,49 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
+import { ReportGenerationScreen } from "@/components/report-generation-screen";
 import {
-  ReportActions,
-  ReportControls,
-  ReportEmptyState,
-  ReportPageHeader,
-} from "@/components/report-generator";
-import ReportActivitiesDocument from "@/components/report-activities-document";
-import { downloadActivitiesCsv } from "@/lib/report-activities-export";
-import { useActivitiesReport } from "@/hooks/use-activities-report";
+  SPORTS_COMPLEX_VENUE_ID,
+  reportVenueIdsForUserType,
+  venueScopeLabel,
+} from "@/lib/report-venue-scope";
 
 /**
- * The Program Coordinator only handles the Cultural Center (venueId 1), so the
- * activity report is scoped to that venue. Everything else — the period
- * selector, the generated document and the exports — is identical to the other
- * report screens.
+ * Program Coordinator reports.
+ *
+ * A coordinator is responsible for a single venue, and their reports must stay
+ * inside it: the Cultural Center coordinator only ever sees Cultural Center
+ * figures, the Sports Complex coordinator only Sports Complex figures. The
+ * venue is read from the session user type stored at login and is also enforced
+ * server-side by `/api/reports/*`, so the scope cannot be widened from the
+ * browser.
  */
 export default function CoordinatorReportsPage() {
-  const report = useActivitiesReport({ venueIds: "1" });
+  const [venueIds, setVenueIds] = React.useState([]);
 
-  const handleExportCsv = () => {
-    if (!report.report) return;
-    if (!downloadActivitiesCsv(report.report)) {
-      toast.error("No data to export");
-    } else {
-      toast.success("Report exported as CSV");
-    }
-  };
+  React.useEffect(() => {
+    const userType =
+      typeof window === "undefined"
+        ? ""
+        : localStorage.getItem("userType") || "";
+    setVenueIds(reportVenueIdsForUserType(userType));
+  }, []);
+
+  const scopeName = venueIds.length
+    ? venueScopeLabel(venueIds)
+    : "assigned venue";
+  const isSportsComplex = venueIds.includes(SPORTS_COMPLEX_VENUE_ID);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="no-print">
-        <ReportPageHeader description="Generate a monthly, weekly or yearly list of activities for the Cultural Center. Every report prints in the official LIST OF SCGCC ACTIVITIES format." />
-      </div>
-
-      <div className="no-print">
-        <ReportControls
-          period={report.period}
-          onPeriodChange={report.setPeriod}
-          month={report.month}
-          onMonthChange={report.setMonth}
-          week={report.week}
-          onWeekChange={report.setWeek}
-          year={report.year}
-          onYearChange={report.setYear}
-          onGenerate={report.generate}
-          loading={report.loading}
-        />
-      </div>
-
-      {report.report ? (
-        <>
-          <div className="no-print">
-            <ReportActions
-              onExportPdf={report.printReport}
-              onExportCsv={handleExportCsv}
-            />
-          </div>
-          <ReportActivitiesDocument report={report.report} />
-        </>
-      ) : (
-        <div className="no-print">
-          <ReportEmptyState />
-        </div>
-      )}
-    </div>
+    <ReportGenerationScreen
+      description={`Generate a monthly, weekly or yearly report for the ${scopeName}: the LIST OF SCGCC ACTIVITIES document, or the revenue ${isSportsComplex ? "per facility" : "per particular, venue or package"}. Every report can be printed or exported.`}
+      scopeNote={
+        isSportsComplex
+          ? "Report scope: Sports Complex only. Revenue is reported per Sports Complex facility, and reports cannot include the Cultural Center."
+          : `Report scope: ${scopeName} only. Reports cannot include the other venue.`
+      }
+      showVenue={false}
+      venueIds={venueIds.length ? venueIds.join(",") : undefined}
+    />
   );
 }

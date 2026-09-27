@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate, parseSqlDate } from "@/lib/utils";
 import { BASKETBALL_NAME, getBasketballPrice } from "@/lib/particular-options";
+import { canManageReservationScope } from "@/lib/reschedule-scope";
 import { getTimeSlotLabel, isWholeDaySlot, WHOLE_DAY_SLOT } from "@/lib/time-slots";
 import {
   embedChargeBreakdownInNotes,
@@ -149,8 +150,18 @@ export async function GET(request) {
         reservedParticulars: {
           include: {
             particular: { 
-              select: { particularName: true, inventory: { select: { unitCost: true } } }
+              select: {
+                particularId: true,
+                particularName: true,
+                inventory: { select: { unitCost: true } },
+              }
             },
+          },
+        },
+        schedules: {
+          select: {
+            facilityId: true,
+            facility: { select: { facilityName: true, rate: { select: { dayRate: true, nightRate: true } } } },
           },
         },
         additionalDates: { select: { reservationDateId: true, eventDate: true } },
@@ -200,6 +211,29 @@ export async function GET(request) {
         const paymentStatus = computePaymentStatus(totalAmount || 0, allPayments);
         const calendarVisible = computeCalendarVisible(totalAmount || 0, allPayments);
 
+        // Facilities / particulars / time slot can still be managed while the
+        // reservation is editable (see lib/reschedule-scope.js).
+        const scopeAccess = canManageReservationScope({
+          venueId: r.venueId,
+          reservationStatus: r.reservationStatus,
+          totalAmount,
+          paidAmount: totalPaid,
+          bookingStatus: r.bookings[0]?.status?.status || "Unbooked",
+        });
+
+        // Units booked per facility live in the stored charge breakdown; fall
+        // back to one unit per scheduled facility for older reservations.
+        const chargeLines = extractChargeBreakdownFromNotes(r.notes) || [];
+        const facilityQuantities = new Map();
+        for (const line of chargeLines) {
+          if (!line.facilityId) continue;
+          const id = Number(line.facilityId);
+          facilityQuantities.set(
+            id,
+            (facilityQuantities.get(id) || 0) + (Number(line.quantity) || 0)
+          );
+        }
+
         return {
           id: `RES-${r.reservationId}`,
           clientId: r.clientId,
@@ -210,6 +244,7 @@ export async function GET(request) {
           eventDate: formatDbDate(r.eventDate),
           eventDates: allDates,
           eventDateEntries,
+          timeSlotId: r.timeSlotId,
           timeSlot: `${r.timeSlot.startTime} - ${r.timeSlot.endTime}`,
           status: r.reservationStatus,
           submittedAt: r.submittedAt.toISOString(),
@@ -226,9 +261,20 @@ export async function GET(request) {
           requiredDownPayment: totalAmount ? totalAmount * 0.5 : null,
           requiredDeposit: totalAmount ? totalAmount * 0.1 : null,
           remarks: stripChargeBreakdownFromNotes(r.notes) || null,
-          chargeLines: extractChargeBreakdownFromNotes(r.notes) || null,
+          chargeLines: chargeLines.length > 0 ? chargeLines : null,
+          facilities: r.schedules.map((s) => ({
+            facilityId: s.facilityId,
+            name: s.facility?.facilityName || `Facility ${s.facilityId}`,
+            quantity: facilityQuantities.get(s.facilityId) || 1,
+            rateDay: Number(s.facility?.rate?.dayRate || 0),
+            rateNight: Number(s.facility?.rate?.nightRate || 0),
+          })),
+          canManageScope: scopeAccess.allowed,
+          scopeLockReason: scopeAccess.reason,
           particulars: r.reservedParticulars.map((rp) => ({
+            particularId: rp.particular.particularId,
             name: rp.particular.particularName,
+            particularName: rp.particular.particularName,
             quantity: rp.quantity,
             unitCost: rp.particular.inventory?.unitCost ? Number(rp.particular.inventory.unitCost) : 0,
           })),

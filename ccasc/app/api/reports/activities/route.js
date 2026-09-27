@@ -2,6 +2,10 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { resolvePeriodRange } from "@/lib/report-period";
 import { buildActivitiesReport, buildActivityRows } from "@/lib/report-activities";
+import {
+  resolveReportVenueIds,
+  venueIdsFromReportVenue,
+} from "@/lib/report-venue-scope";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -19,7 +23,12 @@ export const dynamic = "force-dynamic";
  *   month   0-11                 (used by m and w)
  *   week    1-5                  (used by w)
  *   venue   all | sports | cultural
- *   venueIds  comma separated ids — used to scope a panel (e.g. coordinator = 1)
+ *   venueIds  comma separated ids - narrows the report to those venues
+ *
+ * Venue scoping: a Program Coordinator only ever reports on their own venue
+ * (Cultural Center or Sports Complex). `resolveReportVenueIds` derives that
+ * from the signed session, so neither a hand-edited URL nor a stale panel can
+ * widen a coordinator's report.
  *
  * Receipt / OR numbers are intentionally never selected or returned.
  */
@@ -45,18 +54,16 @@ export async function GET(request) {
       reservationStatus: { notIn: EXCLUDED_STATUSES },
     };
 
-    if (venue === "sports") {
-      where.venue = { venue: { contains: "Sports" } };
-    } else if (venue === "cultural") {
-      where.venue = { venue: { contains: "Cultural" } };
-    }
-
-    const venueIds = (searchParams.get("venueIds") || "")
+    const requestedVenueIds = (searchParams.get("venueIds") || "")
       .split(",")
       .map((v) => parseInt(v, 10))
       .filter((v) => Number.isInteger(v));
-    if (venueIds.length > 0) {
-      where.venueId = { in: venueIds };
+    const venueIds = requestedVenueIds.length
+      ? requestedVenueIds
+      : venueIdsFromReportVenue(venue);
+    const scope = resolveReportVenueIds(guard.user.type, venueIds);
+    if (scope) {
+      where.venueId = { in: scope };
     }
 
     const reservations = await prisma.reservation.findMany({

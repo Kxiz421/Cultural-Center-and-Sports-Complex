@@ -21,11 +21,27 @@ import {
   MIN_ADVANCE_BOOKING_DAYS,
 } from "@/lib/reservation-advance-booking";
 import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
+import { RescheduleScopePanel } from "@/components/reschedule-scope-panel";
+import { currentReservationScope } from "@/lib/reschedule-scope";
+
+/** Comparable signature of a scope draft (facilities / particulars / time slot). */
+function scopeSignature(scope) {
+  const pairs = (list, key) =>
+    [...(list || [])]
+      .map((item) => [Number(item[key]), Number(item.quantity) || 0])
+      .sort((a, b) => a[0] - b[0]);
+  return JSON.stringify({
+    timeSlotId: scope?.timeSlotId ?? null,
+    facilities: pairs(scope?.facilities, "facilityId"),
+    particulars: pairs(scope?.particulars, "particularId"),
+  });
+}
 
 export default function ClientReschedulingPage() {
   const [reservations, setReservations] = React.useState([]);
   const [selectedReservation, setSelectedReservation] = React.useState("");
   const [dateDrafts, setDateDrafts] = React.useState({});
+  const [scopeDraft, setScopeDraft] = React.useState(null);
   const [reason, setReason] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
@@ -64,7 +80,8 @@ export default function ClientReschedulingPage() {
     return daysUntil >= 7;
   }, [selected]);
 
-  /** Reservations eligible for rescheduling (event date ≥7 days away, not cancelled). */
+  /** Reservations eligible for rescheduling: event date ≥7 days away, or still
+   *  editable for facilities / particulars / time slot changes. */
   const rescheduleEligible = React.useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -73,7 +90,10 @@ export default function ClientReschedulingPage() {
       if (!r.eventDate) return false;
       const ed = new Date(r.eventDate + "T00:00:00");
       const daysUntil = Math.ceil((ed - today) / (1000 * 60 * 60 * 24));
-      return daysUntil >= 7;
+      if (daysUntil >= 7) return true;
+      // A request that only manages facilities / particulars / the time slot has
+      // no advance-booking limit, so keep those visible in the picker.
+      return r.canManageScope === true;
     });
   }, [reservations]);
 
@@ -122,6 +142,7 @@ export default function ClientReschedulingPage() {
   React.useEffect(() => {
     if (!selected) {
       setDateDrafts({});
+      setScopeDraft(null);
       return;
     }
     const next = {};
@@ -132,6 +153,8 @@ export default function ClientReschedulingPage() {
       next[key] = entry.date;
     }
     setDateDrafts(next);
+    // Facilities / particulars / time slot start from what the reservation has.
+    setScopeDraft(currentReservationScope(selected));
   }, [selectedReservation, eventEntries]);
 
   function entryKey(entry) {
@@ -164,8 +187,16 @@ export default function ClientReschedulingPage() {
       });
     }
 
-    if (dateChanges.length === 0) {
-      toast.error("Change at least one event date before submitting");
+    const scopeChanged =
+      Boolean(selected) &&
+      Boolean(scopeDraft) &&
+      scopeSignature(scopeDraft) !==
+        scopeSignature(currentReservationScope(selected));
+
+    if (dateChanges.length === 0 && !scopeChanged) {
+      toast.error(
+        "Change at least one event date, facility, particular or the time slot before submitting"
+      );
       return;
     }
 
@@ -178,6 +209,13 @@ export default function ClientReschedulingPage() {
           reservationId: parseInt(String(selected.id).replace("RES-", ""), 10),
           reason: reason.trim(),
           dateChanges,
+          scopeChange: scopeChanged
+            ? {
+                timeSlotId: scopeDraft?.timeSlotId ?? null,
+                facilities: scopeDraft?.facilities || [],
+                particulars: scopeDraft?.particulars || [],
+              }
+            : undefined,
         }),
       });
 
@@ -201,6 +239,7 @@ export default function ClientReschedulingPage() {
       setSelectedReservation("");
       setReason("");
       setDateDrafts({});
+      setScopeDraft(null);
 
       const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
       if (clientId) {
@@ -300,7 +339,10 @@ export default function ClientReschedulingPage() {
                 >
                   <option value="">Select a reservation</option>
                   {rescheduleEligible.length === 0 && (
-                    <option disabled>No eligible events (must be at least 7 days away)</option>
+                    <option disabled>
+                      No eligible events (dates need 7+ days; facilities and
+                      particulars can still be changed)
+                    </option>
                   )}
                   {rescheduleEligible
                     .filter((r) => r.eventDate >= todayKey)
@@ -319,6 +361,14 @@ export default function ClientReschedulingPage() {
                   dateDrafts={dateDrafts}
                   onDateDraftChange={handleDateDraftChange}
                   entryKey={entryKey}
+                />
+              )}
+
+              {selected && scopeDraft && (
+                <RescheduleScopePanel
+                  reservation={selected}
+                  value={scopeDraft}
+                  onChange={setScopeDraft}
                 />
               )}
 
@@ -451,7 +501,10 @@ export default function ClientReschedulingPage() {
       <Card>
         <CardHeader>
           <CardTitle>Your Requests</CardTitle>
-          <CardDescription>Recent reschedule requests for your reservations.</CardDescription>
+          <CardDescription>
+            Recent requests for your reservations — event dates, facilities,
+            particulars and time slot.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {requests.length === 0 ? (
@@ -475,6 +528,31 @@ export default function ClientReschedulingPage() {
                     </p>
                   ))}
                 </div>
+                {req.scopeChange && (
+                  <div className="space-y-1">
+                    {req.scopeChange.timeSlotLabel && (
+                      <p className="text-xs text-muted-foreground">
+                        Time slot: {req.scopeChange.timeSlotLabel}
+                      </p>
+                    )}
+                    {req.scopeChange.facilities?.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Facilities:{" "}
+                        {req.scopeChange.facilities
+                          .map((f) => `${f.name} × ${f.quantity}`)
+                          .join(", ")}
+                      </p>
+                    )}
+                    {req.scopeChange.particulars?.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Particulars:{" "}
+                        {req.scopeChange.particulars
+                          .map((p) => `${p.name} × ${p.quantity}`)
+                          .join(", ")}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {req.reason && (
                   <p className="text-xs text-muted-foreground">Reason: {req.reason}</p>
                 )}

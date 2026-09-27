@@ -557,6 +557,10 @@ model RescheduleRequest {
   reason        String   @map("reason") @db.Text
   status        String   @default("Pending") @map("status") @db.VarChar(50)
   declineReason String?  @map("decline_reason") @db.Text
+  // Facilities / particulars / time slot the client asked to change while the
+  // reservation is still editable (JSON payload, see lib/reschedule-scope.js).
+  // Null when the request only moves event dates.
+  scopeChange   String?  @map("scope_change") @db.Text
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

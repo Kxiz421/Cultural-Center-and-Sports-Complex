@@ -67,6 +67,31 @@ function getStatusName(statusId) {
   return s ? s.name : "";
 }
 
+/** "₱1,200.00" — price of a particular (stored as Inventory.unitCost). */
+function formatPeso(amount) {
+  return `₱${(Number(amount) || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** Price input -> number for the API ("" means 0). */
+function parsePriceInput(value) {
+  const raw = String(value ?? "").replace(/,/g, "").trim();
+  if (!raw) return 0;
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+}
+
+/** Keeps a price input numeric with at most 2 decimal places (max 9,999,999.99). */
+function sanitizePriceInput(value) {
+  const cleaned = String(value ?? "").replace(/[^0-9.]/g, "");
+  const [whole = "", ...rest] = cleaned.split(".");
+  const integerPart = whole.slice(0, 7);
+  if (rest.length === 0) return integerPart;
+  return `${integerPart}.${rest.join("").slice(0, 2)}`;
+}
+
 export default function ParticularsPage() {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -77,6 +102,7 @@ export default function ParticularsPage() {
     particularName: "",
     description: "",
     quantityAvailable: "",
+    unitCost: "",
   });
   const [editTransactions, setEditTransactions] = React.useState([]);
   const [editTransactionsLoading, setEditTransactionsLoading] = React.useState(false);
@@ -90,6 +116,7 @@ export default function ParticularsPage() {
     particularName: "",
     description: "",
     quantityAvailable: "",
+    unitCost: "",
   });
   const [addConfirmOpen, setAddConfirmOpen] = React.useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = React.useState(false);
@@ -122,7 +149,12 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
-    setAddForm({ particularName: "", description: "", quantityAvailable: "" });
+    setAddForm({
+      particularName: "",
+      description: "",
+      quantityAvailable: "",
+      unitCost: "",
+    });
   };
 
   const openEditDialog = (item) => {
@@ -131,6 +163,7 @@ export default function ParticularsPage() {
       particularName: item.particularName,
       description: item.description || "",
       quantityAvailable: String(item.totalQuantity || ""),
+      unitCost: item.unitCost ? String(item.unitCost) : "",
     });
     setEditRestockQty("");
     setEditDamageQty("");
@@ -182,6 +215,7 @@ export default function ParticularsPage() {
           particularName: editForm.particularName.trim(),
           description: editForm.description.trim(),
           quantityAvailable: parseInt(editForm.quantityAvailable, 10) || 0,
+          unitCost: parsePriceInput(editForm.unitCost),
           performedBy,
           performedByName,
         }),
@@ -220,6 +254,7 @@ export default function ParticularsPage() {
           particularName: addForm.particularName.trim(),
           description: addForm.description.trim(),
           quantityAvailable: parseInt(addForm.quantityAvailable, 10) || 0,
+          unitCost: parsePriceInput(addForm.unitCost),
           performedBy,
           performedByName,
         }),
@@ -463,18 +498,36 @@ export default function ParticularsPage() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-qty">Quantity Available</Label>
-                <Input
-                  id="add-qty"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="e.g. 50"
-                  value={addForm.quantityAvailable}
-                  onChange={(e) =>
-                    setAddForm((f) => ({ ...f, quantityAvailable: e.target.value.replace(/\D/g, "").slice(0, 5) }))
-                  }
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="add-qty">Quantity Available</Label>
+                  <Input
+                    id="add-qty"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="e.g. 50"
+                    value={addForm.quantityAvailable}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, quantityAvailable: e.target.value.replace(/\D/g, "").slice(0, 5) }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add-price">Price per Unit (₱)</Label>
+                  <Input
+                    id="add-price"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 1200 or 1200.50"
+                    value={addForm.unitCost}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, unitCost: sanitizePriceInput(e.target.value) }))
+                    }
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Charged per unit on bookings.
+                  </p>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -535,6 +588,7 @@ export default function ParticularsPage() {
                 <TableHead>Item Name</TableHead>
                 <TableHead>Inventory Item</TableHead>
                 <TableHead className="text-right">Qty Available</TableHead>
+                <TableHead className="text-right">Price / Unit</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-28">Actions</TableHead>
               </TableRow>
@@ -542,13 +596,13 @@ export default function ParticularsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
                     {searchQuery ? "No particulars match your search" : "No particulars found. Add one to get started."}
                   </TableCell>
                 </TableRow>
@@ -578,6 +632,15 @@ export default function ParticularsPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
                         {item.totalQuantity}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {Number(item.unitCost) > 0 ? (
+                          formatPeso(item.unitCost)
+                        ) : (
+                          <span className="text-muted-foreground text-sm">
+                            Not priced
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -691,6 +754,31 @@ export default function ParticularsPage() {
               {editItem?.inventoryName && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Linked to Inventory: <span className="font-medium">{editItem.inventoryName}</span>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-price">Price per Unit (₱)</Label>
+              <Input
+                id="edit-price"
+                type="text"
+                inputMode="decimal"
+                placeholder="e.g. 1200 or 1200.50"
+                value={editForm.unitCost}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, unitCost: sanitizePriceInput(e.target.value) }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Amount charged per unit when this particular is booked
+                {editItem
+                  ? ` — currently ${formatPeso(editItem.unitCost)}.`
+                  : "."}
+              </p>
+              {/venue rental/i.test(editItem?.particularName || "") && (
+                <p className="text-xs text-amber-600">
+                  Venue Rental prices follow the Day/Night rate of the linked
+                  Cultural Center facility in Facilities management.
                 </p>
               )}
             </div>
@@ -860,6 +948,12 @@ export default function ParticularsPage() {
               <span className="text-muted-foreground">Quantity:</span>
               <span className="font-medium text-right">{addForm.quantityAvailable || 0}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Price per Unit:</span>
+              <span className="font-medium text-right">
+                {formatPeso(parsePriceInput(addForm.unitCost))}
+              </span>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
@@ -882,6 +976,28 @@ export default function ParticularsPage() {
               Are you sure you want to save the changes to &ldquo;{editItem?.particularName}&rdquo;?
             </DialogDescription>
           </DialogHeader>
+          {editItem && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-medium text-right">
+                  {editForm.particularName}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Quantity:</span>
+                <span className="font-medium text-right">
+                  {editForm.quantityAvailable || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Price per Unit:</span>
+                <span className="font-medium text-right">
+                  {formatPeso(parsePriceInput(editForm.unitCost))}
+                </span>
+              </div>
+            </div>
+          )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditConfirmOpen(false)}>Cancel</Button>
             <Button onClick={() => { setEditConfirmOpen(false); handleSaveItem(); }} disabled={saving}>
@@ -924,6 +1040,10 @@ export default function ParticularsPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Quantity Available:</span>
                 <span className="font-medium">{detailsItem.totalQuantity}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Price per Unit:</span>
+                <span className="font-medium">{formatPeso(detailsItem.unitCost)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status:</span>

@@ -14,6 +14,30 @@ function getStatusName(id) {
   return STATUS_NAMES[id] || `Status ${id}`;
 }
 
+/**
+ * Price of a particular = `Inventory.unitCost` of the linked inventory row.
+ *
+ * @returns {number|null} the parsed amount, or null when the value is unusable
+ *   (negative / not a number). Missing values mean "0" so existing callers that
+ *   never send a price keep working.
+ */
+function parseUnitCost(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return 0;
+  }
+  const amount = Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  return Math.round(amount * 100) / 100;
+}
+
+/** "₱1,200.00" for audit-log details. */
+function formatPeso(amount) {
+  return `₱${(Number(amount) || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export async function GET(request) {
   const guard = await requireApiAuth();
   if (guard.response) return guard.response;
@@ -70,11 +94,27 @@ export async function POST(request) {
   const acting = actingAs(guard.user);
 
   try {
-    const { particularName, description, category, quantityAvailable } = await request.json();
+    const { particularName, description, category, quantityAvailable, unitCost } = await request.json();
 
     if (!particularName || !particularName.trim()) {
       return NextResponse.json(
         { error: "Particular name is required" },
+        { status: 400 }
+      );
+    }
+
+    // Price lives on the linked Inventory row (`Inventory.unitCost`), which is
+    // what reservation pricing reads; 0 is allowed (free / not yet priced).
+    // An omitted price is left untouched so re-linking an existing inventory
+    // item never silently clears a price that is already set.
+    const priceProvided =
+      unitCost !== undefined &&
+      unitCost !== null &&
+      String(unitCost).trim() !== "";
+    const price = parseUnitCost(unitCost);
+    if (price === null) {
+      return NextResponse.json(
+        { error: "Price must be a valid amount of 0 or more" },
         { status: 400 }
       );
     }
@@ -88,9 +128,11 @@ export async function POST(request) {
       },
     });
 
-    // If quantity provided, create or update the linked inventory item
+    // An inventory row is created/linked when a quantity OR a price is given,
+    // so a particular can be priced before it has stock.
     const qty = parseInt(quantityAvailable, 10);
-    if (qty > 0) {
+    const hasQty = !Number.isNaN(qty) && qty > 0;
+    if (hasQty || (priceProvided && price > 0)) {
       // Check if there's already an inventory item with matching name
       let inventory = await prisma.inventory.findFirst({
         where: { itemName: particularName.trim() },
@@ -102,18 +144,21 @@ export async function POST(request) {
           where: { particularId: created.particularId },
           data: { itemId: inventory.itemId },
         });
-        // Update quantity
+        // Update quantity and/or price
         await prisma.inventory.update({
           where: { itemId: inventory.itemId },
-          data: { quantityAvailable: qty },
+          data: {
+            ...(hasQty ? { quantityAvailable: qty } : {}),
+            ...(priceProvided ? { unitCost: price } : {}),
+          },
         });
       } else {
         // Create new inventory item
         inventory = await prisma.inventory.create({
           data: {
             itemName: particularName.trim(),
-            unitCost: 0,
-            quantityAvailable: qty,
+            unitCost: price,
+            quantityAvailable: hasQty ? qty : 0,
             venueId: 1,
             statusId: 1,
           },
@@ -134,7 +179,7 @@ export async function POST(request) {
         targetName: created.particularName,
         performedById: acting.performedBy,
         performedByName: acting.performedByName,
-        details: `Particular created: name="${created.particularName}", category="${created.category}", quantity=${qty || 0}`,
+        details: `Particular created: name="${created.particularName}", category="${created.category}", quantity=${hasQty ? qty : 0}, price=${priceProvided ? formatPeso(price) : "not set"}`,
       },
     });
 
@@ -144,7 +189,8 @@ export async function POST(request) {
       particularName: created.particularName,
       description: created.description || "",
       category: created.category || "",
-      totalQuantity: qty || 0,
+      totalQuantity: hasQty ? qty : 0,
+      unitCost: priceProvided ? price : 0,
       inventoryName: particularName.trim(),
       statusId: created.statusId,
       statusName: getStatusName(created.statusId),
@@ -164,11 +210,21 @@ export async function PUT(request) {
   const acting = actingAs(guard.user);
 
   try {
-    const { particularId, particularName, description, category, statusId, quantityAvailable } = await request.json();
+    const { particularId, particularName, description, category, statusId, quantityAvailable, unitCost } = await request.json();
 
     if (!particularId) {
       return NextResponse.json(
         { error: "Particular ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // `unitCost === undefined` means "leave the price alone" (e.g. the archive /
+    // restore toggle and the restock / damage calls).
+    const price = unitCost === undefined ? null : parseUnitCost(unitCost);
+    if (price === null && unitCost !== undefined) {
+      return NextResponse.json(
+        { error: "Price must be a valid amount of 0 or more" },
         { status: 400 }
       );
     }
@@ -178,7 +234,12 @@ export async function PUT(request) {
       where: { particularId: parseInt(particularId, 10) },
       include: {
         inventory: {
-          select: { itemId: true, itemName: true, quantityAvailable: true },
+          select: {
+            itemId: true,
+            itemName: true,
+            quantityAvailable: true,
+            unitCost: true,
+          },
         },
       },
     });
@@ -201,49 +262,63 @@ export async function PUT(request) {
       data: updateData,
       include: {
         inventory: {
-          select: { itemId: true, itemName: true, quantityAvailable: true },
+          select: {
+            itemId: true,
+            itemName: true,
+            quantityAvailable: true,
+            unitCost: true,
+          },
         },
       },
     });
 
-    // Update quantity in Inventory if provided
+    // Quantity and price both live on the linked Inventory row.
     const qty = parseInt(quantityAvailable, 10);
-    if (!isNaN(qty) && qty >= 0) {
-      if (updated.itemId) {
-        // Update existing linked inventory
+    const hasQty = !isNaN(qty) && qty >= 0;
+
+    if (updated.itemId) {
+      // Update the already linked inventory
+      const inventoryData = {};
+      if (hasQty) inventoryData.quantityAvailable = qty;
+      if (price !== null) inventoryData.unitCost = price;
+      if (Object.keys(inventoryData).length > 0) {
         await prisma.inventory.update({
           where: { itemId: updated.itemId },
-          data: { quantityAvailable: qty },
+          data: inventoryData,
         });
-      } else if (qty > 0) {
-        // No linked inventory - create one
-        let inventory = await prisma.inventory.findFirst({
-          where: { itemName: updated.particularName },
-        });
-        if (!inventory) {
-          inventory = await prisma.inventory.create({
-            data: {
-              itemName: updated.particularName,
-              unitCost: 0,
-              quantityAvailable: qty,
-              venueId: 1,
-              statusId: 1,
-            },
-          });
-        } else {
-          await prisma.inventory.update({
-            where: { itemId: inventory.itemId },
-            data: { quantityAvailable: qty },
-          });
-        }
-        // Link particular to inventory
-        await prisma.particular.update({
-          where: { particularId: updated.particularId },
-          data: { itemId: inventory.itemId },
-        });
-        updated.itemId = inventory.itemId;
-        updated.inventory = inventory;
+        updated.inventory = { ...updated.inventory, ...inventoryData };
       }
+    } else if ((hasQty && qty > 0) || price !== null) {
+      // No linked inventory yet - create (or reuse) one so the price is stored
+      let inventory = await prisma.inventory.findFirst({
+        where: { itemName: updated.particularName },
+      });
+      if (!inventory) {
+        inventory = await prisma.inventory.create({
+          data: {
+            itemName: updated.particularName,
+            unitCost: price ?? 0,
+            quantityAvailable: hasQty ? qty : 0,
+            venueId: 1,
+            statusId: 1,
+          },
+        });
+      } else {
+        await prisma.inventory.update({
+          where: { itemId: inventory.itemId },
+          data: {
+            ...(hasQty ? { quantityAvailable: qty } : {}),
+            ...(price !== null ? { unitCost: price } : {}),
+          },
+        });
+      }
+      // Link particular to inventory
+      await prisma.particular.update({
+        where: { particularId: updated.particularId },
+        data: { itemId: inventory.itemId },
+      });
+      updated.itemId = inventory.itemId;
+      updated.inventory = inventory;
     }
 
     // Build before/after details
@@ -262,6 +337,11 @@ export async function PUT(request) {
     }
     if (!isNaN(qty) && qty >= 0 && (existing.inventory?.quantityAvailable ?? 0) !== qty) {
       changes.push(`quantity: ${existing.inventory?.quantityAvailable ?? 0} → ${qty}`);
+    }
+    if (price !== null && Number(existing.inventory?.unitCost ?? 0) !== price) {
+      changes.push(
+        `price: ${formatPeso(existing.inventory?.unitCost ?? 0)} → ${formatPeso(price)}`
+      );
     }
 
     if (changes.length > 0) {
@@ -283,7 +363,8 @@ export async function PUT(request) {
       particularName: updated.particularName,
       description: updated.description || "",
       category: updated.category || "",
-      totalQuantity: updated.inventory?.quantityAvailable ?? qty ?? 0,
+      totalQuantity: updated.inventory?.quantityAvailable ?? (hasQty ? qty : 0),
+      unitCost: Number(updated.inventory?.unitCost ?? 0),
       inventoryName: updated.inventory?.itemName || "",
       statusId: updated.statusId,
       statusName: getStatusName(updated.statusId),

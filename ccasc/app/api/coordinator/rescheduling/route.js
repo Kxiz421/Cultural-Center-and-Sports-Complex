@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import {
-  applyRescheduleDateChanges,
+  applyRescheduleRequest,
   formatRescheduleDateChanges,
 } from "@/lib/reschedule-utils";
+import {
+  describeScopeChange,
+  formatScopeChange,
+  scopeChangeFromJson,
+} from "@/lib/reschedule-scope";
 import { createClientNotification } from "@/lib/coordinator-notifications";
+import { formatPhp } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth } from "@/lib/api-auth";
@@ -46,11 +52,66 @@ export async function GET(request) {
             },
             timeSlot: { select: { startTime: true, endTime: true } },
             additionalDates: { select: { eventDate: true } },
+            schedules: {
+              select: {
+                facilityId: true,
+                facility: { select: { facilityName: true } },
+              },
+            },
+            reservedParticulars: {
+              select: {
+                quantity: true,
+                particular: {
+                  select: { particularId: true, particularName: true },
+                },
+              },
+            },
           },
         },
       },
       orderBy: { createdAt: "desc" },
     });
+
+    // Names for every facility / particular a request wants to change.
+    const scopeList = requests
+      .map((req) => scopeChangeFromJson(req.scopeChange))
+      .filter(Boolean);
+    const scopeFacilityIds = [
+      ...new Set(
+        scopeList.flatMap((s) => (s.facilities || []).map((f) => Number(f.facilityId)))
+      ),
+    ];
+    const scopeParticularIds = [
+      ...new Set(
+        scopeList.flatMap((s) =>
+          (s.particulars || []).map((p) => Number(p.particularId))
+        )
+      ),
+    ];
+    const [scopeFacilities, scopeParticulars] = await Promise.all([
+      scopeFacilityIds.length
+        ? prisma.facility.findMany({
+            where: { facilityId: { in: scopeFacilityIds } },
+            select: { facilityId: true, facilityName: true },
+          })
+        : Promise.resolve([]),
+      scopeParticularIds.length
+        ? prisma.particular.findMany({
+            where: { particularId: { in: scopeParticularIds } },
+            select: { particularId: true, particularName: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const scopeContext = {
+      facilities: scopeFacilities.map((f) => ({
+        facilityId: f.facilityId,
+        name: f.facilityName,
+      })),
+      particulars: scopeParticulars.map((p) => ({
+        particularId: p.particularId,
+        name: p.particularName,
+      })),
+    };
 
     const formatted = requests.map((req) => {
       const dateChanges = formatRescheduleDateChanges(
@@ -61,6 +122,7 @@ export async function GET(request) {
         formatDbDate(req.reservation.eventDate),
         ...req.reservation.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
       ];
+      const scope = scopeChangeFromJson(req.scopeChange);
 
       return {
         id: req.rescheduleId,
@@ -73,10 +135,24 @@ export async function GET(request) {
         currentDates,
         requestedDate: formatDbDate(req.requestedDate),
         dateChanges,
+        timeSlotId: req.reservation.timeSlotId,
+        timeSlot: `${req.reservation.timeSlot.startTime} - ${req.reservation.timeSlot.endTime}`,
+        totalAmount: Number(req.reservation.totalAmount || 0),
+        currentFacilities: req.reservation.schedules.map((s) => ({
+          facilityId: s.facilityId,
+          name: s.facility?.facilityName || `Facility ${s.facilityId}`,
+          quantity: 1,
+        })),
+        currentParticulars: req.reservation.reservedParticulars.map((rp) => ({
+          particularId: rp.particular.particularId,
+          name: rp.particular.particularName,
+          quantity: rp.quantity,
+        })),
+        scopeChange: scope ? formatScopeChange(scope, scopeContext) : null,
+        scopeChangeText: scope ? describeScopeChange(scope, scopeContext) : null,
         reason: req.reason,
         status: req.status,
         declineReason: req.declineReason || null,
-        timeSlot: `${req.reservation.timeSlot.startTime} - ${req.reservation.timeSlot.endTime}`,
       };
     });
 
@@ -110,7 +186,7 @@ export async function PATCH(request) {
     }
 
     if (action === "approve") {
-      const result = await applyRescheduleDateChanges(id);
+      const result = await applyRescheduleRequest(id);
       if (result.error) {
         return NextResponse.json(
           {
@@ -126,13 +202,31 @@ export async function PATCH(request) {
         .map((c) => `${c.originalDate} → ${c.requestedDate}`)
         .join("; ");
 
+      const messageParts = [];
+      if (pairs) messageParts.push(`Date change(s): ${pairs}.`);
+      if (result.scopeChange?.description) {
+        messageParts.push(
+          `Updated ${result.scopeChange.description}.`
+        );
+        if (result.scopeChange.total > 0) {
+          messageParts.push(
+            `New reservation amount: ${formatPhp(result.scopeChange.total)}.`
+          );
+        }
+      }
+
       await createClientNotification({
         clientId: rescheduleReq.reservation.client.clientId,
         type: "reschedule",
-        message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. Date change(s): ${pairs}.`,
+        message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. ${messageParts.join(" ")}`.trim(),
       });
 
-      return NextResponse.json({ success: true, message: "Reschedule approved" });
+      return NextResponse.json({
+        success: true,
+        message: "Reschedule approved",
+        dateChanges: result.dateChanges,
+        scopeChange: result.scopeChange,
+      });
     }
 
     if (action === "decline") {

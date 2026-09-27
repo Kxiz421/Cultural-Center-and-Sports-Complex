@@ -17,12 +17,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart, Download, FileSpreadsheet } from "lucide-react";
+import {
+  FileBarChart,
+  Download,
+  FileSpreadsheet,
+  Coins,
+} from "lucide-react";
 import {
   REPORT_MONTHS,
   REPORT_PERIODS,
+  REPORT_TYPES,
   REPORT_VENUES,
   REPORT_WEEKS,
+  REVENUE_GROUPS,
   reportYears,
   resolvePeriodRange,
 } from "@/lib/report-period";
@@ -34,6 +41,13 @@ import {
  * render `ReportPageHeader` + `ReportControls`, so the generation UI is the
  * same everywhere and Monthly / Weekly / Yearly always lives in the same
  * dropdown in the same place.
+ *
+ * `ReportControls` also carries the Report Type toggle:
+ *
+ *   List of Activities -> the existing period report
+ *   Revenue            -> the same period, broken down per particular / venue /
+ *                         package, optionally narrowed to one particular or
+ *                         package ("Group By" + the entity selector)
  */
 
 function Field({ label, children, className = "" }) {
@@ -68,6 +82,15 @@ export function ReportControls({
   onWeekChange,
   venue,
   onVenueChange,
+  reportType,
+  onReportTypeChange,
+  revenueGroup,
+  onRevenueGroupChange,
+  revenueGroups,
+  specific,
+  onSpecificChange,
+  specificOptions = [],
+  optionsLoading = false,
   onGenerate,
   loading = false,
   years,
@@ -75,14 +98,25 @@ export function ReportControls({
 }) {
   const yearOptions = years || reportYears(5);
   const showMonth = period === "m" || period === "w";
+  const isRevenue = reportType === "revenue";
   const preview = resolvePeriodRange({ period, year, month, week });
+  // A venue scope may restrict the groupings (Sports Complex is per facility).
+  const allowedGroups = revenueGroups?.length
+    ? REVENUE_GROUPS.filter((group) => revenueGroups.includes(group.value))
+    : REVENUE_GROUPS;
+  const specificLabel =
+    revenueGroup === "facility"
+      ? "Facility"
+      : revenueGroup === "package"
+        ? "Package"
+        : "Particular";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Report Configuration</CardTitle>
         <CardDescription>
-          Pick a report period, then generate.{" "}
+          Pick a report type and period, then generate.{" "}
           <span className="text-foreground font-medium">
             {preview.rangeLabel}
           </span>
@@ -90,6 +124,35 @@ export function ReportControls({
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap items-end gap-4">
+          {onReportTypeChange && (
+            <Field label="Report Type" className="w-full sm:w-auto">
+              <div
+                role="group"
+                aria-label="Report type"
+                className="flex flex-wrap gap-2"
+              >
+                {REPORT_TYPES.map((type) => {
+                  const active = (reportType || "activities") === type.value;
+                  const Icon = type.value === "revenue" ? Coins : FileBarChart;
+                  return (
+                    <Button
+                      key={type.value}
+                      type="button"
+                      size="lg"
+                      variant={active ? "default" : "outline"}
+                      aria-pressed={active}
+                      onClick={() => onReportTypeChange(type.value)}
+                      className="gap-2"
+                    >
+                      <Icon className="size-4" />
+                      {type.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
+
           <Field label="Report Period" className="w-[180px]">
             <Select value={period} onValueChange={onPeriodChange}>
               <SelectTrigger className="w-full">
@@ -170,6 +233,51 @@ export function ReportControls({
               </Select>
             </Field>
           )}
+
+          {isRevenue && (
+            <Field label="Group By" className="w-[180px]">
+              <Select value={revenueGroup} onValueChange={onRevenueGroupChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Per Particular" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allowedGroups.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>
+                      {g.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+
+          {isRevenue &&
+            revenueGroup !== "venue" &&
+            onSpecificChange && (
+              <Field
+                label={`Specific ${specificLabel}`}
+                className="w-[240px]"
+              >
+                <Select value={specific} onValueChange={onSpecificChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={`All ${specificLabel}s`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{`All ${specificLabel}s`}</SelectItem>
+                    {optionsLoading && (
+                      <SelectItem value="__loading" disabled>
+                        Loading…
+                      </SelectItem>
+                    )}
+                    {specificOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
 
           {extra}
 

@@ -48,6 +48,35 @@ export const REPORT_VENUES = [
   { value: "cultural", label: "Cultural Center" },
 ];
 
+/**
+ * Report types offered by every "Report Generation" screen.
+ *
+ *   activities -> the printed LIST OF SCGCC ACTIVITIES document
+ *   revenue    -> revenue per particular / venue / package
+ */
+export const REPORT_TYPES = [
+  { value: "activities", label: "List of Activities" },
+  { value: "revenue", label: "Revenue" },
+];
+
+/** Revenue report groupings (the "check the revenue per ..." selector). */
+export const REVENUE_GROUPS = [
+  { value: "particular", label: "Per Particular" },
+  { value: "venue", label: "Per Venue" },
+  { value: "package", label: "Per Package" },
+  { value: "facility", label: "Per Facility" },
+];
+
+/** Label of the entity a revenue grouping is reported per. */
+export function revenueGroupLabel(group) {
+  return REVENUE_GROUPS.find((g) => g.value === group)?.label || "Per Particular";
+}
+
+export function reportTypeLabel(type) {
+  return REPORT_TYPES.find((t) => t.value === type)?.label || "List of Activities";
+}
+
+
 /** Years offered in the Year dropdown — current year first. */
 export function reportYears(count = 5) {
   const current = new Date().getFullYear();

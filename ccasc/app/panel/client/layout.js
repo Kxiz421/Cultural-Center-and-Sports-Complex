@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { href: "/panel/client/rescheduling", label: "Rescheduling", icon: CalendarRange },
   { href: "/panel/client/documents", label: "Documents", icon: FileText },
   { href: "/panel/client/notifications", label: "Notifications", icon: Bell, showBadge: true },
-  { href: "/panel/client/history", label: "Booking History", icon: History },
+  { href: "/panel/client/history", label: "Booking & Reservation History", icon: History },
 ];
 
 export default function ClientLayout({ children }) {

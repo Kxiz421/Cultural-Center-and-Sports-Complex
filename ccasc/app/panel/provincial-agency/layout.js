@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: "/panel/provincial-agency/notifications", label: "Notifications", icon: Bell, showBadge: true },
   { href: "/panel/provincial-agency/documents", label: "Documents", icon: FileText },
   { href: "/panel/provincial-agency/rescheduling", label: "Rescheduling", icon: CalendarRange },
-  { href: "/panel/provincial-agency/history", label: "Booking History", icon: History },
+  { href: "/panel/provincial-agency/history", label: "Booking & Reservation History", icon: History },
 ];
 
 export default function ProvincialAgencyLayout({ children }) {

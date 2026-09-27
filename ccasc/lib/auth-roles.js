@@ -152,6 +152,9 @@ export const API_RULES = [
       USER_TYPE.ADMIN,
     ],
   },
+  // Report generation (LIST OF SCGCC ACTIVITIES and the Revenue report).
+  // Every report route re-uses the same staff types; a Program Coordinator's
+  // venue scope is enforced inside the routes by lib/report-venue-scope.js.
   { prefix: "/api/reports/", types: STAFF_TYPES },
 ];
 

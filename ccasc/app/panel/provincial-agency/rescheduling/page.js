@@ -21,6 +21,21 @@ import {
   MIN_ADVANCE_BOOKING_DAYS,
 } from "@/lib/reservation-advance-booking";
 import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
+import { RescheduleScopePanel } from "@/components/reschedule-scope-panel";
+import { currentReservationScope } from "@/lib/reschedule-scope";
+
+/** Comparable signature of a scope draft (facilities / particulars / time slot). */
+function scopeSignature(scope) {
+  const pairs = (list, key) =>
+    [...(list || [])]
+      .map((item) => [Number(item[key]), Number(item.quantity) || 0])
+      .sort((a, b) => a[0] - b[0]);
+  return JSON.stringify({
+    timeSlotId: scope?.timeSlotId ?? null,
+    facilities: pairs(scope?.facilities, "facilityId"),
+    particulars: pairs(scope?.particulars, "particularId"),
+  });
+}
 
 export default function ProvincialReschedulingPage() {
   const [reservations, setReservations] = React.useState([]);
@@ -28,6 +43,7 @@ export default function ProvincialReschedulingPage() {
   const [loading, setLoading] = React.useState(true);
   const [selectedReservation, setSelectedReservation] = React.useState("");
   const [dateDrafts, setDateDrafts] = React.useState({});
+  const [scopeDraft, setScopeDraft] = React.useState(null);
   const [reason, setReason] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const minDate = getMinEventDateKey();
@@ -143,6 +159,11 @@ export default function ProvincialReschedulingPage() {
     setDateDrafts((prev) => ({ ...prev, [key]: dateStr }));
   };
 
+  // Facilities / particulars / time slot start from what the reservation has.
+  React.useEffect(() => {
+    setScopeDraft(selected ? currentReservationScope(selected) : null);
+  }, [selected]);
+
   async function handleSubmitRequest(e) {
     e.preventDefault();
     if (!selected || !reason.trim()) {
@@ -163,8 +184,16 @@ export default function ProvincialReschedulingPage() {
       });
     }
 
-    if (dateChanges.length === 0) {
-      toast.error("Change at least one event date before submitting");
+    const scopeChanged =
+      Boolean(selected) &&
+      Boolean(scopeDraft) &&
+      scopeSignature(scopeDraft) !==
+        scopeSignature(currentReservationScope(selected));
+
+    if (dateChanges.length === 0 && !scopeChanged) {
+      toast.error(
+        "Change at least one event date, facility, particular or the time slot before submitting"
+      );
       return;
     }
 
@@ -177,6 +206,13 @@ export default function ProvincialReschedulingPage() {
           reservationId: parseInt(String(selected.id).replace("RES-", ""), 10),
           reason: reason.trim(),
           dateChanges,
+          scopeChange: scopeChanged
+            ? {
+                timeSlotId: scopeDraft?.timeSlotId ?? null,
+                facilities: scopeDraft?.facilities || [],
+                particulars: scopeDraft?.particulars || [],
+              }
+            : undefined,
         }),
       });
 
@@ -300,6 +336,14 @@ export default function ProvincialReschedulingPage() {
                   dateDrafts={dateDrafts}
                   onDateDraftChange={handleDateDraftChange}
                   entryKey={entryKey}
+                />
+              )}
+
+              {selected && scopeDraft && (
+                <RescheduleScopePanel
+                  reservation={selected}
+                  value={scopeDraft}
+                  onChange={setScopeDraft}
                 />
               )}
 
@@ -456,6 +500,31 @@ export default function ProvincialReschedulingPage() {
                         {c.isPrimary ? " (primary)" : ""}
                       </p>
                     ))}
+                    {req.scopeChange && (
+                      <div className="space-y-0.5">
+                        {req.scopeChange.timeSlotLabel && (
+                          <p className="text-xs text-muted-foreground">
+                            Time slot: {req.scopeChange.timeSlotLabel}
+                          </p>
+                        )}
+                        {req.scopeChange.facilities?.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Facilities:{" "}
+                            {req.scopeChange.facilities
+                              .map((f) => `${f.name} × ${f.quantity}`)
+                              .join(", ")}
+                          </p>
+                        )}
+                        {req.scopeChange.particulars?.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Particulars:{" "}
+                            {req.scopeChange.particulars
+                              .map((p) => `${p.name} × ${p.quantity}`)
+                              .join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {req.reason && (
                       <p className="text-xs text-muted-foreground">Reason: {req.reason}</p>
                     )}

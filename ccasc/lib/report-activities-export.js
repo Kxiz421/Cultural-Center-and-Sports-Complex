@@ -1,3 +1,5 @@
+import { esc, money } from "@/lib/csv";
+
 /**
  * CSV export for the LIST OF SCGCC ACTIVITIES report.
  *
@@ -5,17 +7,6 @@
  * summary block) and — like every other generated report — omits receipt
  * (OR) numbers entirely.
  */
-
-/** Quotes a CSV field only when it contains a comma, quote or newline. */
-function esc(value) {
-  const text = String(value ?? "");
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-/** Bare 2-decimal figure — avoids thousands separators breaking CSV columns. */
-function money(value) {
-  return (Number(value) || 0).toFixed(2);
-}
 
 export function buildActivitiesCsv(report) {
   if (!report) return "";
