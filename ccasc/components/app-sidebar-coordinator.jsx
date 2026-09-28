@@ -8,6 +8,7 @@ import {
   FileBarChart,
   Bell,
   Calendar,
+  Package,
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,6 +61,11 @@ const navMain = [
     url: "/panel/program-coordinator/reports",
     icon: FileBarChart,
   },
+  {
+    title: "Particulars Management",
+    url: "/panel/program-coordinator/particulars",
+    icon: Package,
+  },
 ];
 
 export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props }) {
@@ -80,6 +86,11 @@ export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props 
     }
     // Hide Reservations for Cultural Center
     if (item.url === "/panel/program-coordinator/reservations") {
+      return venueType === "Sports Complex" ? item : null;
+    }
+    // The particulars stock module (restock / report damage / generate report)
+    // is only offered to the Sports Complex coordinator.
+    if (item.url === "/panel/program-coordinator/particulars") {
       return venueType === "Sports Complex" ? item : null;
     }
     return item;

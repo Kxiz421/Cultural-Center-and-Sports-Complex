@@ -14,6 +14,8 @@ const TITLES = {
   "/panel/program-coordinator/rescheduling": "Rescheduling",
   "/panel/program-coordinator/notifications": "Notifications",
   "/panel/program-coordinator/reports": "Report Generation",
+  "/panel/program-coordinator/particulars": "Particulars Management",
+  "/panel/program-coordinator/particulars/reports": "Particulars Report",
   "/panel/program-coordinator/reservations": "Reservations",
 };
 

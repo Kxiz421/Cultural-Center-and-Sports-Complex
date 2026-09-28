@@ -156,6 +156,11 @@ export const API_RULES = [
   // Every report route re-uses the same staff types; a Program Coordinator's
   // venue scope is enforced inside the routes by lib/report-venue-scope.js.
   { prefix: "/api/reports/", types: STAFF_TYPES },
+  // Particulars stock report (restocking / damage movements) generated from the
+  // particulars modules. Staff only - the movement log names the staff members
+  // who recorded each entry. More specific than `/api/particulars`, which has no
+  // rule of its own.
+  { prefix: "/api/particulars/reports", types: STAFF_TYPES },
 ];
 
 /**

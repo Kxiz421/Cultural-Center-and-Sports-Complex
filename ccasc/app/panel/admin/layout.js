@@ -14,6 +14,7 @@ const TITLES = {
   "/panel/admin/calendar": "Combined Calendar",
   "/panel/admin/bookings": "Bookings",
   "/panel/admin/particulars": "Particulars Management",
+  "/panel/admin/particulars/reports": "Particulars Report",
   "/panel/admin/packages": "Packages Management",
   "/panel/admin/amenities": "Amenities Overview",
   "/panel/admin/announcements": "Announcements",

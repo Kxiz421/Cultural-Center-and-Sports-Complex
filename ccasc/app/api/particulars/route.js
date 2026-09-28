@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
+import { STAFF_TYPES } from "@/lib/auth-roles";
 const STATUS_NAMES = {
   1: "Available",
   2: "Unavailable",
@@ -379,7 +380,11 @@ export async function PUT(request) {
 }
 
 export async function PATCH(request) {
-  const guard = await requireApiAuth();
+  // Restocking / reporting damage moves stock and writes an audit entry, and the
+  // coordinator particulars module calls this route too, so it stays staff-only.
+  // The movement is always attributed to the signed-in user (never to a
+  // caller-supplied name).
+  const guard = await requireApiAuth(STAFF_TYPES);
   if (guard.response) return guard.response;
   const acting = actingAs(guard.user);
 

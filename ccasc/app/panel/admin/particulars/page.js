@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -53,6 +54,7 @@ import {
   ShieldCheck,
   PackageX,
   Shield,
+  FileBarChart,
 } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -454,6 +456,12 @@ export default function ParticularsPage() {
             Manage rentable equipment and amenities — add, edit, archive, or remove particulars.
           </p>
         </div>
+        <Button asChild variant="outline" className="md:ml-auto">
+          <Link href="/panel/admin/particulars/reports">
+            <FileBarChart className="mr-2 size-4" />
+            Generate Report
+          </Link>
+        </Button>
         <Dialog
           open={addOpen}
           onOpenChange={(open) => {
