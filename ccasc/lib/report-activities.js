@@ -93,7 +93,7 @@ export function buildActivityRows(reservation) {
       chargeLabel: isProvincial ? CHARGE_LABELS[CHARGE_PGSC] : CHARGE_LABELS[CHARGE_PRIVATE],
       venue: reservation.venue?.venue || "",
       clientName: [client.firstName, client.lastName].filter(Boolean).join(" "),
-      organization: client.clientOrg?.organizationName || client.otherOrganization || "",
+      organization: client.clientOrg?.organizationName || "",
     },
   ];
 
@@ -112,7 +112,7 @@ export function buildActivityRows(reservation) {
       chargeLabel: CHARGE_LABELS[CHARGE_PGO],
       venue: reservation.venue?.venue || "",
       clientName: [client.firstName, client.lastName].filter(Boolean).join(" "),
-      organization: client.clientOrg?.organizationName || client.otherOrganization || "",
+      organization: client.clientOrg?.organizationName || "",
     });
   }
 

@@ -95,7 +95,6 @@ export async function POST(request) {
     // Handle organization: a typed custom name gets its own org row (dedupe
     // case-insensitively); no shared generic "Other" bucket is created.
     let orgId;
-    let otherOrgValue = null;
     if (organizationId && organizationId !== "other") {
       orgId = parseInt(organizationId, 10);
     } else {
@@ -106,16 +105,18 @@ export async function POST(request) {
           { status: 400 }
         );
       }
+      // MySQL's utf8mb4_unicode_ci collation already matches case-insensitively,
+      // so a plain `equals` dedupes "acme" / "ACME" (Prisma's `mode` argument is
+      // not supported by the MySQL connector).
       let existingOrg = await prisma.clientOrganization.findFirst({
-        where: { organizationName: { equals: typedName, mode: "insensitive" } },
+        where: { organizationName: { equals: typedName } },
       });
       if (!existingOrg) {
         existingOrg = await prisma.clientOrganization.create({
-          data: { organizationName: typedName },
+          data: { organizationName: typedName, isCustom: true },
         });
       }
       orgId = existingOrg.clientOrgId;
-      otherOrgValue = existingOrg.organizationName;
     }
 
     // Hash password
@@ -136,7 +137,6 @@ export async function POST(request) {
         verificationStatus: "Pending",
         clientRoleId: "PUB",
         clientOrgId: orgId,
-        otherOrganization: otherOrgValue,
       },
     });
 

@@ -77,7 +77,6 @@ export async function GET(request) {
             firstName: true,
             lastName: true,
             clientRoleId: true,
-            otherOrganization: true,
             clientRole: { select: { roleName: true } },
             clientOrg: { select: { organizationName: true } },
           },

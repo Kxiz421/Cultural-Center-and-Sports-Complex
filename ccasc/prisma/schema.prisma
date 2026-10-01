@@ -88,7 +88,6 @@ model Client {
   otpExpiration      DateTime? @map("otp_expiration")
   clientRoleId       String  @map("client_role_id") @db.VarChar(10)
   clientOrgId        Int     @map("client_org_id")
-  otherOrganization  String? @map("other_organization") @db.VarChar(200)
   createdAt          DateTime @default(now()) @map("created_at")
 
   clientRole ClientRole         @relation(fields: [clientRoleId], references: [clientRoleId])
@@ -112,6 +111,10 @@ model ClientRole {
 model ClientOrganization {
   clientOrgId      Int    @id @default(autoincrement()) @map("client_org_id")
   organizationName String @map("organization_name") @db.VarChar(200)
+  // Organizations typed through the registration "Other" option. They are kept
+  // (so the client keeps their org) but hidden from the registration dropdown so
+  // the curated list does not grow one entry per custom name.
+  isCustom         Boolean @default(false) @map("is_custom")
 
   clients Client[]
 

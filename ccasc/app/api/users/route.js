@@ -65,13 +65,7 @@ export async function GET() {
         email: c.email,
         contact: c.contactNumber,
         role: c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName,
-        // When a client registered via "Other", the org row is literally
-        // "Other" — show the custom name they typed instead.
-        organization:
-          c.clientOrg?.organizationName === "Other" && c.otherOrganization
-            ? c.otherOrganization
-            : c.clientOrg?.organizationName,
-        otherOrganization: c.otherOrganization ?? null,
+        organization: c.clientOrg?.organizationName,
         status: c.accountStatus,
         dbId: c.clientId,
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
@@ -355,6 +349,39 @@ export async function PUT(request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
+    // A changed email must stay unique across both account tables so no two
+    // accounts can ever share an address (the create route enforces this too).
+    // The user's own current email is allowed.
+    const trimmedEmail = email === undefined ? undefined : String(email).trim();
+    if (trimmedEmail) {
+      const [staffWithEmail, clientWithEmail] = await Promise.all([
+        prisma.staff.findUnique({
+          where: { email: trimmedEmail },
+          select: { staffId: true },
+        }),
+        prisma.client.findUnique({
+          where: { email: trimmedEmail },
+          select: { clientId: true },
+        }),
+      ]);
+      const ownedBySelf =
+        (staffWithEmail && `STF-${staffWithEmail.staffId}` === userId) ||
+        (clientWithEmail && `CLT-${clientWithEmail.clientId}` === userId);
+      if ((staffWithEmail || clientWithEmail) && !ownedBySelf) {
+        return NextResponse.json(
+          { error: "A user with this email already exists." },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Contact numbers are stored as digits only. Legacy rows may hold free text
+    // such as "N/A"; an empty value is allowed and simply clears the number.
+    const contactDigits =
+      contact === undefined
+        ? undefined
+        : String(contact).replace(/\D/g, "").slice(0, 11);
+
     // Helper to get user name for logging
     async function getTargetName(prefix, id) {
       if (prefix === "STF") {
@@ -372,8 +399,8 @@ export async function PUT(request) {
       if (firstName !== undefined) updateData.firstName = firstName.trim();
       if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
       if (lastName !== undefined) updateData.lastName = lastName.trim();
-      if (email !== undefined) updateData.email = email.trim();
-      if (contact !== undefined) updateData.contactNumber = contact.trim();
+      if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
+      if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
 
       await prisma.staff.update({
@@ -385,8 +412,8 @@ export async function PUT(request) {
       if (firstName !== undefined) updateData.firstName = firstName.trim();
       if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
       if (lastName !== undefined) updateData.lastName = lastName.trim();
-      if (email !== undefined) updateData.email = email.trim();
-      if (contact !== undefined) updateData.contactNumber = contact.trim();
+      if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
+      if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
 
       await prisma.client.update({

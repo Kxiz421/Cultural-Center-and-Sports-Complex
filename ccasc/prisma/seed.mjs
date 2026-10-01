@@ -41,13 +41,15 @@ async function main() {
   console.log(`✓ Created ${clientRoles.length} client roles`);
 
   // Client Organizations
+  // NOTE: there is intentionally no generic "Other" row. When a client picks
+  // "Other (please specify)" at registration, a dedicated ClientOrganization
+  // row is created from the name they type (see app/api/auth/register).
   const clientOrgs = await Promise.all([
     prisma.clientOrganization.create({ data: { organizationName: 'Mendoza Catering Services' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'Notre Dame of Marbel University' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'South Cotabato State College' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'Villanueva Events Management' } }),
     prisma.clientOrganization.create({ data: { organizationName: 'STI College Koronadal' } }),
-    prisma.clientOrganization.create({ data: { organizationName: 'Other' } }),
   ]);
   console.log(`✓ Created ${clientOrgs.length} client organizations`);
 

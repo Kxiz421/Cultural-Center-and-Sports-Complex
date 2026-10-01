@@ -283,7 +283,8 @@ export default function UserManagementPage() {
       middleName: user.middleName || "",
       lastName: user.lastName || "",
       email: user.email || "",
-      contact: user.contact || "",
+      // Legacy rows may hold "N/A" or other free text - keep digits only.
+      contact: String(user.contact || "").replace(/\D/g, "").slice(0, 11),
       password: "",
       confirmPassword: "",
     });
@@ -298,15 +299,26 @@ export default function UserManagementPage() {
     const fn = editForm.firstName.trim();
     const ln = editForm.lastName.trim();
     const email = editForm.email.trim();
+    // Legacy rows may hold "N/A" or other free text - keep digits only.
+    const contact = String(editForm.contact || "").replace(/\D/g, "").slice(0, 11);
 
     if (!fn || !ln) {
       toast.error("First and last name are required.");
       return;
     }
 
-    // Validate contact number if provided (only digits accepted)
-    if (editForm.contact && editForm.contact.length !== 11) {
+    // Contact number is optional, but must be 11 digits when provided.
+    if (contact && contact.length !== 11) {
       toast.error("Contact number must be exactly 11 digits.");
+      return;
+    }
+
+    // Email must stay unique across the other accounts.
+    const emailTaken = users.some(
+      (u) => u.id !== selectedUser.id && u.email?.toLowerCase() === email.toLowerCase()
+    );
+    if (emailTaken) {
+      toast.error("A user with this email already exists.");
       return;
     }
 
@@ -348,7 +360,7 @@ export default function UserManagementPage() {
         middleName: editForm.middleName,
         lastName: ln,
         email,
-        contact: editForm.contact,
+        contact,
         performedBy: currentUserId,
         performedByName: currentUserName,
       };
