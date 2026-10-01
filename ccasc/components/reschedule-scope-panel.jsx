@@ -19,6 +19,7 @@ import {
   isBasketballParticularName,
 } from "@/lib/particular-options";
 import { SPORTS_COMPLEX_VENUE_ID } from "@/lib/venues";
+import { isArchivedFacility } from "@/lib/facility-status";
 
 /**
  * Facilities / particulars / time slot editor used by the reschedule request
@@ -76,7 +77,9 @@ export function RescheduleScopePanel({ reservation, value, onChange }) {
           if (cancelled) return;
           setCatalog(
             (Array.isArray(facilities) ? facilities : []).filter(
-              (f) => Number(f.venueId) === Number(reservation.venueId)
+              (f) =>
+                Number(f.venueId) === Number(reservation.venueId) &&
+                !isArchivedFacility(f)
             )
           );
           if (availRes) {

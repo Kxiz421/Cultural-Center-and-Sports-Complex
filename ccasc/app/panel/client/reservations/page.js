@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Printer, Layers, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { excludeArchivedFacilities } from "@/lib/facility-status";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -203,7 +204,10 @@ export default function ClientReservationsPage() {
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
-            const matchingFacilities = data.filter((item) => item.venueId === parseInt(form.venueId, 10));
+            // Archived facilities are hidden from clients entirely.
+            const matchingFacilities = excludeArchivedFacilities(data).filter(
+              (item) => item.venueId === parseInt(form.venueId, 10)
+            );
             setFacilities(matchingFacilities);
           } else {
             setFacilities([]);

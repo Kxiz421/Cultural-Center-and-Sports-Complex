@@ -49,6 +49,7 @@ import {
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
+import { excludeArchivedFacilities } from "@/lib/facility-status";
 import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange, isWholeDaySlot } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
@@ -235,7 +236,10 @@ export default function WalkInReservationPage() {
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
-            const matchingFacilities = data.filter((item) => item.venueId === parseInt(venueId, 10));
+            // Archived facilities are hidden from the booking lists.
+            const matchingFacilities = excludeArchivedFacilities(data).filter(
+              (item) => item.venueId === parseInt(venueId, 10)
+            );
             setFacilities(matchingFacilities);
           } else {
             setFacilities([]);

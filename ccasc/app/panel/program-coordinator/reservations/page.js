@@ -49,6 +49,7 @@ import {
   validateAdvanceBookingDates,
   MIN_ADVANCE_BOOKING_DAYS,
 } from "@/lib/reservation-advance-booking";
+import { excludeArchivedFacilities } from "@/lib/facility-status";
 
 const VENUES = [
   { id: 2, name: "Sports Complex" },
@@ -224,7 +225,8 @@ export default function CoordinatorReservationsPage() {
         
         if (Array.isArray(facData)) {
           // Get all Sports Complex facilities (venueId=2)
-          const sportsComplexFacilities = facData.filter(
+          // Archived facilities are hidden from the booking lists.
+          const sportsComplexFacilities = excludeArchivedFacilities(facData).filter(
             (item) => item.venueId === 2
           );
           console.log("Facilities API returned", sportsComplexFacilities.length, "Sports Complex facilities out of", facData.length, "total");
