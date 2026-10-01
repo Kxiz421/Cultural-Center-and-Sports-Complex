@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { handleUpload } from "@vercel/blob/client";
+import { noCacheJson } from "@/lib/api-cache-control";
 
 const ALLOWED_TYPES = [
   "image/jpeg",
@@ -14,6 +15,18 @@ const ALLOWED_TYPES = [
 // upload (the file never passes through the serverless function body).
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 
+/**
+ * Reports whether this deployment can issue Vercel Blob client tokens. The
+ * browser uploader probes this once so it can skip the direct-to-Blob handshake
+ * (and its spurious "Failed to retrieve the client token" error) when no token
+ * is configured - e.g. on localhost - and go straight to the disk fallback.
+ */
+export async function GET() {
+  return noCacheJson({
+    blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+  });
+}
+
 export async function POST(request) {
   try {
     const contentType = request.headers.get("content-type") || "";
@@ -23,6 +36,19 @@ export async function POST(request) {
     // a short-lived client token so the browser can PUT the file directly to
     // Blob storage — large files never pass through this serverless function.
     if (contentType.includes("application/json")) {
+      // No Blob token (e.g. localhost): tell the client to use the multipart
+      // fallback instead of failing the token handshake with a 500.
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return NextResponse.json(
+          {
+            error:
+              "Large-file Blob uploads require BLOB_READ_WRITE_TOKEN on this deployment.",
+            code: "BLOB_NOT_CONFIGURED",
+          },
+          { status: 501 }
+        );
+      }
+
       const body = await request.json();
       try {
         const json = await handleUpload({

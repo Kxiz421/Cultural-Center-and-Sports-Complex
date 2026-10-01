@@ -10,24 +10,49 @@ import { upload } from "@vercel/blob/client";
  * files up to 50MB work. Without a Blob token (local dev) it falls back to
  * the disk-based /api/upload/id-proof endpoint.
  */
+
+/**
+ * Whether this deployment can issue Blob client tokens. Probed once per
+ * session and cached, so the direct-to-Blob path is only attempted when it can
+ * actually succeed - local dev (no token) skips straight to the fallback and
+ * never logs a spurious "Failed to retrieve the client token" error.
+ */
+let blobConfiguredPromise = null;
+
+function blobConfigured() {
+  if (!blobConfiguredPromise) {
+    blobConfiguredPromise = fetch("/api/upload/id-proof", {
+      method: "GET",
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => Boolean(data?.blobConfigured))
+      .catch(() => false);
+  }
+  return blobConfiguredPromise;
+}
+
 export async function uploadIdProof(file) {
-  // Fast path: direct browser → Vercel Blob upload (up to 50MB).
-  try {
-    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const pathname = `id-proofs/${Date.now()}-${safeName}`;
-    const blob = await upload(pathname, file, {
-      handleUploadUrl: "/api/upload/id-proof",
-      contentType: file.type,
-      access: "public",
-    });
-    return blob.url;
-  } catch (blobError) {
-    // Surface the real reason so it's easy to diagnose (e.g. token missing
-    // on the deployment, route returning 500, CORS issues in dev).
-    console.error(
-      "[uploadIdProof] Vercel Blob direct upload failed:",
-      blobError?.message || blobError
-    );
+  // Fast path: direct browser to Vercel Blob upload (up to 50MB), only when a
+  // Blob token is configured on the deployment.
+  if (await blobConfigured()) {
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const pathname = `id-proofs/${Date.now()}-${safeName}`;
+      const blob = await upload(pathname, file, {
+        handleUploadUrl: "/api/upload/id-proof",
+        contentType: file.type,
+        access: "public",
+      });
+      return blob.url;
+    } catch (blobError) {
+      // Blob is configured but this attempt failed (network / CORS / size);
+      // fall back so registration can still complete.
+      console.warn(
+        "[uploadIdProof] Vercel Blob direct upload failed, using server upload:",
+        blobError?.message || blobError
+      );
+    }
   }
 
   // Fallback: classic multipart upload handled server-side (localhost).
