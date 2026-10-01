@@ -364,6 +364,18 @@ export default function CalendarPage() {
     }
   };
 
+  // Blocks grouped by date (ascending) so the list stays compact and scannable
+  // no matter how many holiday / maintenance days have been set.
+  const blockGroups = [];
+  for (const block of [...blocks].sort((a, b) =>
+    String(a.date).localeCompare(String(b.date))
+  )) {
+    const key = String(block.date).split("T")[0];
+    const last = blockGroups[blockGroups.length - 1];
+    if (last && last.key === key) last.blocks.push(block);
+    else blockGroups.push({ key, blocks: [block] });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between">
@@ -462,37 +474,76 @@ export default function CalendarPage() {
         </Dialog>
       </div>
 
-      {/* Blocks list */}
+      {/* Blocks list - grouped by date and scrollable so it never fills the page */}
       {blocks.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Upcoming Blocks</CardTitle>
-            <CardDescription>
-              Holidays and maintenance days currently set.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+            <div>
+              <CardTitle className="text-lg">Blocks</CardTitle>
+              <CardDescription>
+                Holidays and maintenance days currently set.
+              </CardDescription>
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {blocks.length} total
+            </Badge>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {blocks.map((block) => (
-                <div
-                  key={block.id}
-                  className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${
-                    block.blockType === "Holiday"
-                      ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-                      : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
-                  }`}
-                >
-                  <span>{block.title}</span>
-                  <span className="opacity-70">—</span>
-                  <span>{new Date(block.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                  <span className="opacity-70">({block.venue})</span>
-                  <button
-                    onClick={() => handleDeleteBlock(block.id)}
-                    className="ml-1 hover:text-foreground transition-colors"
-                    title="Remove block"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
+            <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+              {blockGroups.map((group) => (
+                <div key={group.key} className="space-y-1">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {new Date(`${group.key}T00:00:00`).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      {group.blocks.length}
+                    </span>
+                  </div>
+                  {group.blocks.map((block) => (
+                    <div
+                      key={block.id}
+                      className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm"
+                    >
+                      <span
+                        className={`size-2 shrink-0 rounded-full ${
+                          block.blockType === "Holiday" ? "bg-red-500" : "bg-orange-500"
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {block.title}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 ${
+                          block.blockType === "Holiday"
+                            ? "border-red-300 text-red-700 dark:text-red-300"
+                            : "border-orange-300 text-orange-700 dark:text-orange-300"
+                        }`}
+                      >
+                        {block.blockType}
+                      </Badge>
+                      <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                        {block.venueId === 1
+                          ? "Cultural Center"
+                          : block.venueId === 2
+                            ? "Sports Complex"
+                            : block.venue}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteBlock(block.id)}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                        title="Remove block"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

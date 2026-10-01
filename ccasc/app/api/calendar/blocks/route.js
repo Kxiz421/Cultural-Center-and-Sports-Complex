@@ -4,6 +4,17 @@ import { noCacheJson } from "@/lib/api-cache-control";
 
 
 import { requireApiAuth } from "@/lib/api-auth";
+/**
+ * Formats a Date as YYYY-MM-DD in the server's local timezone, avoiding the UTC
+ * shift `toISOString()` would introduce. Shared by GET and POST.
+ */
+function formatLocalDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+
 export async function GET() {
   const guard = await requireApiAuth(["admin"]);
   if (guard.response) return guard.response;
@@ -17,11 +28,6 @@ export async function GET() {
       },
       orderBy: { blockDate: "asc" },
     });
-
-    // Helper to format a Date object as YYYY-MM-DD in local timezone
-    // (avoiding toISOString() which shifts dates by the UTC offset)
-    const formatLocalDate = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     const formatted = blocks.map((b) => ({
       id: `BLK-${b.blockId}`,
