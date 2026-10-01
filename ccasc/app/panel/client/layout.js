@@ -23,7 +23,9 @@ const NAV_ITEMS = [
   { href: "/panel/client/rescheduling", label: "Rescheduling", icon: CalendarRange },
   { href: "/panel/client/documents", label: "Documents", icon: FileText },
   { href: "/panel/client/notifications", label: "Notifications", icon: Bell, showBadge: true },
-  { href: "/panel/client/history", label: "Booking & Reservation History", icon: History },
+  // `wrap` lets this longer label break onto a second line instead of running
+  // past the fixed-width rail and overlapping the page content.
+  { href: "/panel/client/history", label: "Booking & Reservation History", icon: History, wrap: true },
 ];
 
 export default function ClientLayout({ children }) {
@@ -85,14 +87,24 @@ export default function ClientLayout({ children }) {
               <Button
                 key={item.href}
                 variant={isActive ? "secondary" : "ghost"}
-                className="w-full justify-start gap-3 relative"
+                className={cn(
+                  "w-full justify-start gap-3 relative",
+                  item.wrap && "h-auto py-2"
+                )}
                 onClick={() => {
                   router.push(item.href);
                   setSidebarOpen(false);
                 }}
               >
-                <Icon className="size-4" />
-                {item.label}
+                <Icon className="size-4 shrink-0" />
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 text-left",
+                    item.wrap && "whitespace-normal leading-snug"
+                  )}
+                >
+                  {item.label}
+                </span>
                 {item.showBadge && unreadCount > 0 && (
                   <span
                     className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
