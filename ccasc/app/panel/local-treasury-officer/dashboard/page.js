@@ -8,7 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Wallet, BellRing, FileText, DollarSign } from "lucide-react";
+import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
+import { Wallet, BellRing, FileText } from "lucide-react";
 
 export default function LTOODashboardPage() {
   const [stats, setStats] = React.useState(null);
@@ -38,7 +39,7 @@ export default function LTOODashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
@@ -75,19 +76,13 @@ export default function LTOODashboardPage() {
             <p className="text-xs text-muted-foreground">Submitted documents</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-            <DollarSign className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? "..." : `₱${(stats?.monthlyRevenue ?? 0).toLocaleString()}`}
-            </div>
-            <p className="text-xs text-muted-foreground">Current month</p>
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Revenue windows: daily, weekly, monthly and yearly */}
+      <RevenueSummaryCards
+        revenue={stats?.revenue}
+        note="Payments recorded in this window."
+      />
     </div>
   );
 }

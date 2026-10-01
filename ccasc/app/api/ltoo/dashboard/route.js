@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { revenueQueryStart, summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,6 @@ export async function GET() {
 
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const totalPayments = await prisma.payment.count();
 
@@ -23,27 +23,19 @@ export async function GET() {
 
     const totalDocuments = await prisma.document.count();
 
-    const monthlyPayments = await prisma.payment.findMany({
-      where: {
-        transactions: {
-          some: {
-            paymentDate: { gte: startOfMonth },
-          },
-        },
-      },
-      select: { amountPaid: true },
+    // Daily / weekly / monthly / yearly revenue for the cards, from the same
+    // receipt rows the payments module lists (see lib/revenue-summary.js).
+    const transactions = await prisma.transaction.findMany({
+      where: { paymentDate: { gte: revenueQueryStart(now) } },
+      include: { payment: { select: { amountPaid: true } } },
     });
-
-    const monthlyRevenue = monthlyPayments.reduce(
-      (sum, p) => sum + Number(p.amountPaid),
-      0
-    );
+    const revenue = summarizeRevenue(transactions, now);
 
     return noCacheJson({
       totalPayments,
       pendingNotifications,
       totalDocuments,
-      monthlyRevenue,
+      revenue,
     });
   } catch (error) {
     console.error("Dashboard error:", error);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { revenueQueryStart, summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export async function GET() {
@@ -9,25 +10,15 @@ export async function GET() {
 
   try {
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
 
-    // Today's payments
-    const todayTransactions = await prisma.transaction.findMany({
-      where: { paymentDate: { gte: startOfDay } },
+    // Every receipt feeds the daily / weekly / monthly / yearly cards, so a
+    // single query bounded to the start of the year covers all four windows
+    // (see lib/revenue-summary.js).
+    const transactions = await prisma.transaction.findMany({
+      where: { paymentDate: { gte: revenueQueryStart(now) } },
       include: { payment: { select: { amountPaid: true } } },
     });
-    const dailyRevenue = todayTransactions.reduce(
-      (sum, t) => sum + Number(t.payment.amountPaid), 0
-    );
-
-    // All payments (for weekly/yearly we sum all since we don't have date on payment directly)
-    const allPayments = await prisma.payment.aggregate({
-      _sum: { amountPaid: true },
-    });
-    const totalRevenue = Number(allPayments._sum.amountPaid || 0);
+    const revenue = summarizeRevenue(transactions, now);
 
     // Count reservations by status
     const pendingReservations = await prisma.reservation.count({
@@ -38,11 +29,7 @@ export async function GET() {
     });
 
     return noCacheJson({
-      revenue: {
-        daily: dailyRevenue,
-        weekly: totalRevenue,
-        yearly: totalRevenue,
-      },
+      revenue,
       bookingStatus: {
         pending: pendingReservations,
         confirmed: confirmedReservations,

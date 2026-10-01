@@ -10,14 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-
-function formatPhp(amount) {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
+import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState(null);
@@ -53,7 +46,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  const revenue = data?.revenue || { daily: 0, weekly: 0, yearly: 0 };
+  const revenue = data?.revenue || { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
   const bookingStatus = data?.bookingStatus || { pending: 0, confirmed: 0 };
   const totalPipeline = bookingStatus.pending + bookingStatus.confirmed;
   const confirmedPct = totalPipeline === 0 ? 0 : Math.round((bookingStatus.confirmed / totalPipeline) * 100);
@@ -69,29 +62,13 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
+      {/* Revenue windows: daily, weekly, monthly and yearly */}
+      <RevenueSummaryCards
+        revenue={revenue}
+        note="Both venues combined."
+      />
+
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Daily revenue</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {formatPhp(revenue.daily)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Rolling total for today's recorded receipts.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total revenue (all-time)</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {formatPhp(revenue.yearly)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Includes Cultural Center & Sports Complex bookings.
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Active reservations</CardDescription>

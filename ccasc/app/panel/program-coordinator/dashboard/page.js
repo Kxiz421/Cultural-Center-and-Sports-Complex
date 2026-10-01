@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 import { CalendarDays, DollarSign, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
 
 function formatPhp(amount) {
@@ -59,7 +60,7 @@ export default function CoordinatorDashboardPage() {
     );
   }
 
-  const revenue = data?.revenue || { daily: 0, weekly: 0, yearly: 0 };
+  const revenue = data?.revenue || { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
   const bookingStatus = data?.bookingStatus || { pending: 0, confirmed: 0, ongoing: 0, completed: 0 };
   const recentReservations = data?.recentReservations || [];
   const monthlyRevenue = data?.monthlyRevenue || [];
@@ -75,30 +76,13 @@ export default function CoordinatorDashboardPage() {
         </p>
       </div>
 
-      {/* Revenue Cards */}
+      {/* Revenue windows: daily, weekly, monthly and yearly */}
+      <RevenueSummaryCards
+        revenue={revenue}
+        note={`Recorded receipts for ${venueLabel}.`}
+      />
+
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Daily Revenue</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {formatPhp(revenue.daily)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Today's recorded receipts for Cultural Center.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Revenue (All-Time)</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {formatPhp(revenue.yearly)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Includes all Cultural Center bookings.
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Active Reservations</CardDescription>

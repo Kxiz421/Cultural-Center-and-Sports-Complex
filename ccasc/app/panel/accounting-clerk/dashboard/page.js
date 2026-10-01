@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 import { CalendarDays, ClipboardList, DollarSign, TrendingUp } from "lucide-react";
 
 function formatPhp(amount) {
@@ -56,9 +57,9 @@ export default function AccountingDashboardPage() {
 
   const summary = data?.summary || { total: 0, partiallyPaid: 0, fullyPaid: 0 };
   const pendingReservations = data?.pendingCount || 0;
-  const totalRevenue = data?.totalClientRevenue || 0;
   const reservations = data?.reservations || [];
   const monthlyRevenue = data?.monthlyRevenue || [];
+  const revenue = data?.revenue || { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
 
   return (
     <div className="flex flex-col gap-6">
@@ -176,27 +177,14 @@ export default function AccountingDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Revenue Summary */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Yearly Revenue Overview</CardTitle>
-            <CardDescription>
-              Total revenue from client bookings.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-sm">
-                Client Revenue
-              </span>
-              <span className="text-xl font-bold tabular-nums">
-                {formatPhp(totalRevenue)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Revenue windows: daily, weekly, monthly and yearly */}
+      <RevenueSummaryCards
+        revenue={revenue}
+        note="Client payments recorded in this window."
+      />
 
+      {/* Monthly Revenue */}
+      <div className="grid gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Monthly Revenue (Current Year)</CardTitle>

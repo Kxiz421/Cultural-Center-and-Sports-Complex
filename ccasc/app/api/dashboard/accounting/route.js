@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export async function GET() {
@@ -112,6 +113,11 @@ export async function GET() {
 
     const monthlyRevenue = Object.values(monthlyMap).reverse();
 
+    // Daily / weekly / monthly / yearly totals for the revenue cards. The
+    // trailing-year query above already covers the current year-to-date, so the
+    // same rows feed both the chart and the windows (see lib/revenue-summary.js).
+    const revenue = summarizeRevenue(transactions, now);
+
     return noCacheJson({
       summary: {
         total: totalReservations,
@@ -124,6 +130,7 @@ export async function GET() {
         (r) => r.payment === "Partially paid" || r.status === "Pending"
       ),
       monthlyRevenue,
+      revenue,
     });
   } catch (error) {
     console.error("Failed to fetch accounting dashboard data:", error);

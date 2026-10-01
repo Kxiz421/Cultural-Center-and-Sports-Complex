@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export async function GET(request) {
@@ -14,39 +15,26 @@ export async function GET(request) {
     const venueLabel = venueId === "2" ? "Sports Complex" : "Cultural Center";
 
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
 
-    // Today's payments for selected venue
-    const todayTransactions = await prisma.transaction.findMany({
+    // A trailing year of receipts feeds both the monthly chart below and every
+    // revenue window (daily / weekly / monthly / yearly): a trailing year
+    // always contains the current calendar year-to-date. See
+    // lib/revenue-summary.js.
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const transactions = await prisma.transaction.findMany({
       where: {
-        paymentDate: { gte: startOfDay },
+        paymentDate: { gte: twelveMonthsAgo },
         payment: {
           booking: {
             reservation: { venueId: { in: venueFilter } },
           },
         },
       },
-      include: { payment: { select: { amountPaid: true } } },
-    });
-    const dailyRevenue = todayTransactions.reduce(
-      (sum, t) => sum + Number(t.payment.amountPaid), 0
-    );
-
-    // All payments for Cultural Center
-    const allPayments = await prisma.payment.findMany({
-      where: {
-        booking: {
-          reservation: { venueId: { in: venueFilter } },
-        },
+      include: {
+        payment: { select: { amountPaid: true } },
       },
-      select: { amountPaid: true },
     });
-    const totalRevenue = allPayments.reduce(
-      (sum, p) => sum + Number(p.amountPaid), 0
-    );
+    const revenue = summarizeRevenue(transactions, now);
 
     // Count reservations by status for Cultural Center
     const pendingReservations = await prisma.reservation.count({
@@ -119,21 +107,6 @@ export async function GET(request) {
     });
 
     // Monthly revenue for Cultural Center (last 12 months)
-    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        paymentDate: { gte: twelveMonthsAgo },
-        payment: {
-          booking: {
-            reservation: { venueId: { in: venueFilter } },
-          },
-        },
-      },
-      include: {
-        payment: { select: { amountPaid: true } },
-      },
-    });
-
     const monthlyMap = {};
     const monthNames = [
       "January", "February", "March", "April", "May", "June",
@@ -153,18 +126,14 @@ export async function GET(request) {
       const d = new Date(t.paymentDate);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       if (monthlyMap[key]) {
-        monthlyMap[key].revenue += Number(t.payment.amountPaid);
+        monthlyMap[key].revenue += Number(t.payment?.amountPaid ?? 0);
       }
     }
 
     const monthlyRevenue = Object.values(monthlyMap).reverse();
 
     return noCacheJson({
-      revenue: {
-        daily: dailyRevenue,
-        weekly: totalRevenue,
-        yearly: totalRevenue,
-      },
+      revenue,
       bookingStatus: {
         pending: pendingReservations,
         confirmed: confirmedReservations,
