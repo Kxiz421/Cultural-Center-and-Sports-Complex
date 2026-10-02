@@ -129,10 +129,14 @@ export async function POST(request) {
     }
 
     const trimmedReason = String(reason).trim();
+    const parsedReservationId = parseInt(
+      String(reservationId).replace(/^RES-/i, ""),
+      10
+    );
 
     const reservation = await prisma.reservation.findUnique({
       where: {
-        reservationId: parseInt(String(reservationId).replace(/^RES-/i, ""), 10),
+        reservationId: parsedReservationId,
       },
       include: {
         additionalDates: {
@@ -170,6 +174,23 @@ export async function POST(request) {
       return NextResponse.json(
         { error: "You do not have access to this reservation." },
         { status: 403 }
+      );
+    }
+
+    // One open request per event. While a request is still Pending review a
+    // second one must not be created; it frees up once staff approve
+    // ("Approved") or decline ("Declined") it.
+    const pendingRequest = await prisma.rescheduleRequest.findFirst({
+      where: { reservationId: parsedReservationId, status: "Pending" },
+      select: { rescheduleId: true },
+    });
+    if (pendingRequest) {
+      return NextResponse.json(
+        {
+          error:
+            "This event already has a rescheduling request pending review. You can submit another once it has been approved or declined.",
+        },
+        { status: 409 }
       );
     }
 
@@ -351,7 +372,7 @@ export async function POST(request) {
 
     const rescheduleRequest = await prisma.rescheduleRequest.create({
       data: {
-        reservationId: parseInt(String(reservationId).replace(/^RES-/i, ""), 10),
+        reservationId: parsedReservationId,
         requestedDate: toDateOnly(requestedDate),
         reason: trimmedReason,
         status: "Pending",

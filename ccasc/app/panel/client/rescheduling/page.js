@@ -97,6 +97,17 @@ export default function ClientReschedulingPage() {
     });
   }, [reservations]);
 
+  /** Reservations that already have a reschedule request awaiting review. */
+  const pendingReservationIds = React.useMemo(
+    () =>
+      new Set(
+        requests
+          .filter((r) => r.status === "Pending")
+          .map((r) => `RES-${r.reservationId}`)
+      ),
+    [requests]
+  );
+
   const eventEntries = React.useMemo(() => {
     if (!selected) return [];
     if (Array.isArray(selected.eventDateEntries) && selected.eventDateEntries.length > 0) {
@@ -171,6 +182,12 @@ export default function ClientReschedulingPage() {
     e.preventDefault();
     if (!selected || !reason.trim()) {
       toast.error("Please select a reservation and provide a reason");
+      return;
+    }
+    if (pendingReservationIds.has(selected.id)) {
+      toast.error(
+        "This event already has a reschedule request pending review."
+      );
       return;
     }
 
@@ -346,11 +363,21 @@ export default function ClientReschedulingPage() {
                   )}
                   {rescheduleEligible
                     .filter((r) => r.eventDate >= todayKey)
-                    .map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.eventType} — {r.venue} ({(r.eventDates || [r.eventDate]).join(", ")})
-                      </option>
-                    ))}
+                    .map((r) => {
+                      const hasPendingRequest = pendingReservationIds.has(r.id);
+                      return (
+                        <option
+                          key={r.id}
+                          value={r.id}
+                          disabled={hasPendingRequest}
+                        >
+                          {r.eventType} — {r.venue} ({(r.eventDates || [r.eventDate]).join(", ")})
+                          {hasPendingRequest
+                            ? " — reschedule request pending review"
+                            : ""}
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
 
@@ -388,7 +415,12 @@ export default function ClientReschedulingPage() {
 
               <Button
                 type="submit"
-                disabled={submitting || !selected || !reason.trim()}
+                disabled={
+                  submitting ||
+                  !selected ||
+                  !reason.trim() ||
+                  pendingReservationIds.has(selected.id)
+                }
               >
                 {submitting ? "Submitting..." : "Submit Request"}
               </Button>
