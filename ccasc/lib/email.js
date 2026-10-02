@@ -112,7 +112,7 @@ export async function sendOtpEmail(to, otp) {
               <div class="otp-code">${otp}</div>
               
               <p style="text-align: center; font-size: 14px; color: #4b5563;">
-                This code will expire in <strong>10 minutes</strong>.
+                This code will expire in <strong>5 minutes</strong>.
               </p>
 
               <div class="note">

@@ -9,10 +9,13 @@ import {
   updatePasswordResetAccount,
 } from "@/lib/password-reset-scope";
 import {
+  checkOtpSendCooldown,
   checkOtpVerifyRateLimit,
   checkPasswordResetRateLimit,
+  clearOtpSend,
   clearOtpVerifyAttempts,
   getClientIP,
+  recordOtpSend,
   recordOtpVerifyFailure,
   recordPasswordReset,
 } from "@/lib/rate-limit";
@@ -50,9 +53,29 @@ export async function POST(request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // One code per account per minute. Keyed by the account email so a
+    // double-tap on "Send code" / "Resend code" cannot fire several emails.
+    const cooldownKey = String(email).trim().toLowerCase();
+    const cooldown = checkOtpSendCooldown(cooldownKey);
+    if (!cooldown.allowed) {
+      return NextResponse.json(
+        {
+          error: `A recovery code was just sent. Please wait ${cooldown.retryAfter}s before requesting another.`,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(cooldown.retryAfter) },
+        }
+      );
+    }
+
+    // Reserve the slot BEFORE the awaits below so two concurrent requests
+    // cannot both pass the check above.
+    recordOtpSend(cooldownKey);
+
     // Generate OTP (6-digit code) with a CSPRNG - Math.random() is predictable.
     const otp = String(randomInt(100000, 1000000));
-    const otpExpiration = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otpExpiration = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
     await updatePasswordResetAccount(account, { otp, otpExpiration });
 
@@ -60,6 +83,8 @@ export async function POST(request) {
     const emailSent = await sendOtpEmail(email, otp);
 
     if (!emailSent) {
+      // Free the cooldown so a genuine send failure does not lock the user out.
+      clearOtpSend(cooldownKey);
       return NextResponse.json(
         { error: "Failed to send OTP email. Please try again later." },
         { status: 500 }

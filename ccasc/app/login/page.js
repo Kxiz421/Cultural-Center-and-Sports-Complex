@@ -623,7 +623,11 @@ export default function LoginPage() {
                     Close
                   </Button>
                   {fpStep === "email" ? (
-                    <Button type="button" onClick={handleSendCode}>
+                    <Button
+                      type="button"
+                      onClick={handleSendCode}
+                      disabled={fpLoading}
+                    >
                       Send verification code
                     </Button>
                   ) : fpStep === "code" ? (
@@ -631,6 +635,7 @@ export default function LoginPage() {
                       type="button"
                       variant="secondary"
                       onClick={handleSendCode}
+                      disabled={fpLoading}
                     >
                       Resend code
                     </Button>

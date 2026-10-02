@@ -62,10 +62,13 @@ const MODULE_STUBS = {
     "};",
   ].join("\n"),
   "@/lib/rate-limit": [
+    "export const checkOtpSendCooldown = () => ({ allowed: true });",
     "export const checkOtpVerifyRateLimit = () => ({ allowed: true });",
     "export const checkPasswordResetRateLimit = () => ({ allowed: true });",
+    "export const clearOtpSend = () => {};",
     "export const clearOtpVerifyAttempts = () => {};",
     "export const getClientIP = () => '127.0.0.1';",
+    "export const recordOtpSend = () => {};",
     "export const recordOtpVerifyFailure = () => {};",
     "export const recordPasswordReset = () => {};",
   ].join("\n"),
