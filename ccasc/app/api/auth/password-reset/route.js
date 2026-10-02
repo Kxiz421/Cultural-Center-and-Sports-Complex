@@ -4,7 +4,10 @@ import bcrypt from "bcryptjs";
 import { sendOtpEmail } from "@/lib/email";
 
 
-import prisma from "@/lib/prisma";
+import {
+  resolvePasswordResetAccount,
+  updatePasswordResetAccount,
+} from "@/lib/password-reset-scope";
 import {
   checkOtpVerifyRateLimit,
   checkPasswordResetRateLimit,
@@ -38,16 +41,12 @@ export async function POST(request) {
       );
     }
 
-    // Search for user in both Client and Staff models
-    let user = await prisma.client.findUnique({ where: { email } });
-    let userType = 'client';
+    // Resolve the account this reset applies to. The precedence here MUST
+    // match the login provider (Staff before Client) or the OTP is written to
+    // a different row than the one login authenticates.
+    const account = await resolvePasswordResetAccount(email);
 
-    if (!user) {
-      user = await prisma.staff.findUnique({ where: { email } });
-      userType = 'staff';
-    }
-
-    if (!user) {
+    if (!account) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -55,17 +54,7 @@ export async function POST(request) {
     const otp = String(randomInt(100000, 1000000));
     const otpExpiration = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    if (userType === 'client') {
-      await prisma.client.update({
-        where: { email },
-        data: { otp, otpExpiration },
-      });
-    } else {
-      await prisma.staff.update({
-        where: { email },
-        data: { otp, otpExpiration },
-      });
-    }
+    await updatePasswordResetAccount(account, { otp, otpExpiration });
 
     // Send OTP via Gmail SMTP
     const emailSent = await sendOtpEmail(email, otp);
@@ -113,21 +102,16 @@ export async function PATCH(request) {
       );
     }
 
-    // Search for user in both Client and Staff models
-    let user = await prisma.client.findUnique({ where: { email } });
-    let userType = 'client';
+    // Resolve the account exactly as the PUT handler below does, so the code
+    // that is verified is always the code that gets cleared on success.
+    const account = await resolvePasswordResetAccount(email);
 
-    if (!user) {
-      user = await prisma.staff.findUnique({ where: { email } });
-      userType = 'staff';
-    }
-
-    if (!user) {
+    if (!account) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Check if OTP matches and is not expired
-    if (user.otp !== otp || !user.otpExpiration || user.otpExpiration < new Date()) {
+    if (account.otp !== otp || !account.otpExpiration || account.otpExpiration < new Date()) {
       recordOtpVerifyFailure(limiterKey);
       return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
     }
@@ -163,21 +147,14 @@ export async function PUT(request) {
       );
     }
 
-    // Search for user in both Client and Staff models
-    let user = await prisma.client.findUnique({ where: { email } });
-    let userType = 'client';
+    const account = await resolvePasswordResetAccount(email);
 
-    if (!user) {
-      user = await prisma.staff.findUnique({ where: { email } });
-      userType = 'staff';
-    }
-
-    if (!user) {
+    if (!account) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Check if OTP matches and is not expired
-    if (user.otp !== otp || !user.otpExpiration || user.otpExpiration < new Date()) {
+    if (account.otp !== otp || !account.otpExpiration || account.otpExpiration < new Date()) {
       recordOtpVerifyFailure(limiterKey);
       return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
     }
@@ -185,26 +162,13 @@ export async function PUT(request) {
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password and clear OTP fields
-    if (userType === 'client') {
-      await prisma.client.update({
-        where: { email },
-        data: {
-          password: hashedPassword,
-          otp: null,
-          otpExpiration: null,
-        },
-      });
-    } else {
-      await prisma.staff.update({
-        where: { email },
-        data: {
-          password: hashedPassword,
-          otp: null,
-          otpExpiration: null,
-        },
-      });
-    }
+    // Update the password and clear the OTP fields on the SAME row that was
+    // resolved above - i.e. the row the login provider will authenticate.
+    await updatePasswordResetAccount(account, {
+      password: hashedPassword,
+      otp: null,
+      otpExpiration: null,
+    });
 
     clearOtpVerifyAttempts(limiterKey);
 

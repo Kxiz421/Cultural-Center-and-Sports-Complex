@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
+import { sendUserUpdatedEmail } from "@/lib/email";
 export async function GET() {
   const guard = await requireApiAuth(["admin"]);
   if (guard.response) return guard.response;
@@ -349,6 +350,18 @@ export async function PUT(request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
+    // Load the current row so we can diff the values for the update notification.
+    const existing =
+      prefix === "STF"
+        ? await prisma.staff.findUnique({ where: { staffId: id } })
+        : prefix === "CLT"
+        ? await prisma.client.findUnique({ where: { clientId: id } })
+        : null;
+
+    if (!existing) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     // A changed email must stay unique across both account tables so no two
     // accounts can ever share an address (the create route enforces this too).
     // The user's own current email is allowed.
@@ -422,6 +435,41 @@ export async function PUT(request) {
       });
     } else {
       return NextResponse.json({ error: "Unknown user type" }, { status: 400 });
+    }
+
+    // Build a field-level diff of what actually changed, then notify the user
+    // by email. A mail failure must never roll back a successful update, so
+    // sendUserUpdatedEmail catches its own errors and returns a boolean.
+    const changes = [];
+    if (firstName !== undefined && firstName.trim() !== existing.firstName) {
+      changes.push({ label: "First name", from: existing.firstName, to: firstName.trim() });
+    }
+    if (middleName !== undefined) {
+      const newMiddle = middleName.trim() || null;
+      if (newMiddle !== existing.middleName) {
+        changes.push({ label: "Middle name", from: existing.middleName, to: newMiddle });
+      }
+    }
+    if (lastName !== undefined && lastName.trim() !== existing.lastName) {
+      changes.push({ label: "Last name", from: existing.lastName, to: lastName.trim() });
+    }
+    if (trimmedEmail !== undefined && trimmedEmail !== existing.email) {
+      changes.push({ label: "Email", from: existing.email, to: trimmedEmail });
+    }
+    if (contactDigits !== undefined && contactDigits !== existing.contactNumber) {
+      changes.push({ label: "Contact number", from: existing.contactNumber, to: contactDigits });
+    }
+    if (password !== undefined) {
+      changes.push({ label: "Password", from: null, to: null, masked: true });
+    }
+
+    if (changes.length > 0) {
+      await sendUserUpdatedEmail(trimmedEmail || existing.email, {
+        firstName: firstName !== undefined ? firstName.trim() : existing.firstName,
+        lastName: lastName !== undefined ? lastName.trim() : existing.lastName,
+        changes,
+        updatedByName: acting.performedByName,
+      });
     }
 
     // Log the profile update
