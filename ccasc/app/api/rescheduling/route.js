@@ -26,6 +26,7 @@ import {
   notifyCulturalCenterCoordinators,
 } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth, resolveClientScope, isClientRole, ownClientId } from "@/lib/api-auth";
 function normalizeDateChanges(body, reservation) {
@@ -393,7 +394,9 @@ export async function POST(request) {
     });
 
     if (isCulturalCenterVenue(reservation.venueId)) {
-      const clientName = `${reservation.client.firstName} ${reservation.client.lastName}`;
+      const clientName = reservation.client
+        ? `${reservation.client.firstName} ${reservation.client.lastName}`
+        : walkInDisplayName(reservation.notes);
       const changeParts = [];
       if (changes.length > 0) {
         changeParts.push(
@@ -408,7 +411,7 @@ export async function POST(request) {
         );
       }
       await notifyCulturalCenterCoordinators({
-        clientId: reservation.client.clientId,
+        clientId: reservation.client?.clientId,
         type: "reschedule",
         message: `New rescheduling request from ${clientName} for "${reservation.eventType}" at ${reservation.venue?.venue || "Cultural Center"}. Change(s): ${changeParts.join(" | ") || "none"}. Reason: ${trimmedReason}`,
       });

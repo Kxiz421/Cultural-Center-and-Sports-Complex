@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -128,22 +129,27 @@ export async function POST(request) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    const actualClientId = booking.reservation?.client?.clientId || parseInt(clientId) || 1;
+    const actualClientId =
+      booking.reservation?.client?.clientId ||
+      parseInt(clientId, 10) ||
+      null;
     const clientName = booking.reservation?.client
       ? `${booking.reservation.client.firstName} ${booking.reservation.client.lastName}`
-      : "Client";
+      : walkInDisplayName(booking.reservation?.notes);
 
-    // Create notification for the client
-    await prisma.notification.create({
-      data: {
-        message: `Your documents (Certification and Contract of Lease) are ready for release. Booking #${bookingId}.`,
-        type: "Document Release",
-        isRead: false,
-        sentAt: new Date(),
-        staffId: parseInt(staffId) || 1,
-        clientId: actualClientId,
-      },
-    });
+    // Create notification for the client. A walk-in has no account to notify.
+    if (actualClientId != null) {
+      await prisma.notification.create({
+        data: {
+          message: `Your documents (Certification and Contract of Lease) are ready for release. Booking #${bookingId}.`,
+          type: "Document Release",
+          isRead: false,
+          sentAt: new Date(),
+          staffId: parseInt(staffId) || 1,
+          clientId: actualClientId,
+        },
+      });
+    }
 
     // If provincial, also create notification for agency
     if (clientType === "provincial") {

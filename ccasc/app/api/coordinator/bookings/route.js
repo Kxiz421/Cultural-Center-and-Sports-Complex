@@ -4,6 +4,7 @@ import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
@@ -65,8 +66,10 @@ export async function GET(request) {
       orderBy: { submittedAt: "desc" },
     });
 
-    // Fetch valid client info separately
-    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    // Fetch valid client info separately (walk-ins carry no client id)
+    const distinctClientIds = [
+      ...new Set(reservations.map((r) => r.clientId).filter((id) => id != null)),
+    ];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
       select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { roleName: true } } },
@@ -75,25 +78,22 @@ export async function GET(request) {
 
     let filtered;
     if (cancelled === "true" || history === "true") {
-      // For history, include all confirmed reservations that have valid client
-      filtered = reservations.filter((r) => clientMap[r.clientId] !== undefined);
+      // For history, include all confirmed reservations (walk-ins have no client)
+      filtered = reservations;
     } else if (venueId === "2") {
       // For Sports Complex (venueId=2), show ALL pending reservations — payment is recorded by coordinator
-      filtered = reservations
-        .filter((r) => clientMap[r.clientId] !== undefined);
+      filtered = reservations;
     } else {
       // For Cultural Center, only include fully paid ones (LTOO handles payment)
-      filtered = reservations
-        .filter((r) => clientMap[r.clientId] !== undefined)
-        .filter((r) =>
-          r.bookings.some((b) =>
-            b.payments.some((p) => p.status?.status?.toLowerCase() === "fully paid")
-          )
-        );
+      filtered = reservations.filter((r) =>
+        r.bookings.some((b) =>
+          b.payments.some((p) => p.status?.status?.toLowerCase() === "fully paid")
+        )
+      );
     }
 
     const formatted = filtered.map((r) => {
-      const client = clientMap[r.clientId] || { firstName: "Unknown", lastName: "", clientRole: { roleName: "N/A" } };
+      const client = clientMap[r.clientId] || null;
       const totalPaid = r.bookings.reduce(
         (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
         0
@@ -117,8 +117,10 @@ export async function GET(request) {
 
       return {
         id: `RES-${r.reservationId}`,
-        clientName: `${client.firstName} ${client.lastName}`,
-        clientType: client.clientRole?.roleName || "N/A",
+        clientName: client
+          ? `${client.firstName} ${client.lastName}`
+          : walkInDisplayName(r.notes),
+        clientType: client?.clientRole?.roleName || "N/A",
         venue: r.venue.venue,
         eventType: r.eventType,
         eventDate: r.eventDate.toISOString().split("T")[0],
@@ -133,7 +135,7 @@ export async function GET(request) {
         })),
         documents: docs,
         notes: r.notes || "",
-        isWalkIn: r.notes ? r.notes.startsWith("Walk-in client:") : false,
+        isWalkIn: isWalkInReservation(r.notes),
       };
     });
 

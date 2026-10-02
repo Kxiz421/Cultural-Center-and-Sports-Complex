@@ -19,6 +19,8 @@
  *                                        how the paper form records a discount
  */
 
+import { walkInDisplayName } from "@/lib/walk-in";
+
 export const CHARGE_PGSC = "pgsc";
 export const CHARGE_PGO = "pgo";
 export const CHARGE_PRIVATE = "private";
@@ -92,7 +94,9 @@ export function buildActivityRows(reservation) {
       chargeType: isProvincial ? CHARGE_PGSC : CHARGE_PRIVATE,
       chargeLabel: isProvincial ? CHARGE_LABELS[CHARGE_PGSC] : CHARGE_LABELS[CHARGE_PRIVATE],
       venue: reservation.venue?.venue || "",
-      clientName: [client.firstName, client.lastName].filter(Boolean).join(" "),
+      clientName:
+        [client.firstName, client.lastName].filter(Boolean).join(" ") ||
+        walkInDisplayName(reservation.notes),
       organization: client.clientOrg?.organizationName || "",
     },
   ];
@@ -111,7 +115,9 @@ export function buildActivityRows(reservation) {
       chargeType: CHARGE_PGO,
       chargeLabel: CHARGE_LABELS[CHARGE_PGO],
       venue: reservation.venue?.venue || "",
-      clientName: [client.firstName, client.lastName].filter(Boolean).join(" "),
+      clientName:
+        [client.firstName, client.lastName].filter(Boolean).join(" ") ||
+        walkInDisplayName(reservation.notes),
       organization: client.clientOrg?.organizationName || "",
     });
   }

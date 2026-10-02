@@ -307,13 +307,13 @@ model Reservation {
   totalAmount        Decimal? @map("total_amount") @db.Decimal(12, 2)
   submittedAt        DateTime @map("submitted_at")
   venueId            Int      @map("venue_id")
-  clientId           Int      @map("client_id")
+  clientId           Int?     @map("client_id")
   packageId          Int?     @map("package_id")
   timeSlotId         Int      @map("time_slot_id")
   notes              String?  @map("notes") @db.Text
 
   venue     FacilityVenue       @relation(fields: [venueId], references: [venueId])
-  client    Client              @relation(fields: [clientId], references: [clientId])
+  client    Client?             @relation(fields: [clientId], references: [clientId])
   package   Package?            @relation(fields: [packageId], references: [packageId])
   timeSlot  TimeSlot            @relation(fields: [timeSlotId], references: [timeSlotId])
 

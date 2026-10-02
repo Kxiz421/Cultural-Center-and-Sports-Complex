@@ -13,6 +13,7 @@ import {
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { formatPhp } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
@@ -126,9 +127,11 @@ export async function GET(request) {
 
       return {
         id: req.rescheduleId,
-        clientName: `${req.reservation.client.firstName} ${req.reservation.client.lastName}`,
-        clientId: req.reservation.client.clientId,
-        clientType: req.reservation.client.clientRole?.roleName || "N/A",
+        clientName: req.reservation.client
+          ? `${req.reservation.client.firstName} ${req.reservation.client.lastName}`
+          : walkInDisplayName(req.reservation.notes),
+        clientId: req.reservation.client?.clientId ?? null,
+        clientType: req.reservation.client?.clientRole?.roleName || "N/A",
         venue: req.reservation.venue.venue,
         eventType: req.reservation.eventType,
         currentDate: formatDbDate(req.reservation.eventDate),
@@ -216,7 +219,7 @@ export async function PATCH(request) {
       }
 
       await createClientNotification({
-        clientId: rescheduleReq.reservation.client.clientId,
+        clientId: rescheduleReq.reservation.client?.clientId,
         type: "reschedule",
         message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. ${messageParts.join(" ")}`.trim(),
       });
@@ -259,7 +262,7 @@ export async function PATCH(request) {
         ? `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.\n\nReason: ${declineReason}`
         : `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.`;
       await createClientNotification({
-        clientId: rescheduleReq.reservation.client.clientId,
+        clientId: rescheduleReq.reservation.client?.clientId,
         type: "reschedule",
         message: declineMsg,
       });

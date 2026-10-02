@@ -22,6 +22,7 @@ import {
   findFacilityConflicts,
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth, resolveClientScope, ownClientId } from "@/lib/api-auth";
 function parsePackageId(value) {
@@ -169,17 +170,17 @@ export async function GET(request) {
       orderBy: { submittedAt: "desc" },
     });
 
-    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    const distinctClientIds = [
+      ...new Set(reservations.map((r) => r.clientId).filter((id) => id != null)),
+    ];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
       select: { clientId: true, firstName: true, lastName: true },
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
-    const formatted = reservations
-      .filter((r) => clientMap[r.clientId] !== undefined)
-      .map((r) => {
-        const client = clientMap[r.clientId];
+    const formatted = reservations.map((r) => {
+        const client = clientMap[r.clientId] || null;
         const allDates = [
           formatDbDate(r.eventDate),
           ...r.additionalDates.map((ad) => formatDbDate(ad.eventDate)),
@@ -237,7 +238,9 @@ export async function GET(request) {
         return {
           id: `RES-${r.reservationId}`,
           clientId: r.clientId,
-          clientName: `${client.firstName} ${client.lastName}`,
+          clientName: client
+            ? `${client.firstName} ${client.lastName}`
+            : walkInDisplayName(r.notes),
           venueId: r.venueId,
           venue: r.venue.venue,
           eventType: r.eventType,
@@ -300,7 +303,11 @@ export async function POST(request) {
     const body = await request.json();
     const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars, chargeLines: rawChargeLines } = body;
 
-    if (!venueId || !eventType || !eventDate || !timeSlotId || !clientId) {
+    // A walk-in client has no registered account: the reservation is stored
+    // without a client_id and the client's details live in the notes.
+    const isWalkIn = isWalkInReservation(notes);
+
+    if (!venueId || !eventType || !eventDate || !timeSlotId || (!clientId && !isWalkIn)) {
       return NextResponse.json(
         { error: "Missing required fields: venueId, eventType, eventDate, timeSlotId, clientId" },
         { status: 400 }
@@ -417,12 +424,16 @@ export async function POST(request) {
       }
     }
 
-    const isWalkIn = notes && notes.startsWith("Walk-in client:");
-    const parsedClientId = parseInt(clientId, 10);
+    const parsedClientId =
+      clientId != null && clientId !== "" ? parseInt(clientId, 10) : null;
 
-    // Client-role sessions may only create reservations for their own account.
+    // Client-role sessions may only create reservations for their own account;
+    // a walk-in reservation (no client) is never allowed from a client session.
     const ownReservationClientId = ownClientId(guard.user);
-    if (ownReservationClientId != null && parsedClientId !== ownReservationClientId) {
+    if (
+      ownReservationClientId != null &&
+      parsedClientId !== ownReservationClientId
+    ) {
       return NextResponse.json(
         { error: "You can only create reservations for your own account." },
         { status: 403 }
@@ -573,15 +584,19 @@ export async function POST(request) {
         });
       }
 
-      await prisma.notification.create({
-        data: {
-          message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(totalAmount * 0.5 || 0).toLocaleString()}) + 10% deposit (₱${(totalAmount * 0.1 || 0).toLocaleString()}) is required by ${downPaymentDeadline}.`,
-          type: "booking",
-          staffId: 1,
-          clientId: parsedClientId,
-          sentAt: new Date(),
-        },
-      });
+      // A true walk-in has no account, so there is no inbox for the personal
+      // confirmation; an existing user booked by the clerk still gets it.
+      if (parsedClientId != null) {
+        await prisma.notification.create({
+          data: {
+            message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(totalAmount * 0.5 || 0).toLocaleString()}) + 10% deposit (₱${(totalAmount * 0.1 || 0).toLocaleString()}) is required by ${downPaymentDeadline}.`,
+            type: "booking",
+            staffId: 1,
+            clientId: parsedClientId,
+            sentAt: new Date(),
+          },
+        });
+      }
     }
 
     return NextResponse.json({

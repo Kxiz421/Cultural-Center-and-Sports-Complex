@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 import { summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
@@ -93,8 +94,10 @@ export async function GET(request) {
 
       return {
         id: `RES-${r.reservationId}`,
-        clientName: `${r.client.firstName} ${r.client.lastName}`,
-        clientType: r.client.clientRole?.roleName || "N/A",
+        clientName: r.client
+          ? `${r.client.firstName} ${r.client.lastName}`
+          : walkInDisplayName(r.notes),
+        clientType: r.client?.clientRole?.roleName || "N/A",
         venue: r.venue.venue,
         eventType: r.eventType,
         eventDate: r.eventDate.toISOString().split("T")[0],

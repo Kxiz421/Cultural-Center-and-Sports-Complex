@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 import { summarizeRevenue } from "@/lib/revenue-summary";
 
 import { requireApiAuth } from "@/lib/api-auth";
@@ -27,8 +28,10 @@ export async function GET() {
       orderBy: { submittedAt: "desc" },
     });
 
-    // Fetch valid client info separately
-    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    // Fetch valid client info separately (walk-ins carry no client id)
+    const distinctClientIds = [
+      ...new Set(reservations.map((r) => r.clientId).filter((id) => id != null)),
+    ];
     const allClients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
       select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { roleName: true } } },
@@ -42,9 +45,8 @@ export async function GET() {
     let pendingCount = 0;
 
     const formattedReservations = reservations
-      .filter((r) => clientMap[r.clientId] !== undefined)
       .map((r) => {
-        const client = clientMap[r.clientId];
+        const client = clientMap[r.clientId] || null;
         const totalPaid = r.bookings.reduce(
           (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
           0
@@ -60,8 +62,10 @@ export async function GET() {
 
         return {
           id: `RES-${r.reservationId}`,
-          clientName: `${client.firstName} ${client.lastName}`,
-          clientType: client.clientRole?.roleName || "N/A",
+          clientName: client
+            ? `${client.firstName} ${client.lastName}`
+            : walkInDisplayName(r.notes),
+          clientType: client?.clientRole?.roleName || "N/A",
           venue: r.venue.venue,
           eventType: r.eventType,
           eventDate: r.eventDate.toISOString().split("T")[0],

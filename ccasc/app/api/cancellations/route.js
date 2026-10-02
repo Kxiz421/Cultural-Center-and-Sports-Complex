@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createClientNotification } from "@/lib/coordinator-notifications";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -99,8 +100,12 @@ export async function POST(request) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    const clientName = reservation.client.firstName + " " + reservation.client.lastName;
-    const performerId = acting.performedBy || "CLT-" + reservation.client.clientId;
+    const clientName = reservation.client
+      ? reservation.client.firstName + " " + reservation.client.lastName
+      : walkInDisplayName(reservation.notes);
+    const performerId =
+      acting.performedBy ||
+      (reservation.client ? "CLT-" + reservation.client.clientId : "WALK-IN");
     const performerName =
       acting.performedByName || clientName || "Client";
 
@@ -126,7 +131,7 @@ export async function POST(request) {
 
     // Send notification to the client
     await createClientNotification({
-      clientId: reservation.client.clientId,
+      clientId: reservation.client?.clientId,
       type: "cancellation",
       message: "Your reservation for \"" + (reservation.eventType || "Scheduled event") + "\" at " + reservation.venue.venue + " on " + (eventDate ? eventDate.toISOString().split("T")[0] : "N/A") + " has been CANCELLED. Reason: " + (reason || "No reason provided") + ". Since the cancellation was made at least 30 days before the event, any payments made are eligible for refund.",
     });

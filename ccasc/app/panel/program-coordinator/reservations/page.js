@@ -802,7 +802,7 @@ export default function CoordinatorReservationsPage() {
     submitLockRef.current = true;
     setSubmitting(true);
     try {
-      let actualClientId;
+      let actualClientId = null;
       let notesStr;
 
       if (isExistingUser && selectedClient) {
@@ -810,25 +810,8 @@ export default function CoordinatorReservationsPage() {
         actualClientId = selectedClient.clientId;
         notesStr = `Walk-in client: ${selectedClient.fullName} | Contact: ${selectedClient.contact || "N/A"} | Email: ${selectedClient.email}${notes ? ` | Notes: ${notes}` : ''}`;
       } else {
-        // For non-existing users, use a default walk-in client
-        let walkInClient = null;
-
-        try {
-          const checkRes = await fetch(`/api/clients/search?q=walkin`);
-          const checkData = await checkRes.json();
-          if (Array.isArray(checkData) && checkData.length > 0) {
-            walkInClient = checkData.find(c => c.email === "walkin@ccasc.gov");
-          }
-        } catch (e) {
-          console.error("Failed to check for walk-in client:", e);
-        }
-
-        if (!walkInClient) {
-          actualClientId = 1; // Default walk-in client ID
-        } else {
-          actualClientId = walkInClient.clientId;
-        }
-
+        // A new walk-in has no account: send no clientId. The API stores the
+        // reservation without one and keeps the details in the notes.
         notesStr = `Walk-in client: ${clientName} | Contact: ${clientContact || "N/A"} | Email: ${clientEmail || "N/A"}${notes ? ` | Notes: ${notes}` : ''}`;
       }
 

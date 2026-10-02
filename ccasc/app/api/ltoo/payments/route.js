@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { walkInDisplayName } from "@/lib/walk-in";
 import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 import {
   computePaymentBreakdown,
@@ -127,8 +128,10 @@ export async function GET(request) {
         orderBy: { reservationId: "desc" },
       });
 
-      // Fetch valid client info separately
-      const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+      // Fetch valid client info separately (walk-ins carry no client id)
+      const distinctClientIds = [
+        ...new Set(reservations.map((r) => r.clientId).filter((id) => id != null)),
+      ];
       const clients = await prisma.client.findMany({
         where: { clientId: { in: distinctClientIds } },
         select: { clientId: true, firstName: true, lastName: true, clientRole: { select: { clientRoleId: true } } },
@@ -137,9 +140,8 @@ export async function GET(request) {
       const packageCatalog = await fetchPackageCatalog();
 
       const mapped = reservations
-        .filter((r) => clientMap[r.clientId] !== undefined)
         .map((r) => {
-          const client = clientMap[r.clientId];
+          const client = clientMap[r.clientId] || null;
           // Calculate total paid so far
           const numDays = 1 + r.additionalDates.length;
           const pkgRate = r.package
@@ -175,8 +177,13 @@ export async function GET(request) {
             id: r.reservationId,
             reservationId: r.reservationId,
             clientId: r.clientId,
-            clientName: `${client.firstName} ${client.lastName}`,
-            clientType: client.clientRole?.clientRoleId === "PROV" ? "provincial-agency" : "client",
+            clientName: client
+              ? `${client.firstName} ${client.lastName}`
+              : walkInDisplayName(r.notes),
+            clientType:
+              client?.clientRole?.clientRoleId === "PROV"
+                ? "provincial-agency"
+                : "client",
             eventType: r.eventType,
             eventDate: r.eventDate ? formatDbDate(r.eventDate) : "",
             eventDates: [

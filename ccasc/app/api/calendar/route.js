@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 
 import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
@@ -54,8 +55,10 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
-    // Fetch valid client info separately
-    const distinctClientIds = [...new Set(reservations.map((r) => r.clientId))];
+    // Fetch valid client info separately (walk-ins carry no client id)
+    const distinctClientIds = [
+      ...new Set(reservations.map((r) => r.clientId).filter((id) => id != null)),
+    ];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
       select: { clientId: true, firstName: true, lastName: true },
@@ -99,9 +102,8 @@ export async function GET(request) {
 
     // One calendar event per reserved day (primary + additional dates)
     const events = reservations
-      .filter((r) => clientMap[r.clientId] !== undefined)
       .flatMap((r) => {
-        const client = clientMap[r.clientId];
+        const client = clientMap[r.clientId] || null;
         const activeBookings = r.bookings.filter((b) => b.status?.status !== "Cancelled");
         const latestBooking = activeBookings.length > 0 ? activeBookings[activeBookings.length - 1] : null;
         const bookingStatus = latestBooking?.status?.status || "Unbooked";
@@ -128,7 +130,9 @@ export async function GET(request) {
           venueId: r.venue.venueId,
           status: r.reservationStatus,
           type: "event",
-          clientName: `${client.firstName} ${client.lastName}`,
+          clientName: client
+            ? `${client.firstName} ${client.lastName}`
+            : walkInDisplayName(r.notes),
           packageName: r.package?.packageName || null,
           bookingStatus,
           isPrimary: idx === 0,

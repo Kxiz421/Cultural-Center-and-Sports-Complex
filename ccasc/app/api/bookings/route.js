@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { walkInDisplayName } from "@/lib/walk-in";
 
 
 import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
@@ -90,20 +91,21 @@ export async function GET(request) {
       filtered = filtered.filter(b => new Date(b.reservation.eventDate) <= to);
     }
 
-    // Client name search
+    // Client name search (walk-ins fall back to the name in their notes)
     if (search) {
       const term = search.toLowerCase();
-      filtered = filtered.filter(b =>
-        b.reservation.client.firstName.toLowerCase().includes(term) ||
-        b.reservation.client.lastName.toLowerCase().includes(term) ||
-        `${b.reservation.client.firstName} ${b.reservation.client.lastName}`.toLowerCase().includes(term)
-      );
+      filtered = filtered.filter((b) => {
+        const name = b.reservation.client
+          ? `${b.reservation.client.firstName} ${b.reservation.client.lastName}`
+          : walkInDisplayName(b.reservation.notes);
+        return name.toLowerCase().includes(term);
+      });
     }
 
     // Client type filter (based on client role: PROV = Provincial Government, PUB = Public Client)
     if (clientType && clientType !== "all") {
-      filtered = filtered.filter(b =>
-        b.reservation.client.clientRoleId === clientType
+      filtered = filtered.filter(
+        (b) => b.reservation.client?.clientRoleId === clientType
       );
     }
 
@@ -114,9 +116,11 @@ export async function GET(request) {
       rawReservationId: b.reservationId,
       venueId: b.reservation.venueId,
       venue: b.reservation.venue.venue,
-      clientName: `${b.reservation.client.firstName} ${b.reservation.client.lastName}`,
-      clientOrg: b.reservation.client.clientOrg?.organizationName || "N/A",
-      clientRole: b.reservation.client.clientRole?.roleName || "N/A",
+      clientName: b.reservation.client
+        ? `${b.reservation.client.firstName} ${b.reservation.client.lastName}`
+        : walkInDisplayName(b.reservation.notes),
+      clientOrg: b.reservation.client?.clientOrg?.organizationName || "N/A",
+      clientRole: b.reservation.client?.clientRole?.roleName || "N/A",
       eventType: b.reservation.eventType,
       eventDate: b.reservation.eventDate.toISOString().split("T")[0],
       status: b.status.status,
