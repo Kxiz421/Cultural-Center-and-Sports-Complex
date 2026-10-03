@@ -49,7 +49,7 @@ export default function ClientLayout({ children }) {
 
   return (
     <>
-    <div className={cn("flex min-h-screen bg-gray-50", isOrderOfPayment && "print:bg-white")}>
+    <div className={cn("flex min-h-screen bg-muted/40", isOrderOfPayment && "print:bg-white")}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -61,7 +61,7 @@ export default function ClientLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-white transition-transform duration-200 lg:static lg:translate-x-0 print:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:static lg:translate-x-0 print:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >

@@ -539,7 +539,7 @@ function CoordinatorBookingsContent() {
       {/* Detail Dialog */}
       {detailOpen && selectedRes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-card rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Booking Details</h3>
@@ -783,7 +783,7 @@ function CoordinatorBookingsContent() {
           onClick={() => setPreviewDoc(null)}
         >
           <div
-            className="relative max-w-2xl w-full bg-white rounded-lg overflow-hidden"
+            className="relative max-w-2xl w-full bg-card rounded-lg overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-3 border-b">
@@ -813,7 +813,7 @@ function CoordinatorBookingsContent() {
           onClick={() => setResubmitDoc(null)}
         >
           <div
-            className="max-w-md w-full bg-white rounded-lg shadow-lg p-6"
+            className="max-w-md w-full bg-card rounded-lg shadow-lg p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h4 className="font-semibold mb-2">

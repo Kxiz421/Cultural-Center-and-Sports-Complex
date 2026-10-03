@@ -231,7 +231,7 @@ export default function CoordinatorReschedulingPage() {
       {/* Detail Dialog */}
       {detailOpen && selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-card rounded-lg shadow-lg max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Reschedule Request Details</h3>

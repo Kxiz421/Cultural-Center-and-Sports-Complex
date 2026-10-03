@@ -205,7 +205,7 @@ export default function CoordinatorAmenitiesPage() {
       {/* Edit Dialog */}
       {editOpen && editItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg max-w-sm w-full mx-4">
+          <div className="bg-card rounded-lg shadow-lg max-w-sm w-full mx-4">
             <div className="p-6 space-y-4">
               <h3 className="text-lg font-semibold">Update Quantity</h3>
               <div className="space-y-2">

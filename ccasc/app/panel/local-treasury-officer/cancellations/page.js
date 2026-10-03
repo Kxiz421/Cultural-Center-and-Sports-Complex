@@ -63,7 +63,7 @@ function getStatusStyle(status) {
     case "Pending":
       return "bg-yellow-100 text-yellow-800";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
   }
 }
 
@@ -368,7 +368,7 @@ export default function LTOOCancellationsPage() {
                   </span>
                 )}
                 {selectedBooking.daysUntilEvent !== null && selectedBooking.daysUntilEvent < 0 && (
-                  <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">
+                  <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium dark:bg-gray-800 dark:text-gray-200">
                     Event passed
                   </span>
                 )}
