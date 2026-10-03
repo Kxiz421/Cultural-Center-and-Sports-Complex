@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer, History } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -266,6 +266,8 @@ export default function CoordinatorReservationsPage() {
 
   const [historyReservations, setHistoryReservations] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(true);
+  const [historySearch, setHistorySearch] = React.useState("");
+  const [showHistory, setShowHistory] = React.useState(false);
   const [orderOfPayment, setOrderOfPayment] = React.useState(null);
 
   // Search debounce ref
@@ -1093,6 +1095,16 @@ export default function CoordinatorReservationsPage() {
   });
   const total = sumReservationSummaryLines(summaryLines);
 
+  const filteredHistory = React.useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return historyReservations;
+    return historyReservations.filter(
+      (r) =>
+        String(r.clientName || "").toLowerCase().includes(q) ||
+        String(r.eventType || "").toLowerCase().includes(q)
+    );
+  }, [historyReservations, historySearch]);
+
 // Render calendar grid for multi-date selection
   const renderCalendar = () => {
     const year = currentMonth.getFullYear();
@@ -1231,78 +1243,98 @@ export default function CoordinatorReservationsPage() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sports Complex Reservation History</CardTitle>
-          <CardDescription>
-            Every Sports Complex reservation. Generate an Order of Payment for
-            any record.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Date(s)</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {historyLoading ? (
+      <div>
+        <Button variant="outline" onClick={() => setShowHistory((v) => !v)}>
+          <History className="mr-2 size-4" />
+          {showHistory ? "Hide Reservation History" : "Reservation History"}
+        </Button>
+      </div>
+
+      {showHistory && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sports Complex Reservation History</CardTitle>
+            <CardDescription>
+              Every Sports Complex reservation. Generate an Order of Payment for
+              any record.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="relative max-w-md">
+              <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
+              <Input
+                className="pl-8"
+                placeholder="Search by client or event..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+              />
+            </div>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-muted-foreground py-6 text-center"
-                  >
-                    Loading...
-                  </TableCell>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Date(s)</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : historyReservations.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-muted-foreground py-6 text-center"
-                  >
-                    No Sports Complex reservations yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                historyReservations.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.clientName}</TableCell>
-                    <TableCell className="text-sm">{r.eventType}</TableCell>
-                    <TableCell className="text-sm">
-                      {(r.eventDates || [r.eventDate]).join(", ")}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{r.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {formatPhp(r.totalAmount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="whitespace-nowrap"
-                        title="Generate Order of Payment"
-                        onClick={() => setOrderOfPayment(buildOrderOfPayment(r))}
-                      >
-                        <Printer className="mr-2 size-4" />
-                        Order of Payment
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {historyLoading ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-muted-foreground py-6 text-center"
+                    >
+                      Loading...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ) : filteredHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-muted-foreground py-6 text-center"
+                    >
+                      {historyReservations.length === 0
+                        ? "No Sports Complex reservations yet."
+                        : "No reservations match your search."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredHistory.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{r.clientName}</TableCell>
+                      <TableCell className="text-sm">{r.eventType}</TableCell>
+                      <TableCell className="text-sm">
+                        {(r.eventDates || [r.eventDate]).join(", ")}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{r.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {formatPhp(r.totalAmount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="whitespace-nowrap"
+                          title="Generate Order of Payment"
+                          onClick={() => setOrderOfPayment(buildOrderOfPayment(r))}
+                        >
+                          <Printer className="mr-2 size-4" />
+                          Order of Payment
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Toggle: Existing User or Walk-in */}
       <Card>
