@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Building2, Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Dialog,
   DialogContent,
@@ -132,7 +133,7 @@ export default function ClientLayout({ children }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b bg-white px-4 lg:px-6 print:hidden">
+        <header className="flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6 print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -142,6 +143,7 @@ export default function ClientLayout({ children }) {
             <Menu className="size-5" />
           </Button>
           <div className="flex-1" />
+          <ThemeToggle />
         </header>
         <main className={cn("flex-1", isOrderOfPayment ? "p-4 lg:p-6 print:p-0" : "p-4 lg:p-6")}>
           {children}

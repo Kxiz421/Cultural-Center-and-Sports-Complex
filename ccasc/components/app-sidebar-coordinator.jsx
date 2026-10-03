@@ -89,9 +89,9 @@ export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props 
       return venueType === "Sports Complex" ? item : null;
     }
     // The particulars stock module (restock / report damage / generate report)
-    // is only offered to the Sports Complex coordinator.
+    // belongs to the Cultural Center coordinator.
     if (item.url === "/panel/program-coordinator/particulars") {
-      return venueType === "Sports Complex" ? item : null;
+      return venueType === "Cultural Center" ? item : null;
     }
     return item;
   }).filter(Boolean);

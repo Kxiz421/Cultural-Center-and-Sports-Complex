@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Building2, Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Dialog,
   DialogContent,
@@ -129,7 +130,7 @@ export default function ProvincialAgencyLayout({ children }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b bg-white px-4 lg:px-6">
+        <header className="flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -139,6 +140,7 @@ export default function ProvincialAgencyLayout({ children }) {
             <Menu className="size-5" />
           </Button>
           <div className="flex-1" />
+          <ThemeToggle />
         </header>
         <main className="flex-1 p-4 lg:p-6">
           {children}

@@ -12,6 +12,7 @@ import {
   isSportsComplexVenue,
   notifyCulturalCenterCoordinators,
   notifySportsComplexCoordinators,
+  notifyLtooStaff,
 } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
@@ -233,14 +234,23 @@ async function notifyDocumentRecipients({
   reservation,
   clientId,
   eventDateKey,
-  documentTypes,
+  documents,
+  submittedByClient = false,
 }) {
-  if (!reservation || !clientId || !documentTypes?.length) return;
+  if (!reservation || !clientId || !documents?.length) return;
+  const documentTypes = documents.map((d) => d.documentType?.type || "Document");
   const dateLabel = eventDateKey || formatDbDate(reservation.eventDate);
   const typeList = documentTypes.join(" and ");
   const message = `${typeList} submitted for "${reservation.eventType}" on ${dateLabel}${
     reservation.venue?.venue ? ` at ${reservation.venue.venue}` : ""
   }.`;
+
+  // Clicking the notice should land on the coordinator Booking Confirmation
+  // module for this booking, with the first submitted document opened.
+  const firstDocId = documents[0]?.documentId;
+  const coordinatorLink = `/panel/program-coordinator/bookings?reservation=${reservation.reservationId}${
+    firstDocId ? `&doc=${firstDocId}` : ""
+  }`;
 
   const hasCoordinatorDocs = documentTypes.some((name) =>
     /certification|contract of lease/i.test(name)
@@ -250,15 +260,31 @@ async function notifyDocumentRecipients({
       clientId,
       type: "document",
       message: `New ${message}`,
+      link: coordinatorLink,
     });
   }
 
-  // For Sports Complex, notify coordinators when an Official Receipt is uploaded
   const hasReceipt = documentTypes.some((name) =>
     /official receipt/i.test(name)
   );
+  const hasBilling = documentTypes.some((name) =>
+    /billing statement/i.test(name)
+  );
+
+  // For Sports Complex, notify coordinators when an Official Receipt is uploaded
   if (hasReceipt && isSportsComplexVenue(reservation.venueId)) {
     await notifySportsComplexCoordinators({
+      clientId,
+      type: "document",
+      message: `New ${message}`,
+      link: coordinatorLink,
+    });
+  }
+
+  // A client / provincial agency submitting the Billing Statement or Official
+  // Receipt is filing it for treasury review — notify the LTOO.
+  if (submittedByClient && (hasBilling || hasReceipt)) {
+    await notifyLtooStaff({
       clientId,
       type: "document",
       message: `New ${message}`,
@@ -446,6 +472,15 @@ export async function POST(request) {
         createDocuments(tx, toCreate)
       );
 
+      // Billing Statement / Official Receipt submitted for treasury review.
+      await notifyDocumentRecipients({
+        reservation,
+        clientId: reservation.clientId,
+        eventDateKey,
+        documents: created,
+        submittedByClient: scopedDocClientId != null,
+      });
+
       return NextResponse.json(
         {
           success: true,
@@ -543,7 +578,8 @@ export async function POST(request) {
         reservation,
         clientId: reservation.clientId,
         eventDateKey,
-        documentTypes: created.map((d) => d.documentType?.type || "Document"),
+        documents: created,
+        submittedByClient: scopedDocClientId != null,
       });
 
       return NextResponse.json(
@@ -627,7 +663,8 @@ export async function POST(request) {
       reservation,
       clientId: reservation.clientId,
       eventDateKey,
-      documentTypes: created.map((d) => d.documentType?.type || "Document"),
+      documents: created,
+      submittedByClient: scopedDocClientId != null,
     });
 
     return NextResponse.json(

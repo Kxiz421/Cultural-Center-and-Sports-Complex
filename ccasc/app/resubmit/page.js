@@ -228,7 +228,7 @@ export default function ResubmitPage() {
                     }
                   }}
                 >
-                  <SelectTrigger className="text-black">
+                  <SelectTrigger className="text-foreground">
                     <SelectValue placeholder="Select your organization" />
                   </SelectTrigger>
                   <SelectContent>
@@ -246,7 +246,7 @@ export default function ResubmitPage() {
                   placeholder="Enter your organization name"
                   value={formData.otherOrganization}
                   onChange={(e) => setFormData((prev) => ({ ...prev, otherOrganization: e.target.value }))}
-                  className="mt-2 text-black placeholder:text-neutral-500"
+                  className="mt-2 text-foreground placeholder:text-muted-foreground"
                 />
               )}
             </div>

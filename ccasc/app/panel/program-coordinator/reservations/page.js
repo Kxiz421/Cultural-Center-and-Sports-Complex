@@ -858,6 +858,12 @@ export default function CoordinatorReservationsPage() {
           timeSlotId ||
           TIME_SLOT.DAY;
       }
+      // Sports Complex shows a fixed Day slot instead of a select, so the
+      // timeSlotId state can stay empty; fall back to Day (as the order preview
+      // does) or the reservation is rejected for a missing time slot.
+      if (!payloadTimeSlotId) {
+        payloadTimeSlotId = TIME_SLOT.DAY;
+      }
 
       // No packages or particulars for Sports Complex
       const selectedParticulars = [];

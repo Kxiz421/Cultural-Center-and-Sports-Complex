@@ -81,6 +81,7 @@ export async function notifyCulturalCenterCoordinators({
   message,
   type,
   clientId,
+  link,
 }) {
   if (!clientId || !message) return;
 
@@ -92,6 +93,7 @@ export async function notifyCulturalCenterCoordinators({
         type: type || "General",
         staffId,
         clientId: Number(clientId),
+        link: link || null,
         sentAt: new Date(),
       })),
     });
@@ -108,6 +110,7 @@ export async function notifySportsComplexCoordinators({
   message,
   type,
   clientId,
+  link,
 }) {
   if (!clientId || !message) return;
 
@@ -119,10 +122,57 @@ export async function notifySportsComplexCoordinators({
         type: type || "General",
         staffId,
         clientId: Number(clientId),
+        link: link || null,
         sentAt: new Date(),
       })),
     });
   } catch (err) {
     console.error("Failed to notify sports complex coordinator(s):", err);
+  }
+}
+
+/** Staff role name (`StaffRole` table) for the treasury office. */
+const LTOO_ROLE_NAME = "Local Treasury Operations Officer";
+
+export async function getLtooStaffIds() {
+  const officers = await prisma.staff.findMany({
+    where: {
+      status: "Active",
+      staffRole: { roleName: LTOO_ROLE_NAME },
+    },
+    select: { staffId: true },
+  });
+
+  if (officers.length > 0) {
+    return officers.map((o) => o.staffId);
+  }
+
+  // Fallback: the seed treasury officer is typically staff_id 4
+  return [4];
+}
+
+/**
+ * Create inbox notifications for the Local Treasury Operations Officer(s).
+ * Used when clients / provincial agencies submit documents (Billing Statement,
+ * Official Receipt) for treasury review. Notification.staffId is the recipient;
+ * clientId is the related client.
+ */
+export async function notifyLtooStaff({ message, type, clientId, link }) {
+  if (!clientId || !message) return;
+
+  try {
+    const staffIds = await getLtooStaffIds();
+    await prisma.notification.createMany({
+      data: staffIds.map((staffId) => ({
+        message,
+        type: type || "document",
+        staffId,
+        clientId: Number(clientId),
+        link: link || null,
+        sentAt: new Date(),
+      })),
+    });
+  } catch (err) {
+    console.error("Failed to notify treasury officer(s):", err);
   }
 }

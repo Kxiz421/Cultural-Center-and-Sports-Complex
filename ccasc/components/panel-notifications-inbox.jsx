@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function PanelNotificationsInbox({
   const [loading, setLoading] = React.useState(true);
   const [selectedNotif, setSelectedNotif] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
+  const router = useRouter();
 
   const queryKey = audience === "client" ? "clientId" : "staffId";
 
@@ -96,10 +98,16 @@ export function PanelNotificationsInbox({
   }
 
   function handleNotificationClick(notif) {
-    setSelectedNotif(notif);
     if (!notif.isRead) {
       markAsRead(notif.id);
     }
+    // A document notice deep-links into the relevant module; open the target
+    // instead of the generic details dialog.
+    if (notif.link) {
+      router.push(notif.link);
+      return;
+    }
+    setSelectedNotif(notif);
   }
 
   const getIcon = (type) => {

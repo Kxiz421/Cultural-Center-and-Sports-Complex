@@ -111,6 +111,7 @@ export async function GET(request) {
       type: n.type,
       isRead: n.isRead,
       sentAt: n.sentAt.toISOString(),
+      link: n.link || null,
     }));
 
     return noCacheJson(formatted);

@@ -10,6 +10,49 @@ import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
 const SPORTS_VENUE_IDS = [2];
 
+/**
+ * Documents that must be Verified before a booking can be confirmed, keyed by
+ * venue id. Walk-in reservations are exempt (they have no client-uploaded
+ * documents).
+ */
+const REQUIRED_DOCUMENT_TYPES_BY_VENUE = {
+  1: [
+    "Billing Statement",
+    "Official Receipt",
+    "Certification",
+    "Contract of Lease",
+  ],
+  2: ["Official Receipt"],
+};
+
+/** Names of the required document types not yet Verified (latest per type). */
+async function missingVerifiedDocuments(reservationId, venueId) {
+  const required = REQUIRED_DOCUMENT_TYPES_BY_VENUE[Number(venueId)] || [];
+  if (required.length === 0) return [];
+
+  const bookings = await prisma.booking.findMany({
+    where: { reservationId },
+    include: {
+      documents: {
+        include: { documentType: { select: { type: true } } },
+        orderBy: { submittedAt: "desc" },
+      },
+    },
+  });
+
+  const latestByType = new Map();
+  for (const b of bookings) {
+    for (const d of b.documents || []) {
+      const name = d.documentType?.type || "Document";
+      if (!latestByType.has(name)) latestByType.set(name, d);
+    }
+  }
+
+  return required.filter(
+    (name) => latestByType.get(name)?.documentStatus !== "Verified"
+  );
+}
+
 export async function GET(request) {
   const guard = await requireApiAuth(["program coordinator cultural","program coordinator sports","admin"]);
   if (guard.response) return guard.response;
@@ -122,6 +165,7 @@ export async function GET(request) {
           : walkInDisplayName(r.notes),
         clientType: client?.clientRole?.roleName || "N/A",
         venue: r.venue.venue,
+        venueId: r.venueId,
         eventType: r.eventType,
         eventDate: r.eventDate.toISOString().split("T")[0],
         eventDates: allDates,
@@ -173,7 +217,7 @@ export async function PATCH(request) {
     if (action === "confirm") {
       const existing = await prisma.reservation.findUnique({
         where: { reservationId: id },
-        select: { reservationStatus: true },
+        select: { reservationStatus: true, venueId: true, notes: true },
       });
 
       if (!existing) {
@@ -182,6 +226,19 @@ export async function PATCH(request) {
 
       if (existing.reservationStatus === "Confirmed") {
         return NextResponse.json({ error: "This booking has already been confirmed." }, { status: 400 });
+      }
+
+      // Every required document must be approved before the booking is confirmed.
+      if (!isWalkInReservation(existing.notes)) {
+        const missing = await missingVerifiedDocuments(id, existing.venueId);
+        if (missing.length > 0) {
+          return NextResponse.json(
+            {
+              error: `Cannot confirm this booking yet. Approve these documents first: ${missing.join(", ")}.`,
+            },
+            { status: 400 }
+          );
+        }
       }
 
       await prisma.reservation.update({
@@ -222,7 +279,13 @@ export async function PATCH(request) {
     } else if (action === "pay_and_confirm") {
       const existing = await prisma.reservation.findUnique({
         where: { reservationId: id },
-        select: { reservationStatus: true, clientId: true, totalAmount: true },
+        select: {
+          reservationStatus: true,
+          clientId: true,
+          totalAmount: true,
+          venueId: true,
+          notes: true,
+        },
       });
 
       if (!existing) {
@@ -231,6 +294,19 @@ export async function PATCH(request) {
 
       if (existing.reservationStatus === "Confirmed") {
         return NextResponse.json({ error: "This booking has already been confirmed." }, { status: 400 });
+      }
+
+      // Every required document must be approved before the booking is confirmed.
+      if (!isWalkInReservation(existing.notes)) {
+        const missing = await missingVerifiedDocuments(id, existing.venueId);
+        if (missing.length > 0) {
+          return NextResponse.json(
+            {
+              error: `Cannot confirm this booking yet. Approve these documents first: ${missing.join(", ")}.`,
+            },
+            { status: 400 }
+          );
+        }
       }
 
       const paidAmount = Number(existing.totalAmount) || 0;

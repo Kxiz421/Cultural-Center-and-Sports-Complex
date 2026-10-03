@@ -110,6 +110,7 @@ function OrderOfPaymentContent() {
         chargeLines={paymentLines}
         totalAmount={totalAmount}
         eventDates={dateList}
+        venueName={data.venue}
       />
     </div>
   );

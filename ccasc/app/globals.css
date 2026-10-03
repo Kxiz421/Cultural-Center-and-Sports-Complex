@@ -184,6 +184,15 @@
   label {
     @apply text-foreground font-medium;
   }
+  /*
+   * Hide the browser's built-in password reveal/clear controls (Edge/IE).
+   * They render at the right edge of `input[type=password]`, exactly where the
+   * app's own show/hide button sits, so the two overlap and fight each other.
+   */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
   [data-slot="table-cell"] {
     @apply text-foreground;
   }

@@ -2,6 +2,7 @@
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function SiteHeaderCCASC({ title }) {
   return (
@@ -13,6 +14,9 @@ export function SiteHeaderCCASC({ title }) {
           CCASC Administration
         </p>
         <h1 className="text-base font-semibold">{title}</h1>
+      </div>
+      <div className="ml-auto">
+        <ThemeToggle />
       </div>
     </header>
   );

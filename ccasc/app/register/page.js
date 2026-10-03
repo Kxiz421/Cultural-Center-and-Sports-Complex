@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { uploadIdProof } from "@/lib/upload-id-proof";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   TransitionLink,
   useRouteTransition,
@@ -218,6 +219,10 @@ export default function RegisterPage() {
       />
       <div className="absolute inset-0 bg-black/55" aria-hidden />
 
+      <div className="absolute right-4 top-4 z-20 rounded-full border bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur">
+        <ThemeToggle />
+      </div>
+
       <div className="relative z-10 w-full max-w-lg">
         <TransitionLink
           href="/"
@@ -265,7 +270,7 @@ export default function RegisterPage() {
                     value={formData.firstName}
                     onChange={handleChange}
                     placeholder="Juan"
-                    className="text-black placeholder:text-neutral-500"
+                    className="text-foreground placeholder:text-muted-foreground"
                     required
                   />
                 </div>
@@ -277,7 +282,7 @@ export default function RegisterPage() {
                     value={formData.middleName}
                     onChange={handleChange}
                     placeholder="Dela Cruz"
-                    className="text-black placeholder:text-neutral-500"
+                    className="text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
                 <div className="space-y-2">
@@ -290,7 +295,7 @@ export default function RegisterPage() {
                     value={formData.lastName}
                     onChange={handleChange}
                     placeholder="Santos"
-                    className="text-black placeholder:text-neutral-500"
+                    className="text-foreground placeholder:text-muted-foreground"
                     required
                   />
                 </div>
@@ -308,7 +313,7 @@ export default function RegisterPage() {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="juan.santos@email.com"
-                  className="text-black placeholder:text-neutral-500"
+                  className="text-foreground placeholder:text-muted-foreground"
                   required
                 />
               </div>
@@ -322,7 +327,7 @@ export default function RegisterPage() {
                   value={formData.username}
                   onChange={handleChange}
                   placeholder="Choose a username"
-                  className="text-black placeholder:text-neutral-500"
+                  className="text-foreground placeholder:text-muted-foreground"
                 />
               </div>
 
@@ -335,7 +340,7 @@ export default function RegisterPage() {
                   value={formData.contactNumber}
                   onChange={handleChange}
                   placeholder="+63 912 345 6789"
-                  className="text-black placeholder:text-neutral-500"
+                  className="text-foreground placeholder:text-muted-foreground"
                 />
               </div>
 
@@ -352,7 +357,7 @@ export default function RegisterPage() {
                     value={formData.password}
                     onChange={handleChange}
                     placeholder="At least 8 characters"
-                    className="pr-10 text-black placeholder:text-neutral-500"
+                    className="pr-10 text-foreground placeholder:text-muted-foreground"
                     required
                     minLength={8}
                   />
@@ -360,7 +365,7 @@ export default function RegisterPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
@@ -389,7 +394,7 @@ export default function RegisterPage() {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     placeholder="Re-enter your password"
-                    className="pr-10 text-black placeholder:text-neutral-500"
+                    className="pr-10 text-foreground placeholder:text-muted-foreground"
                     required
                     minLength={8}
                   />
@@ -397,7 +402,7 @@ export default function RegisterPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                     onClick={() => setShowConfirmPassword((v) => !v)}
                     aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                   >
@@ -433,7 +438,7 @@ export default function RegisterPage() {
                       }
                     }}
                   >
-                    <SelectTrigger className="text-black">
+                    <SelectTrigger className="text-foreground">
                       <SelectValue placeholder="Select your organization" />
                     </SelectTrigger>
                     <SelectContent>
@@ -452,7 +457,7 @@ export default function RegisterPage() {
                     value={formData.otherOrganization}
                     onChange={handleChange}
                     placeholder="Enter your organization name"
-                    className="mt-2 text-black placeholder:text-neutral-500"
+                    className="mt-2 text-foreground placeholder:text-muted-foreground"
                   />
                 )}
               </div>

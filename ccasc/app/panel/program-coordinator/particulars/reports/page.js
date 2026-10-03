@@ -3,7 +3,7 @@
 import { ParticularsReportScreen } from "@/components/particulars-report-screen";
 
 /**
- * Program Coordinator — Sports Complex: particulars stock report.
+ * Program Coordinator — Cultural Center: particulars stock report.
  *
  * Same document and actions as the admin report page, reached from the
  * "Generate Report" button of the coordinator's particulars module, and using

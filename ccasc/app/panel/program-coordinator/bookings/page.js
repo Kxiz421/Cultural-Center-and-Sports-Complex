@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -26,7 +27,29 @@ function formatPhp(amount) {
   }).format(amount);
 }
 
-export default function CoordinatorBookingsPage() {
+/** Required-and-verified documents per venue (walk-ins are exempt). */
+const REQUIRED_DOCUMENT_TYPES_BY_VENUE = {
+  1: ["Billing Statement", "Official Receipt", "Certification", "Contract of Lease"],
+  2: ["Official Receipt"],
+};
+
+function missingRequiredDocs(res) {
+  if (!res || res.isWalkIn) return [];
+  const required = REQUIRED_DOCUMENT_TYPES_BY_VENUE[Number(res.venueId)] || [];
+  const docs = res.documents || [];
+  return required.filter(
+    (name) => !docs.some((d) => d.type === name && d.status === "Verified")
+  );
+}
+
+function requiredDocsVerified(res) {
+  return missingRequiredDocs(res).length === 0;
+}
+
+function CoordinatorBookingsContent() {
+  const searchParams = useSearchParams();
+  const deepLinkReservation = searchParams.get("reservation");
+  const deepLinkDoc = searchParams.get("doc");
   const [reservations, setReservations] = useState([]);
   const [historyReservations, setHistoryReservations] = useState([]);
   const [cancelledReservations, setCancelledReservations] = useState([]);
@@ -70,6 +93,23 @@ export default function CoordinatorBookingsPage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // Deep link from a document-submission notification: open that booking's
+  // detail (and the submitted document) once the list has loaded.
+  useEffect(() => {
+    if (!deepLinkReservation || reservations.length === 0) return;
+    const match = reservations.find((r) => r.id === `RES-${deepLinkReservation}`);
+    if (!match) return;
+    setSelectedRes(match);
+    setDetailOpen(true);
+    if (deepLinkDoc) {
+      const doc = (match.documents || []).find(
+        (d) => String(d.id) === String(deepLinkDoc)
+      );
+      if (doc) setPreviewDoc(doc);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkReservation, deepLinkDoc, reservations]);
 
   async function loadHistory() {
     setHistoryLoading(true);
@@ -126,13 +166,16 @@ export default function CoordinatorBookingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reservationId, action: "confirm" }),
       });
-      if (!res.ok) throw new Error("Failed to confirm");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to confirm");
+      }
       toast.success("Booking confirmed successfully");
       refreshBookings();
       notifyPanelNotificationsUpdated();
       setDetailOpen(false);
     } catch (err) {
-      toast.error("Failed to confirm booking");
+      toast.error(err.message || "Failed to confirm booking");
     }
   }
 
@@ -151,13 +194,18 @@ export default function CoordinatorBookingsPage() {
           performedByName,
         }),
       });
-      if (!res.ok) throw new Error("Failed to record payment and confirm");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.error || "Failed to record payment and confirm"
+        );
+      }
       toast.success("Payment recorded and booking confirmed successfully");
       refreshBookings();
       notifyPanelNotificationsUpdated();
       setDetailOpen(false);
     } catch (err) {
-      toast.error("Failed to record payment and confirm booking");
+      toast.error(err.message || "Failed to record payment and confirm booking");
     } finally {
       setSaving(false);
     }
@@ -688,14 +736,7 @@ export default function CoordinatorBookingsPage() {
                       </Button>
                       <Button
                         className="flex-1"
-                        disabled={
-                          saving ||
-                          (selectedRes.isWalkIn
-                            ? false
-                            : !(selectedRes.documents || []).some(
-                                (d) => d.type === "Official Receipt" && d.status === "Verified"
-                              ))
-                        }
+                        disabled={saving || !requiredDocsVerified(selectedRes)}
                         onClick={() => handlePayAndConfirm(selectedRes.id.replace("RES-", ""))}
                       >
                         {saving ? "Processing..." : "Record Payment & Confirm"}
@@ -706,7 +747,9 @@ export default function CoordinatorBookingsPage() {
                   <>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <AlertTriangle className="size-3" />
-                      Confirm only if physical copies of certification and contract of lease are verified.
+                      Confirm only after every required document is approved.
+                      {missingRequiredDocs(selectedRes).length > 0 &&
+                        ` Pending: ${missingRequiredDocs(selectedRes).join(", ")}.`}
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -718,6 +761,7 @@ export default function CoordinatorBookingsPage() {
                       </Button>
                       <Button
                         className="flex-1"
+                        disabled={saving || !requiredDocsVerified(selectedRes)}
                         onClick={() => handleConfirm(selectedRes.id.replace("RES-", ""))}
                       >
                         <CheckCircle2 className="mr-2 size-4" />
@@ -803,5 +847,13 @@ export default function CoordinatorBookingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CoordinatorBookingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <CoordinatorBookingsContent />
+    </Suspense>
   );
 }

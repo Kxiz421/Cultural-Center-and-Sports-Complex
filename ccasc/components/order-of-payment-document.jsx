@@ -43,6 +43,18 @@ export const OOP_LETTERHEAD_CONTACT = [
   "Tel. No. (083) 228-9314 • Facebook: SouthCot Gym",
 ];
 
+/** Same office/address, but the Sports Complex prints its own facility + page. */
+export const OOP_LETTERHEAD_CONTACT_SPORTS = [
+  "Alunan Ave., Brgy. Zone IV, City of Koronadal",
+  "Tel. No. (083) 228-9314 • Facebook: South Cotabato Sports Complex",
+];
+
+/** The facility line on the letterhead, per venue. */
+export const OOP_FACILITY = {
+  CULTURAL_CENTER: "South Cotabato Gymnasium and Cultural Center",
+  SPORTS_COMPLEX: "South Cotabato Sports Complex",
+};
+
 /** "Inclusive: Free use of the ff. amenities/facilities" box. */
 export const OOP_INCLUSIVE = [
   "Aircon",
@@ -239,6 +251,9 @@ export default function OrderOfPaymentDocument({
   chargeLines = [],
   totalAmount = 0,
   eventDates = [],
+  // Venue the reservation is for. Drives the letterhead facility line and the
+  // Facebook contact so a Sports Complex booking doesn't print the Gymnasium.
+  venueName = "",
   signatories = OOP_SIGNATORIES,
   // The "Prepared by" line. Defaults to the currently signed-in user so the
   // printed form shows whoever generated it, with their role underneath.
@@ -246,6 +261,17 @@ export default function OrderOfPaymentDocument({
 }) {
   const currentUser = useCurrentUser();
   const prepared = preparedBy || currentUser;
+
+  // Venue-specific letterhead: the last office line names the facility, and the
+  // Sports Complex has its own Facebook page.
+  const isSportsComplex = /sports\s*complex/i.test(String(venueName));
+  const officeLines = [
+    ...OOP_LETTERHEAD_OFFICES.slice(0, -1),
+    isSportsComplex ? OOP_FACILITY.SPORTS_COMPLEX : OOP_FACILITY.CULTURAL_CENTER,
+  ];
+  const contactLines = isSportsComplex
+    ? OOP_LETTERHEAD_CONTACT_SPORTS
+    : OOP_LETTERHEAD_CONTACT;
 
   const lines = React.useMemo(
     () =>
@@ -295,12 +321,12 @@ export default function OrderOfPaymentDocument({
               {line}
             </p>
           ))}
-          {OOP_LETTERHEAD_OFFICES.map((line) => (
+          {officeLines.map((line) => (
             <p key={line} className="text-[11px] font-bold uppercase">
               {line}
             </p>
           ))}
-          {OOP_LETTERHEAD_CONTACT.map((line) => (
+          {contactLines.map((line) => (
             <p key={line}>{line}</p>
           ))}
         </div>

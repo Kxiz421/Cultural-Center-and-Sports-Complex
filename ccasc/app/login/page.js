@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useRouteTransition } from "@/components/route-transition";
 import {
   Card,
@@ -356,6 +357,9 @@ export default function LoginPage() {
         className="absolute inset-0 bg-black/55"
         aria-hidden
       />
+      <div className="absolute right-4 top-4 z-20 rounded-full border bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur">
+        <ThemeToggle />
+      </div>
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
         <div className="mb-8 flex max-w-2xl flex-col items-center px-2 text-center">
           <Image
@@ -389,7 +393,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email or username"
-                className="text-black placeholder:text-neutral-500"
+                className="text-foreground placeholder:text-muted-foreground"
               />
             </div>
             <div className="space-y-2">
@@ -402,13 +406,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="pr-10 text-black placeholder:text-neutral-500"
+                  className="pr-10 text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                  className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                   onClick={() => setShowLoginPassword((v) => !v)}
                   aria-label={
                     showLoginPassword ? "Hide password" : "Show password"
@@ -475,7 +479,7 @@ export default function LoginPage() {
                         <Mail className="text-muted-foreground absolute top-2.5 left-2 size-4" />
                         <Input
                           id="recover-email"
-                          className="pl-8 text-black placeholder:text-neutral-500"
+                          className="pl-8 text-foreground placeholder:text-muted-foreground"
                           type="email"
                           value={recoverEmail}
                           onChange={(e) => setRecoverEmail(e.target.value)}
@@ -516,7 +520,7 @@ export default function LoginPage() {
                               value={digit}
                               onChange={(e) => handleOtpChange(i, e)}
                               onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                              className="border-input focus-visible:ring-ring h-12 w-10 rounded-md border-2 text-center text-lg font-semibold tracking-widest text-black tabular-nums shadow-sm sm:h-14 sm:w-11 sm:text-xl"
+                              className="border-input focus-visible:ring-ring h-12 w-10 rounded-md border-2 text-center text-lg font-semibold tracking-widest text-foreground tabular-nums shadow-sm sm:h-14 sm:w-11 sm:text-xl"
                             />
                           ))}
                         </div>
@@ -542,13 +546,13 @@ export default function LoginPage() {
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             placeholder="Enter a new password"
-                            className="pr-10 text-black placeholder:text-neutral-500"
+                            className="pr-10 text-foreground placeholder:text-muted-foreground"
                           />
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                            className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                             onClick={() => setShowNewPassword((v) => !v)}
                             aria-label={
                               showNewPassword
@@ -579,13 +583,13 @@ export default function LoginPage() {
                               setConfirmPassword(e.target.value)
                             }
                             placeholder="Confirm your new password"
-                            className="pr-10 text-black placeholder:text-neutral-500"
+                            className="pr-10 text-foreground placeholder:text-muted-foreground"
                           />
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                            className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                             onClick={() =>
                               setShowConfirmPassword((v) => !v)
                             }

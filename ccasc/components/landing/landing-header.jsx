@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CalendarCheck, ChevronDown, LogIn, UserPlus } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TransitionLink } from "@/components/route-transition";
 import { HERO_STATS, NAV_LINKS } from "@/lib/landing-content";
 import { useLandingFacilities } from "@/components/landing/use-facilities";
@@ -51,6 +52,7 @@ function LandingHeader() {
             screen while the auth route loads, so pressing these reads as one
             motion instead of an instant page swap. */}
         <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggle />
           <TransitionLink href="/login">
             <Button size="sm" variant="ghost">
               Sign in

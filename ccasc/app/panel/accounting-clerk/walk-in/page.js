@@ -939,6 +939,12 @@ export default function WalkInReservationPage() {
           timeSlotId ||
           TIME_SLOT.DAY;
       }
+      // Sports Complex shows a fixed Day slot instead of a select, so the
+      // timeSlotId state stays empty; fall back to Day (matching the order
+      // preview) or the reservation is rejected for a missing time slot.
+      if (!payloadTimeSlotId) {
+        payloadTimeSlotId = TIME_SLOT.DAY;
+      }
 
       let selectedParticulars = [];
       let selectedPackageId = parseReservationPackageId(packageId);
@@ -1115,6 +1121,8 @@ export default function WalkInReservationPage() {
         chargeLines: summaryLines,
         totalAmount: total,
         eventDates: sortedDates,
+        venueName:
+          VENUES.find((v) => String(v.id) === String(venueId))?.name || "",
       });
 
       // Reset form
@@ -1433,6 +1441,7 @@ const renderPerDateFacilities = (date, cust) => {
             chargeLines={savedOrder.chargeLines}
             totalAmount={savedOrder.totalAmount}
             eventDates={savedOrder.eventDates}
+            venueName={savedOrder.venueName}
           />
         </div>
       )}

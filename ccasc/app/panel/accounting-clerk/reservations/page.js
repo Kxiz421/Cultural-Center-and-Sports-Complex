@@ -73,6 +73,7 @@ function buildOrderOfPayment(reservation) {
     chargeLines: buildPaymentLines(reservation, dateList),
     totalAmount: Number(reservation.totalAmount) || 0,
     eventDates: dateList,
+    venueName: reservation.venue,
   };
 }
 
@@ -164,6 +165,7 @@ export default function AccountingReservationsPage() {
             chargeLines={orderOfPayment.chargeLines}
             totalAmount={orderOfPayment.totalAmount}
             eventDates={orderOfPayment.eventDates}
+            venueName={orderOfPayment.venueName}
           />
         </div>
       )}

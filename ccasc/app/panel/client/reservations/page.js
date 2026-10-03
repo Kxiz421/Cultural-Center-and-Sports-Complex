@@ -927,6 +927,12 @@ export default function ClientReservationsPage() {
         form.timeSlotId ||
         TIME_SLOT.DAY;
     }
+    // Sports Complex shows a fixed Day slot instead of a select, so the
+    // timeSlotId can stay empty; fall back to Day (as the order preview does)
+    // or the reservation is rejected for a missing time slot.
+    if (!payloadTimeSlotId) {
+      payloadTimeSlotId = TIME_SLOT.DAY;
+    }
 
     const advanceCheck = validateAdvanceBookingDates(sortedDates);
     if (!advanceCheck.valid) {

@@ -34,11 +34,6 @@ const navMain = [
     icon: Wallet,
   },
   {
-    title: "Notifications",
-    url: "/panel/local-treasury-officer/notifications",
-    icon: BellRing,
-  },
-  {
     title: "Announcements",
     url: "/panel/local-treasury-officer/announcements",
     icon: Megaphone,
@@ -53,6 +48,11 @@ const navMain = [
     title: "Documents",
     url: "/panel/local-treasury-officer/documents",
     icon: FileText,
+  },
+  {
+    title: "Notifications",
+    url: "/panel/local-treasury-officer/notifications",
+    icon: BellRing,
   },
   {
     title: "Report Generation",

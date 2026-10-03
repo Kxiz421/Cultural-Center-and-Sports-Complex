@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
 import {
   Avatar,
   AvatarImage,
@@ -664,7 +664,7 @@ export default function UserManagementPage() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                      className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? "Hide password" : "Show password"}
                       aria-pressed={showPassword}
@@ -695,7 +695,7 @@ export default function UserManagementPage() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                      className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                       onClick={() => setShowConfirmPassword((v) => !v)}
                       aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                       aria-pressed={showConfirmPassword}
@@ -1191,7 +1191,7 @@ export default function UserManagementPage() {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                         onClick={() => setShowNewPassword((v) => !v)}
                       >
                         {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -1212,7 +1212,7 @@ export default function UserManagementPage() {
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
                         onClick={() => setShowConfirmNewPassword((v) => !v)}
                       >
                         {showConfirmNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -1463,6 +1463,15 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenProfile(u)}
+                          title="Update user details"
+                        >
+                          <Pencil className="size-4" />
+                          Update
+                        </Button>
                         {u.type === "client" && (
                           <>
                             <Button

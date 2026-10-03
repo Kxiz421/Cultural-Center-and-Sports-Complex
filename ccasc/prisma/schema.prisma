@@ -533,6 +533,9 @@ model Notification {
   // staff-targeted notifications (e.g. an announcement broadcast to a staff
   // role), where staffId is the recipient instead of the sender.
   clientId       Int?     @map("client_id")
+  // Optional deep link the inbox navigates to when the row is clicked (e.g.
+  // a submitted-document notice -> the coordinator Booking Confirmation page).
+  link           String?  @map("link") @db.VarChar(255)
 
   staff  Staff   @relation("StaffNotifications", fields: [staffId], references: [staffId])
   client Client? @relation(fields: [clientId], references: [clientId])
