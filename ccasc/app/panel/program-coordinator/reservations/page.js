@@ -22,8 +22,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
-import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock } from "lucide-react";
+import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer } from "lucide-react";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -50,6 +58,8 @@ import {
   MIN_ADVANCE_BOOKING_DAYS,
 } from "@/lib/reservation-advance-booking";
 import { excludeArchivedFacilities } from "@/lib/facility-status";
+import OrderOfPaymentDocument from "@/components/order-of-payment-document";
+import { buildPaymentLines } from "@/lib/reservation-payment-lines";
 
 const VENUES = [
   { id: 2, name: "Sports Complex" },
@@ -62,6 +72,49 @@ const TIME_SLOTS = TIME_SLOT_OPTIONS.map((slot) => ({
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
+
+function formatPhp(amount) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+}
+
+function formatActivityDate(dateStr) {
+  if (!dateStr) return "";
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** Build the Order of Payment props from a GET /api/reservations row. */
+function buildOrderOfPayment(reservation) {
+  if (!reservation) return null;
+  const dateList = [...(reservation.eventDates || [reservation.eventDate])]
+    .filter(Boolean)
+    .sort();
+  return {
+    controlNumber: reservation.id,
+    date: new Date().toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }),
+    clientName: reservation.clientName,
+    address: "",
+    contactNumber: "",
+    activityName: reservation.eventType,
+    activityDate: dateList.map(formatActivityDate).join(", "),
+    participants: "",
+    chargeLines: buildPaymentLines(reservation, dateList),
+    totalAmount: Number(reservation.totalAmount) || 0,
+    eventDates: dateList,
+    venueName: reservation.venue,
+  };
+}
 
 /**
  * Get the correct facility rate based on the selected time slot.
@@ -211,9 +264,38 @@ export default function CoordinatorReservationsPage() {
   const [availability, setAvailability] = React.useState({});
   const [availLoading, setAvailLoading] = React.useState(false);
 
+  const [historyReservations, setHistoryReservations] = React.useState([]);
+  const [historyLoading, setHistoryLoading] = React.useState(true);
+  const [orderOfPayment, setOrderOfPayment] = React.useState(null);
+
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
   const submitLockRef = React.useRef(false);
+
+  // Reservation history — every Sports Complex reservation (venueId 2).
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/reservations");
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        if (!cancelled) {
+          setHistoryReservations(list.filter((r) => Number(r.venueId) === 2));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load reservation history:", err);
+        }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    }
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Load facilities on mount
   React.useEffect(() => {
@@ -908,6 +990,35 @@ export default function CoordinatorReservationsPage() {
       const data = await res.json();
       toast.success(`Reservation ${data.id} created successfully!${isExistingUser && selectedClient ? ` Linked to ${selectedClient.fullName}.` : ''}`);
 
+      // Generate the Order of Payment for this reservation (same flow as the
+      // Cultural Center / Accounting Clerk) so it can be printed and handed over.
+      setOrderOfPayment({
+        controlNumber: data.id,
+        date: new Date().toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }),
+        clientName:
+          isExistingUser && selectedClient
+            ? selectedClient.fullName
+            : clientName || "Walk-in Client",
+        address: "",
+        contactNumber:
+          isExistingUser && selectedClient
+            ? selectedClient.contact || ""
+            : clientContact || "",
+        activityName: eventType,
+        activityDate: sortedDates.map(formatActivityDate).join(", "),
+        participants: "",
+        chargeLines: summaryLines,
+        totalAmount: total,
+        eventDates: sortedDates,
+        venueName:
+          VENUES.find((v) => String(v.id) === String(venueId))?.name ||
+          "Sports Complex",
+      });
+
       // Reset form
       setShowOrder(false);
       setVenueId("2");
@@ -1076,6 +1187,122 @@ export default function CoordinatorReservationsPage() {
           Create reservations on behalf of walk-in clients. Toggle to search for existing users or enter new client details manually.
         </p>
       </div>
+
+      {orderOfPayment && (
+        <div className="flex flex-col gap-4">
+          <div className="no-print flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+            <div>
+              <p className="font-medium">
+                Order of Payment ready — {orderOfPayment.controlNumber}
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Print this and hand it to the client for payment at the
+                Accounting Office.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setOrderOfPayment(null)}
+              >
+                Close
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="mr-2 size-4" />
+                Print Order of Payment
+              </Button>
+            </div>
+          </div>
+
+          <OrderOfPaymentDocument
+            controlNumber={orderOfPayment.controlNumber}
+            date={orderOfPayment.date}
+            clientName={orderOfPayment.clientName}
+            address={orderOfPayment.address}
+            contactNumber={orderOfPayment.contactNumber}
+            activityName={orderOfPayment.activityName}
+            activityDate={orderOfPayment.activityDate}
+            participants={orderOfPayment.participants}
+            chargeLines={orderOfPayment.chargeLines}
+            totalAmount={orderOfPayment.totalAmount}
+            eventDates={orderOfPayment.eventDates}
+            venueName={orderOfPayment.venueName}
+          />
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sports Complex Reservation History</CardTitle>
+          <CardDescription>
+            Every Sports Complex reservation. Generate an Order of Payment for
+            any record.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Date(s)</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {historyLoading ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-muted-foreground py-6 text-center"
+                  >
+                    Loading...
+                  </TableCell>
+                </TableRow>
+              ) : historyReservations.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-muted-foreground py-6 text-center"
+                  >
+                    No Sports Complex reservations yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                historyReservations.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.clientName}</TableCell>
+                    <TableCell className="text-sm">{r.eventType}</TableCell>
+                    <TableCell className="text-sm">
+                      {(r.eventDates || [r.eventDate]).join(", ")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{r.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {formatPhp(r.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="whitespace-nowrap"
+                        title="Generate Order of Payment"
+                        onClick={() => setOrderOfPayment(buildOrderOfPayment(r))}
+                      >
+                        <Printer className="mr-2 size-4" />
+                        Order of Payment
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Toggle: Existing User or Walk-in */}
       <Card>
