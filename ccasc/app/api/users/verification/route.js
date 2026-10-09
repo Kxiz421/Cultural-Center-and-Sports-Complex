@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { sendAccountVerificationEmail } from "@/lib/email";
 
 
 import { requireApiAuth } from "@/lib/api-auth";
@@ -42,10 +43,22 @@ export async function PATCH(request) {
       if (verificationStatus === "Declined" && remarks) {
         updateData.remarks = remarks;
       }
-      await prisma.client.update({
+      const client = await prisma.client.update({
         where: { clientId: id },
         data: updateData,
       });
+
+      if (
+        verificationStatus === "Verified" ||
+        verificationStatus === "Declined"
+      ) {
+        await sendAccountVerificationEmail(client.email, {
+          firstName: client.firstName,
+          lastName: client.lastName,
+          status: verificationStatus,
+          remarks: client.remarks,
+        });
+      }
     } else {
       return NextResponse.json(
         { error: "Only client accounts can have verification status" },

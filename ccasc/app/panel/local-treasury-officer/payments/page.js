@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/pagination";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -243,10 +244,13 @@ function EventDatesDisplay({ eventDate, eventDates, className, iconSize = 3 }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
 export default function LTOOPaymentsPage() {
   const [reservations, setReservations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
   const [paymentFilter, setPaymentFilter] = React.useState("all");
   const [recordOpen, setRecordOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -284,7 +288,7 @@ export default function LTOOPaymentsPage() {
     setLoading(true);
     try {
       // Get all reservations with payment info from the bookings endpoint
-      const res = await fetch("/api/ltoo/payments?bookings=true");
+      const res = await fetch("/api/ltoo/payments?bookings=true&venueId=1");
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to load reservations");
@@ -343,6 +347,17 @@ export default function LTOOPaymentsPage() {
     }
     return items;
   }, [enrichedReservations, search, paymentFilter]);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, paymentFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReservations.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedReservations = filteredReservations.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const pendingDiscount = React.useMemo(() => {
     if (!discountEnabled || !selectedReservation) return 0;
@@ -792,7 +807,7 @@ export default function LTOOPaymentsPage() {
   };
 
   const refreshSelectedReservation = async () => {
-    const res = await fetch("/api/ltoo/payments?bookings=true");
+    const res = await fetch("/api/ltoo/payments?bookings=true&venueId=1");
     const data = await res.json();
     if (!res.ok || !Array.isArray(data)) return;
     setReservations(data);
@@ -990,7 +1005,7 @@ export default function LTOOPaymentsPage() {
                   : "No reservations found."}
                 </TableCell></TableRow>
               ) : (
-                filteredReservations.map((r) => (
+                paginatedReservations.map((r) => (
                   <TableRow
                     key={r.reservationId || r.id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -1061,6 +1076,13 @@ export default function LTOOPaymentsPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredReservations.length}
+            onPageChange={setPage}
+            itemLabel="reservations"
+          />
         </CardContent>
       </Card>
 

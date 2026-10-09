@@ -121,9 +121,32 @@ export async function POST(request) {
       );
     }
 
+    const newName = String(data.name).trim();
+    const newVenueId = parseInt(data.venueId, 10);
+    if (!newName) {
+      return NextResponse.json(
+        { error: "Facility name is required" },
+        { status: 400 }
+      );
+    }
+
+    const duplicate = await prisma.facility.findFirst({
+      where: { venueId: newVenueId, facilityName: { equals: newName } },
+      select: { facilityId: true },
+    });
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          error:
+            "A facility with this name already exists in the selected venue.",
+        },
+        { status: 409 }
+      );
+    }
+
     const facility = await prisma.facility.create({
       data: {
-        facilityName: data.name,
+        facilityName: newName,
         description: data.description,
         capacity: parseInt(data.capacity) || 0,
         rateId: parseInt(data.rateId),
@@ -183,6 +206,18 @@ export async function PUT(request) {
       );
     }
 
+    const facilityIdNum = parseInt(facilityId, 10);
+    const existingFacility = await prisma.facility.findUnique({
+      where: { facilityId: facilityIdNum },
+      select: { venueId: true, facilityName: true },
+    });
+    if (!existingFacility) {
+      return NextResponse.json(
+        { error: "Facility not found" },
+        { status: 404 }
+      );
+    }
+
     // Update rate if provided
     if (rateDay !== undefined || rateNight !== undefined) {
       const facility = await prisma.facility.findUnique({
@@ -202,7 +237,41 @@ export async function PUT(request) {
 
     // Update facility fields (only if there are changes)
     const updateData = {};
-    if (name !== undefined) updateData.facilityName = name;
+    if (name !== undefined) {
+      const trimmedName = String(name).trim();
+      if (!trimmedName) {
+        return NextResponse.json(
+          { error: "Facility name is required" },
+          { status: 400 }
+        );
+      }
+      const targetVenueId =
+        venueId !== undefined ? parseInt(venueId, 10) : existingFacility.venueId;
+      const nameChanged =
+        trimmedName.toLowerCase() !==
+        existingFacility.facilityName.trim().toLowerCase();
+      const venueChanged = targetVenueId !== existingFacility.venueId;
+      if (nameChanged || venueChanged) {
+        const duplicate = await prisma.facility.findFirst({
+          where: {
+            venueId: targetVenueId,
+            facilityName: { equals: trimmedName },
+            facilityId: { not: facilityIdNum },
+          },
+          select: { facilityId: true },
+        });
+        if (duplicate) {
+          return NextResponse.json(
+            {
+              error:
+                "A facility with this name already exists in the selected venue.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+      updateData.facilityName = trimmedName;
+    }
     if (description !== undefined) updateData.description = description;
     // capacity is required in schema - always include it
     if (capacity !== undefined) {

@@ -53,6 +53,8 @@ import {
   Upload,
 } from "lucide-react";
 import { formatPhp } from "@/lib/utils";
+import { Pagination } from "@/components/pagination";
+import { isDisplayableImage } from "@/components/facility-details-dialog";
 
 const STATUS_OPTIONS = [
   { id: 1, name: "Available" },
@@ -66,11 +68,15 @@ const VENUE_OPTIONS = [
   { id: 2, name: "Sports Complex" },
 ];
 
+const PAGE_SIZE = 10;
+
 export default function FacilitiesPage() {
   const [facilities, setFacilities] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState("");
   const [venueFilter, setVenueFilter] = React.useState("all");
+  const [culturalPage, setCulturalPage] = React.useState(1);
+  const [sportsPage, setSportsPage] = React.useState(1);
   const [editOpen, setEditOpen] = React.useState(false);
   const [editFacility, setEditFacility] = React.useState(null);
   const [editForm, setEditForm] = React.useState({
@@ -137,32 +143,41 @@ export default function FacilitiesPage() {
     }
   }
 
-  const handleUploadImage = async (file, targetForm) => {
-    if (!file) return;
+  const handleUploadImages = async (files, targetForm) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const uploaded = [];
+      for (const file of list) {
+        const formData = new FormData();
+        formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to upload image");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed to upload ${file.name}`);
+        }
+
+        const data = await res.json();
+        uploaded.push(data.url);
       }
-
-      const data = await res.json();
 
       if (targetForm === "edit") {
-        setEditForm((f) => ({ ...f, images: [...f.images, data.url] }));
+        setEditForm((f) => ({ ...f, images: [...f.images, ...uploaded] }));
       } else {
-        setAddForm((f) => ({ ...f, images: [...f.images, data.url] }));
+        setAddForm((f) => ({ ...f, images: [...f.images, ...uploaded] }));
       }
 
-      toast.success("Image uploaded successfully");
+      toast.success(
+        uploaded.length > 1
+          ? `${uploaded.length} images uploaded successfully`
+          : "Image uploaded successfully"
+      );
     } catch (err) {
       toast.error(err.message || "Failed to upload image");
     } finally {
@@ -180,7 +195,7 @@ export default function FacilitiesPage() {
       rateDaily: String(facility.rateDaily || ""),
       venueId: String(facility.venueId || ""),
       statusId: String(facility.statusId || ""),
-      images: [...(facility.images || [])],
+      images: (facility.images || []).filter(isDisplayableImage),
     });
     setEditOpen(true);
   };
@@ -281,9 +296,28 @@ export default function FacilitiesPage() {
     }
   };
 
+  const findDuplicateFacility = (name, venueId, excludeFacilityId = null) => {
+    const normalized = String(name || "").trim().toLowerCase();
+    if (!normalized || venueId === "" || venueId == null) return null;
+    return (
+      facilities.find(
+        (f) =>
+          String(f.venueId) === String(venueId) &&
+          String(f.facilityId) !== String(excludeFacilityId) &&
+          String(f.name || "").trim().toLowerCase() === normalized
+      ) || null
+    );
+  };
+
   const handleAddFacility = async () => {
     if (!addForm.name || !addForm.venueId) {
       toast.error("Facility name and venue are required");
+      return;
+    }
+    if (findDuplicateFacility(addForm.name, addForm.venueId)) {
+      toast.error(
+        "A facility with this name already exists in the selected venue."
+      );
       return;
     }
 
@@ -365,7 +399,18 @@ export default function FacilitiesPage() {
   const culturalFacilities = filtered.filter((f) => f.venueId === 1);
   const sportsFacilities = filtered.filter((f) => f.venueId === 2);
 
-  const renderFacilityTable = (facilitiesList, title, Icon, color, hideCapacity) => {
+  React.useEffect(() => {
+    setCulturalPage(1);
+    setSportsPage(1);
+  }, [query, venueFilter]);
+
+  const renderFacilityTable = (facilitiesList, title, Icon, color, hideCapacity, page, setPage) => {
+    const totalPages = Math.max(1, Math.ceil(facilitiesList.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const list = facilitiesList.slice(
+      (safePage - 1) * PAGE_SIZE,
+      safePage * PAGE_SIZE
+    );
     return (
       <Card className="flex flex-col">
         <CardHeader className={`border-b pb-3 ${color}`}>
@@ -405,11 +450,23 @@ export default function FacilitiesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                facilitiesList.map((f) => {
+                list.map((f) => {
                   const statusName = getStatusName(f.statusId);
+                  const thumb = (f.images || []).find(isDisplayableImage);
                   return (
                     <TableRow key={f.id}>
-                      <TableCell className="font-medium">{f.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {thumb && (
+                            <img
+                              src={thumb}
+                              alt={f.name}
+                              className="size-8 shrink-0 rounded object-cover"
+                            />
+                          )}
+                          <span>{f.name}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className="tabular-nums">
                         {formatPhp(f.rateHourly)}
                       </TableCell>
@@ -479,6 +536,14 @@ export default function FacilitiesPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={facilitiesList.length}
+            onPageChange={setPage}
+            itemLabel="facilities"
+            className="px-4 pb-2"
+          />
         </CardContent>
       </Card>
     );
@@ -673,12 +738,10 @@ export default function FacilitiesPage() {
                     id="add-image-file"
                     type="file"
                     accept="image/*"
+                    multiple
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        handleUploadImage(file, "add");
-                      }
+                      handleUploadImages(e.target.files, "add");
                       e.target.value = "";
                     }}
                   />
@@ -699,6 +762,12 @@ export default function FacilitiesPage() {
                 onClick={() => {
                   if (!addForm.name || !addForm.venueId) {
                     toast.error("Facility name and venue are required");
+                    return;
+                  }
+                  if (findDuplicateFacility(addForm.name, addForm.venueId)) {
+                    toast.error(
+                      "A facility with this name already exists in the selected venue."
+                    );
                     return;
                   }
                   setConfirmAction({ type: "add" });
@@ -770,14 +839,19 @@ export default function FacilitiesPage() {
             culturalFacilities,
             "Cultural Center",
             Building2,
-            "border-l-4 border-l-blue-500"
+            "border-l-4 border-l-blue-500",
+            false,
+            culturalPage,
+            setCulturalPage
           )}
           {renderFacilityTable(
             sportsFacilities,
             "Sports Complex",
             Trophy,
             "border-l-4 border-l-orange-500",
-            true
+            true,
+            sportsPage,
+            setSportsPage
           )}
         </div>
       )}
@@ -953,12 +1027,10 @@ export default function FacilitiesPage() {
                     id="edit-image-file"
                     type="file"
                     accept="image/*"
+                    multiple
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        handleUploadImage(file, "edit");
-                      }
+                      handleUploadImages(e.target.files, "edit");
                       e.target.value = "";
                     }}
                   />
@@ -979,6 +1051,28 @@ export default function FacilitiesPage() {
             </Button>
             <Button
               onClick={() => {
+                if (!String(editForm.name || "").trim()) {
+                  toast.error("Facility name is required");
+                  return;
+                }
+                const nameChanged =
+                  String(editForm.name || "").trim().toLowerCase() !==
+                  String(editFacility?.name || "").trim().toLowerCase();
+                const venueChanged =
+                  String(editForm.venueId) !== String(editFacility?.venueId);
+                if (
+                  (nameChanged || venueChanged) &&
+                  findDuplicateFacility(
+                    editForm.name,
+                    editForm.venueId,
+                    editFacility?.facilityId
+                  )
+                ) {
+                  toast.error(
+                    "A facility with this name already exists in the selected venue."
+                  );
+                  return;
+                }
                 // Capture a snapshot of editForm at this moment
                 setConfirmAction({ 
                   type: "save", 

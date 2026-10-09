@@ -44,6 +44,12 @@ export async function GET() {
       content: announcement.content,
       recipientType: announcement.recipientType,
       postedAt: announcement.datePosted.toISOString(),
+      startDate: announcement.startDate
+        ? announcement.startDate.toISOString().slice(0, 10)
+        : null,
+      endDate: announcement.endDate
+        ? announcement.endDate.toISOString().slice(0, 10)
+        : null,
       status: announcement.status?.status ?? "Active",
       archived: announcement.statusId === ANNOUNCEMENT_STATUS.ARCHIVED,
       authorName: announcement.staff
@@ -86,6 +92,28 @@ export async function POST(request) {
       );
     }
 
+    const startRaw = body.startDate ? String(body.startDate).trim() : "";
+    const endRaw = body.endDate ? String(body.endDate).trim() : "";
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+    if (startRaw && !dateOnly.test(startRaw)) {
+      return NextResponse.json(
+        { error: "The start date must be a valid date." },
+        { status: 400 }
+      );
+    }
+    if (endRaw && !dateOnly.test(endRaw)) {
+      return NextResponse.json(
+        { error: "The end date must be a valid date." },
+        { status: 400 }
+      );
+    }
+    if (startRaw && endRaw && endRaw < startRaw) {
+      return NextResponse.json(
+        { error: "The end date must be on or after the start date." },
+        { status: 400 }
+      );
+    }
+
     const result = await createAnnouncement({
       title,
       content,
@@ -93,6 +121,8 @@ export async function POST(request) {
       clientIds: Array.isArray(body.clientIds) ? body.clientIds : [],
       staffIds: Array.isArray(body.staffIds) ? body.staffIds : [],
       authorStaffId: acting.performedBy,
+      startDate: startRaw ? new Date(`${startRaw}T00:00:00.000Z`) : null,
+      endDate: endRaw ? new Date(`${endRaw}T00:00:00.000Z`) : null,
     });
 
     if (!result.ok) {

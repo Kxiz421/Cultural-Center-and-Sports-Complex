@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer } from "lucide-react";
+import { FacilityDetailsDialog, FacilityNameButton } from "@/components/facility-details-dialog";
 import {
   isVirtualPackageId,
   isRegularPackageId,
@@ -179,6 +180,7 @@ export default function WalkInReservationPage() {
 
   // Sports Complex facilities
   const [facilities, setFacilities] = React.useState([]);
+  const [facilityDetails, setFacilityDetails] = React.useState(null);
   const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
   const [facilityQuantities, setFacilityQuantities] = React.useState({});
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
@@ -1378,7 +1380,7 @@ const renderPerDateFacilities = (date, cust) => {
                   }}
                 >
                   <Checkbox checked={checked} disabled={dateReserved} />
-                  <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                  <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                   {dateReserved ? (
                     <span className="shrink-0 text-xs text-destructive">Reserved</span>
                   ) : (
@@ -1824,7 +1826,7 @@ const renderPerDateFacilities = (date, cust) => {
                             onCheckedChange={() => toggleFacilitySelection(id)}
                             disabled={disabled}
                           />
-                          <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                          <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                           {reserved ? (
                             <span className="shrink-0 text-xs text-destructive">Reserved</span>
                           ) : (
@@ -2335,6 +2337,14 @@ const renderPerDateFacilities = (date, cust) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FacilityDetailsDialog
+        facility={facilityDetails}
+        open={!!facilityDetails}
+        onOpenChange={(open) => {
+          if (!open) setFacilityDetails(null);
+        }}
+      />
     </div>
   );
 }

@@ -286,21 +286,6 @@ async function main() {
   ]);
   console.log(`✓ Created ${facilities.length} facilities`);
 
-  // ===== FACILITY IMAGES =====
-  const facilityImagesData = [
-    { image: 'scgcc_main.jpg', facilityId: 1 },
-    { image: 'scgcc_side.jpg', facilityId: 1 },
-    { image: 'scgcc_front.jpg', facilityId: 1 },
-    { image: 'basketball_court.jpg', facilityId: 2 },
-    { image: 'stage_area.jpg', facilityId: 3 },
-    { image: 'gym_lobby.jpg', facilityId: 4 },
-    { image: 'track_oval.jpg', facilityId: 5 },
-  ];
-  for (const img of facilityImagesData) {
-    await prisma.facilityImage.create({ data: img });
-  }
-  console.log(`✓ Created ${facilityImagesData.length} facility images`);
-
   // ===== INVENTORY =====
   const inventoryItems = await Promise.all([
     prisma.inventory.create({ data: { itemName: 'Chair', description: 'Plastic monoblock chair for seating arrangements up to 700 units available', unitCost: 5, quantityAvailable: 700, venueId: 1, statusId: 1, particularId: 1 } }),

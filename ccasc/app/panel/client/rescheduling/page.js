@@ -23,6 +23,9 @@ import {
 import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
 import { RescheduleScopePanel } from "@/components/reschedule-scope-panel";
 import { currentReservationScope } from "@/lib/reschedule-scope";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 10;
 
 /** Comparable signature of a scope draft (facilities / particulars / time slot). */
 function scopeSignature(scope) {
@@ -46,6 +49,13 @@ export default function ClientReschedulingPage() {
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
   const [requests, setRequests] = React.useState([]);
+  const [page, setPage] = React.useState(1);
+  const requestsTotalPages = Math.max(1, Math.ceil(requests.length / PAGE_SIZE));
+  const requestsSafePage = Math.min(page, requestsTotalPages);
+  const paginatedRequests = requests.slice(
+    (requestsSafePage - 1) * PAGE_SIZE,
+    requestsSafePage * PAGE_SIZE
+  );
   const minDate = getMinEventDateKey();
 
   // ── Cancellation state ──
@@ -544,7 +554,7 @@ export default function ClientReschedulingPage() {
               No reschedule requests yet.
             </p>
           ) : (
-            requests.map((req) => (
+            paginatedRequests.map((req) => (
               <div key={req.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium">
@@ -591,6 +601,13 @@ export default function ClientReschedulingPage() {
               </div>
             ))
           )}
+          <Pagination
+            page={requestsSafePage}
+            pageSize={PAGE_SIZE}
+            total={requests.length}
+            onPageChange={setPage}
+            itemLabel="requests"
+          />
         </CardContent>
       </Card>
     </div>

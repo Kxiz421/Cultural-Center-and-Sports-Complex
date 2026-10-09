@@ -104,6 +104,17 @@ export async function POST(request) {
       );
     }
 
+    const duplicate = await prisma.particular.findFirst({
+      where: { particularName: { equals: particularName.trim() } },
+      select: { particularId: true },
+    });
+    if (duplicate) {
+      return NextResponse.json(
+        { error: "A particular with this name already exists." },
+        { status: 409 }
+      );
+    }
+
     // Price lives on the linked Inventory row (`Inventory.unitCost`), which is
     // what reservation pricing reads; 0 is allowed (free / not yet priced).
     // An omitted price is left untouched so re-linking an existing inventory
@@ -250,6 +261,34 @@ export async function PUT(request) {
         { error: "Particular not found" },
         { status: 404 }
       );
+    }
+
+    if (particularName !== undefined) {
+      const trimmedName = particularName.trim();
+      if (!trimmedName) {
+        return NextResponse.json(
+          { error: "Particular name is required" },
+          { status: 400 }
+        );
+      }
+      const nameChanged =
+        trimmedName.toLowerCase() !==
+        (existing.particularName || "").trim().toLowerCase();
+      if (nameChanged) {
+        const duplicate = await prisma.particular.findFirst({
+          where: {
+            particularName: { equals: trimmedName },
+            particularId: { not: existing.particularId },
+          },
+          select: { particularId: true },
+        });
+        if (duplicate) {
+          return NextResponse.json(
+            { error: "A particular with this name already exists." },
+            { status: 409 }
+          );
+        }
+      }
     }
 
     const updateData = {};

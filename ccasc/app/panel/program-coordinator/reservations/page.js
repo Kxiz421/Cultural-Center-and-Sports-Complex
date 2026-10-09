@@ -30,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/pagination";
+import { FacilityDetailsDialog, FacilityNameButton } from "@/components/facility-details-dialog";
 import { toast } from "sonner";
 import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer, History } from "lucide-react";
 import {
@@ -206,6 +208,8 @@ function buildFacilitySummaryLines({
   return lines;
 }
 
+const PAGE_SIZE = 10;
+
 export default function CoordinatorReservationsPage() {
   const minEventDateKey = getMinEventDateKey();
 
@@ -239,6 +243,7 @@ export default function CoordinatorReservationsPage() {
 
   // Facilities (Sports Complex venueId=2) — multi-select with quantity by time-slot rate
   const [facilities, setFacilities] = React.useState([]);
+  const [facilityDetails, setFacilityDetails] = React.useState(null);
   const [facilityQuantities, setFacilityQuantities] = React.useState({});
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(true);
   /** dateKey → facilityId[] already reserved by other reservations */
@@ -267,6 +272,7 @@ export default function CoordinatorReservationsPage() {
   const [historyReservations, setHistoryReservations] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(true);
   const [historySearch, setHistorySearch] = React.useState("");
+  const [historyPage, setHistoryPage] = React.useState(1);
   const [showHistory, setShowHistory] = React.useState(false);
   const [orderOfPayment, setOrderOfPayment] = React.useState(null);
 
@@ -1105,6 +1111,17 @@ export default function CoordinatorReservationsPage() {
     );
   }, [historyReservations, historySearch]);
 
+  React.useEffect(() => {
+    setHistoryPage(1);
+  }, [historySearch]);
+
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
+  const historySafePage = Math.min(historyPage, historyTotalPages);
+  const paginatedHistory = filteredHistory.slice(
+    (historySafePage - 1) * PAGE_SIZE,
+    historySafePage * PAGE_SIZE
+  );
+
 // Render calendar grid for multi-date selection
   const renderCalendar = () => {
     const year = currentMonth.getFullYear();
@@ -1302,7 +1319,7 @@ export default function CoordinatorReservationsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredHistory.map((r) => (
+                  paginatedHistory.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.clientName}</TableCell>
                       <TableCell className="text-sm">{r.eventType}</TableCell>
@@ -1332,6 +1349,13 @@ export default function CoordinatorReservationsPage() {
                 )}
               </TableBody>
             </Table>
+            <Pagination
+              page={historySafePage}
+              pageSize={PAGE_SIZE}
+              total={filteredHistory.length}
+              onPageChange={setHistoryPage}
+              itemLabel="reservations"
+            />
           </CardContent>
         </Card>
       )}
@@ -1674,7 +1698,7 @@ export default function CoordinatorReservationsPage() {
                             >+</button>
                           </div>
                         )}
-                        <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                        <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                         {reserved ? (
                           <span className="shrink-0 text-xs text-destructive">Reserved</span>
                         ) : (
@@ -2020,7 +2044,7 @@ export default function CoordinatorReservationsPage() {
                                   >+</button>
                                 </div>
                               )}
-                              <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                              <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                               {reserved ? (
                                 <span className="shrink-0 text-xs text-destructive">Reserved</span>
                               ) : (
@@ -2048,6 +2072,14 @@ export default function CoordinatorReservationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FacilityDetailsDialog
+        facility={facilityDetails}
+        open={!!facilityDetails}
+        onOpenChange={(open) => {
+          if (!open) setFacilityDetails(null);
+        }}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/pagination";
 import { toast } from "sonner";
 import { formatEventDateLabel } from "@/lib/document-event-date";
 import {
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import {
   FileText,
+  FileCheck2,
   Search,
   Eye,
   Download,
@@ -75,10 +77,13 @@ function StatusIcon({ status }) {
   return <Clock className="size-4 text-amber-500" />;
 }
 
+const PAGE_SIZE = 10;
+
 export default function LTOODocumentsPage() {
   const [reservations, setReservations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
   const [clientTypeFilter, setClientTypeFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -87,6 +92,8 @@ export default function LTOODocumentsPage() {
   const [verifyConfirmOpen, setVerifyConfirmOpen] = React.useState(false);
   const [declineConfirmOpen, setDeclineConfirmOpen] = React.useState(false);
   const [declineRemarks, setDeclineRemarks] = React.useState("");
+  const [physicalTarget, setPhysicalTarget] = React.useState(null);
+  const [physicalConfirmOpen, setPhysicalConfirmOpen] = React.useState(false);
 
   const loadDocuments = React.useCallback(async (keepGroupId = null) => {
     const res = await fetch("/api/ltoo/documents");
@@ -157,6 +164,35 @@ export default function LTOODocumentsPage() {
     }
   };
 
+  const handleVerifyPhysical = async () => {
+    if (!physicalTarget) return;
+    try {
+      const res = await fetch("/api/ltoo/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reservationId: physicalTarget.reservationId,
+          bookingId: physicalTarget.bookingId,
+          documentTypeId: physicalTarget.documentTypeId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to verify physical document");
+      }
+      toast.success(
+        data.initialApproved
+          ? "Physical documents verified. The client can now submit the Certification and Contract of Lease."
+          : `${physicalTarget.label} verified (physical copy).`
+      );
+      setPhysicalConfirmOpen(false);
+      setPhysicalTarget(null);
+      await loadDocuments(selectedGroup?.id);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   const filteredReservations = reservations.filter((group) => {
     if (clientTypeFilter !== "all" && group.clientType !== clientTypeFilter) {
       return false;
@@ -180,12 +216,53 @@ export default function LTOODocumentsPage() {
     );
   });
 
-  const renderDocumentCard = (doc, label) => {
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, clientTypeFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReservations.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedReservations = filteredReservations.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
+  const renderDocumentCard = (doc, label, typeId) => {
     if (!doc) {
       return (
-        <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-xs text-muted-foreground">Not submitted yet.</p>
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+          <div>
+            <p className="text-sm font-medium">{label}</p>
+            <p className="text-xs text-muted-foreground">Not submitted yet.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-blue-600 border-blue-300 hover:bg-blue-50"
+            onClick={() => {
+              const rawId = String(selectedGroup?.id || "");
+              const reservationId =
+                selectedGroup?.reservationId ??
+                (rawId.startsWith("res-") ? Number(rawId.slice(4)) : null);
+              const bookingId = selectedGroup?.bookingId ?? null;
+              if (!reservationId && !bookingId) {
+                toast.error(
+                  "This document is not linked to a reservation, so it cannot be verified as a physical copy."
+                );
+                return;
+              }
+              setPhysicalTarget({
+                reservationId,
+                bookingId,
+                documentTypeId: typeId,
+                label,
+              });
+              setPhysicalConfirmOpen(true);
+            }}
+          >
+            <FileCheck2 className="mr-1 size-4" />
+            Verify Physical Copy
+          </Button>
         </div>
       );
     }
@@ -335,7 +412,7 @@ export default function LTOODocumentsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredReservations.map((group) => {
+                paginatedReservations.map((group) => {
                   const billingStatus =
                     group.billingStatement?.documentStatus || "Pending";
                   const receiptStatus =
@@ -423,6 +500,13 @@ export default function LTOODocumentsPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredReservations.length}
+            onPageChange={setPage}
+            itemLabel="reservations"
+          />
         </CardContent>
       </Card>
 
@@ -486,10 +570,17 @@ export default function LTOODocumentsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                {!selectedGroup.venue?.toLowerCase().includes("sports complex") && (
-                  renderDocumentCard(selectedGroup.billingStatement, "Billing Statement")
+                {!selectedGroup.venue?.toLowerCase().includes("sports complex") &&
+                  renderDocumentCard(
+                    selectedGroup.billingStatement,
+                    "Billing Statement",
+                    1
+                  )}
+                {renderDocumentCard(
+                  selectedGroup.officialReceipt,
+                  "Official Receipt",
+                  5
                 )}
-                {renderDocumentCard(selectedGroup.officialReceipt, "Official Receipt")}
               </div>
             </div>
           )}
@@ -513,6 +604,45 @@ export default function LTOODocumentsPage() {
             </Button>
             <Button className="bg-green-600 hover:bg-green-700" onClick={handleVerify}>
               Verify
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={physicalConfirmOpen}
+        onOpenChange={(open) => {
+          setPhysicalConfirmOpen(open);
+          if (!open) setPhysicalTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCheck2 className="size-5 text-blue-500" />
+              Verify Physical Copy
+            </DialogTitle>
+            <DialogDescription>
+              Verify the physical {physicalTarget?.label || "document"} for this
+              reservation? No image was uploaded online, so this records it as
+              verified on the basis of the physical copy.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPhysicalConfirmOpen(false);
+                setPhysicalTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleVerifyPhysical}
+            >
+              Verify Physical Copy
             </Button>
           </DialogFooter>
         </DialogContent>

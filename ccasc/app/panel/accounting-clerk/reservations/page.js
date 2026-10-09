@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -77,8 +78,11 @@ function buildOrderOfPayment(reservation) {
   };
 }
 
+const PAGE_SIZE = 10;
+
 export default function AccountingReservationsPage() {
   const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState("all");
   const [venueFilter, setVenueFilter] = React.useState("all");
   const [selectedRes, setSelectedRes] = React.useState(null);
@@ -115,6 +119,17 @@ export default function AccountingReservationsPage() {
     }
     return true;
   });
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, status, venueFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = rows.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -228,7 +243,7 @@ export default function AccountingReservationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => (
+              {paginatedRows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
                     <div className="flex flex-col">
@@ -295,6 +310,13 @@ export default function AccountingReservationsPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={rows.length}
+            onPageChange={setPage}
+            itemLabel="reservations"
+          />
         </CardContent>
       </Card>
 

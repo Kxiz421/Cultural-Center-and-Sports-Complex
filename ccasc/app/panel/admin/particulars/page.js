@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Pagination } from "@/components/pagination";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -94,10 +95,13 @@ function sanitizePriceInput(value) {
   return `${integerPart}.${rest.join("").slice(0, 2)}`;
 }
 
+const PAGE_SIZE = 10;
+
 export default function ParticularsPage() {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [page, setPage] = React.useState(1);
   const [editOpen, setEditOpen] = React.useState(false);
   const [editItem, setEditItem] = React.useState(null);
   const [editForm, setEditForm] = React.useState({
@@ -198,10 +202,32 @@ export default function ParticularsPage() {
     }
   };
 
+  const findDuplicateParticular = (name, excludeParticularId = null) => {
+    const normalized = String(name || "").trim().toLowerCase();
+    if (!normalized) return null;
+    return (
+      items.find(
+        (p) =>
+          String(p.particularId) !== String(excludeParticularId) &&
+          String(p.particularName || "").trim().toLowerCase() === normalized
+      ) || null
+    );
+  };
+
   const handleSaveItem = async () => {
     if (!editItem) return;
     if (!editForm.particularName.trim()) {
       toast.error("Particular name is required");
+      return;
+    }
+    const nameChanged =
+      editForm.particularName.trim().toLowerCase() !==
+      String(editItem.particularName || "").trim().toLowerCase();
+    if (
+      nameChanged &&
+      findDuplicateParticular(editForm.particularName, editItem.particularId)
+    ) {
+      toast.error("A particular with this name already exists.");
       return;
     }
 
@@ -242,6 +268,10 @@ export default function ParticularsPage() {
   const handleAddParticular = async () => {
     if (!addForm.particularName.trim()) {
       toast.error("Particular name is required");
+      return;
+    }
+    if (findDuplicateParticular(addForm.particularName)) {
+      toast.error("A particular with this name already exists.");
       return;
     }
 
@@ -444,6 +474,13 @@ export default function ParticularsPage() {
     return hay.includes(term);
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedItems = filteredItems.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -548,7 +585,20 @@ export default function ParticularsPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={() => setAddConfirmOpen(true)} disabled={saving}>
+              <Button
+                onClick={() => {
+                  if (!addForm.particularName.trim()) {
+                    toast.error("Particular name is required");
+                    return;
+                  }
+                  if (findDuplicateParticular(addForm.particularName)) {
+                    toast.error("A particular with this name already exists.");
+                    return;
+                  }
+                  setAddConfirmOpen(true);
+                }}
+                disabled={saving}
+              >
                 {saving ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
@@ -566,12 +616,22 @@ export default function ParticularsPage() {
                 type="text"
                 placeholder="Search by name, description, or status..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
                 className="pl-9"
               />
             </div>
             {searchQuery && (
-              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setPage(1);
+                }}
+              >
                 <X className="mr-1 size-3" />
                 Clear
               </Button>
@@ -615,7 +675,7 @@ export default function ParticularsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredItems.map((item) => {
+                paginatedItems.map((item) => {
                   const statusName = getStatusName(item.statusId);
                   return (
                     <TableRow key={item.id}>
@@ -715,6 +775,13 @@ export default function ParticularsPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredItems.length}
+            onPageChange={setPage}
+            itemLabel="particulars"
+          />
         </CardContent>
       </Card>
 
@@ -892,7 +959,29 @@ export default function ParticularsPage() {
             <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); }}>
               Cancel
             </Button>
-            <Button onClick={() => setEditConfirmOpen(true)} disabled={saving}>
+            <Button
+              onClick={() => {
+                if (!editForm.particularName.trim()) {
+                  toast.error("Particular name is required");
+                  return;
+                }
+                const nameChanged =
+                  editForm.particularName.trim().toLowerCase() !==
+                  String(editItem?.particularName || "").trim().toLowerCase();
+                if (
+                  nameChanged &&
+                  findDuplicateParticular(
+                    editForm.particularName,
+                    editItem?.particularId
+                  )
+                ) {
+                  toast.error("A particular with this name already exists.");
+                  return;
+                }
+                setEditConfirmOpen(true);
+              }}
+              disabled={saving}
+            >
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon } from "lucide-react";
+import { Pagination } from "@/components/pagination";
 
 function formatPHP(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -61,8 +62,11 @@ const TIME_SLOTS = [
   { id: 2, label: "Night (5:00 PM — 11:00 PM)" },
 ];
 
+const PAGE_SIZE = 10;
+
 export default function PackagesPage() {
   const [packages, setPackages] = React.useState([]);
+  const [page, setPage] = React.useState(1);
   const [loading, setLoading] = React.useState(true);
   const [editOpen, setEditOpen] = React.useState(false);
   const [editPkg, setEditPkg] = React.useState(null);
@@ -354,6 +358,13 @@ export default function PackagesPage() {
     }));
   };
 
+  const totalPages = Math.max(1, Math.ceil(packages.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedPackages = packages.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -486,7 +497,7 @@ export default function PackagesPage() {
                   <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">No packages found. Add one to get started.</TableCell>
                 </TableRow>
               ) : (
-                packages.map((pkg) => {
+                paginatedPackages.map((pkg) => {
                   const statusName = STATUS_OPTIONS.find((s) => s.id === Number(pkg.statusId))?.name || "Unknown";
                   return (
                     <TableRow key={pkg.id}>
@@ -543,6 +554,13 @@ export default function PackagesPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={packages.length}
+            onPageChange={setPage}
+            itemLabel="packages"
+          />
         </CardContent>
       </Card>
 

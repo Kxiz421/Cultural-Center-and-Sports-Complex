@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { CalendarDays, Trophy, Search, X } from "lucide-react";
 import { formatPhp } from "@/lib/data/admin-mock";
+import { Pagination } from "@/components/pagination";
 
 function getStatusColor(status) {
   switch (status) {
@@ -47,6 +48,8 @@ function getStatusColor(status) {
   }
 }
 
+const PAGE_SIZE = 10;
+
 export default function BookingsPage() {
   const [status, setStatus] = React.useState("all");
   const [clientType, setClientType] = React.useState("all");
@@ -55,6 +58,8 @@ export default function BookingsPage() {
   const [bookings, setBookings] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [culturalPage, setCulturalPage] = React.useState(1);
+  const [sportsPage, setSportsPage] = React.useState(1);
   const [selectedBooking, setSelectedBooking] = React.useState(null);
 
   // Fetch bookings when filters change
@@ -85,6 +90,24 @@ export default function BookingsPage() {
 
   const cultural = bookings.filter((b) => b.venueId === 1);
   const sports = bookings.filter((b) => b.venueId === 2);
+
+  React.useEffect(() => {
+    setCulturalPage(1);
+    setSportsPage(1);
+  }, [status, clientType, dateFrom, dateTo, searchQuery]);
+
+  const culturalTotalPages = Math.max(1, Math.ceil(cultural.length / PAGE_SIZE));
+  const culturalSafePage = Math.min(culturalPage, culturalTotalPages);
+  const paginatedCultural = cultural.slice(
+    (culturalSafePage - 1) * PAGE_SIZE,
+    culturalSafePage * PAGE_SIZE
+  );
+  const sportsTotalPages = Math.max(1, Math.ceil(sports.length / PAGE_SIZE));
+  const sportsSafePage = Math.min(sportsPage, sportsTotalPages);
+  const paginatedSports = sports.slice(
+    (sportsSafePage - 1) * PAGE_SIZE,
+    sportsSafePage * PAGE_SIZE
+  );
 
   const clearFilters = () => {
     setStatus("all");
@@ -216,7 +239,7 @@ export default function BookingsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  cultural.map((b) => (
+                  paginatedCultural.map((b) => (
                     <TableRow
                       key={b.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -247,6 +270,14 @@ export default function BookingsPage() {
                 )}
               </TableBody>
             </Table>
+            <Pagination
+              page={culturalSafePage}
+              pageSize={PAGE_SIZE}
+              total={cultural.length}
+              onPageChange={setCulturalPage}
+              itemLabel="bookings"
+              className="px-4 pb-2"
+            />
           </CardContent>
         </Card>
 
@@ -290,7 +321,7 @@ export default function BookingsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sports.map((b) => (
+                  paginatedSports.map((b) => (
                     <TableRow
                       key={b.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -321,6 +352,14 @@ export default function BookingsPage() {
                 )}
               </TableBody>
             </Table>
+            <Pagination
+              page={sportsSafePage}
+              pageSize={PAGE_SIZE}
+              total={sports.length}
+              onPageChange={setSportsPage}
+              itemLabel="bookings"
+              className="px-4 pb-2"
+            />
           </CardContent>
         </Card>
       </div>

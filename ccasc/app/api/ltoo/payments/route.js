@@ -101,11 +101,16 @@ export async function GET(request) {
     }
 
     if (bookingsOnly === "true") {
+      const venueIdParam = searchParams.get("venueId");
+      const venueIdFilter = venueIdParam ? parseInt(venueIdParam, 10) : null;
+      const hasVenueFilter = Number.isInteger(venueIdFilter);
+
       // Fetch reservations without client include to avoid orphaned FK errors
       const reservations = await prisma.reservation.findMany({
         where: {
           reservationStatus: { notIn: ["Cancelled"] },
           ...(ownScopeId != null ? { clientId: ownScopeId } : {}),
+          ...(hasVenueFilter ? { venueId: venueIdFilter } : {}),
         },
         include: {
           package: {

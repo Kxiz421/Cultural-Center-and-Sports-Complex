@@ -14,12 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Search, Package, RefreshCw } from "lucide-react";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 10;
 
 export default function CoordinatorAmenitiesPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [editItem, setEditItem] = useState(null);
   const [editQuantity, setEditQuantity] = useState("");
   const [editOpen, setEditOpen] = useState(false);
@@ -97,6 +101,13 @@ export default function CoordinatorAmenitiesPage() {
     return hay.includes(searchQuery.toLowerCase());
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedItems = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -126,7 +137,10 @@ export default function CoordinatorAmenitiesPage() {
             <Input
               placeholder="Search by name, category..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               className="pl-8"
             />
           </div>
@@ -152,7 +166,7 @@ export default function CoordinatorAmenitiesPage() {
                 No amenities found.
               </p>
             ) : (
-              filtered.map((item) => (
+              paginatedItems.map((item) => (
                 <div
                   key={item.id || item.particularId}
                   className="flex flex-col gap-2 rounded-lg border p-4 md:flex-row md:items-center md:justify-between"
@@ -199,6 +213,13 @@ export default function CoordinatorAmenitiesPage() {
               ))
             )}
           </div>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+            itemLabel="amenities"
+          />
         </CardContent>
       </Card>
 

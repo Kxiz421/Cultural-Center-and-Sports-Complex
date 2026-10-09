@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Printer, Layers, RotateCcw, Loader2 } from "lucide-react";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Printer, Layers, RotateCcw, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { excludeArchivedFacilities } from "@/lib/facility-status";
@@ -37,6 +37,7 @@ import {
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
+import { FacilityDetailsDialog, FacilityNameButton } from "@/components/facility-details-dialog";
 import {
   getMinEventDate,
   getMinEventDateKey,
@@ -153,6 +154,7 @@ export default function ClientReservationsPage() {
 
   // Sports Complex facilities
   const [facilities, setFacilities] = React.useState([]);
+  const [facilityDetails, setFacilityDetails] = React.useState(null);
   const [selectedFacilityIds, setSelectedFacilityIds] = React.useState([]);
   const [facilityQuantities, setFacilityQuantities] = React.useState({});
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
@@ -1287,7 +1289,7 @@ const renderPerDateFacilities = (date, cust) => {
                       });
                     }}
                   />
-                  <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                  <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                   {dateReserved ? (
                     <span className="shrink-0 text-xs text-destructive">Reserved</span>
                   ) : (
@@ -1573,7 +1575,7 @@ const renderPerDateFacilities = (date, cust) => {
                             onCheckedChange={() => toggleFacilitySelection(id)}
                             disabled={disabled}
                           />
-                          <span className="flex-1 min-w-0 font-medium truncate">{f.name}</span>
+                          <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
                           {reserved ? (
                             <span className="shrink-0 text-xs text-destructive">Reserved</span>
                           ) : (
@@ -2010,6 +2012,14 @@ const renderPerDateFacilities = (date, cust) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FacilityDetailsDialog
+        facility={facilityDetails}
+        open={!!facilityDetails}
+        onOpenChange={(open) => {
+          if (!open) setFacilityDetails(null);
+        }}
+      />
     </div>
   );
 }

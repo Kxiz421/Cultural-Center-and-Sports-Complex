@@ -4,6 +4,7 @@ import * as React from "react";
 import { Building2, ChevronDown, Info, PackageOpen, Trophy } from "lucide-react";
 import { Reveal } from "@/components/landing/reveal";
 import { useLandingFacilities } from "@/components/landing/use-facilities";
+import { FacilityDetailsDialog, isDisplayableImage } from "@/components/facility-details-dialog";
 import { ADD_ONS, formatPeso } from "@/lib/landing-content";
 
 /** Same icons the admin Facility Management screen uses for each venue. */
@@ -42,15 +43,29 @@ function FacilityRates({ facility }) {
   );
 }
 
-function FacilityCard({ facility }) {
+function FacilityCard({ facility, onOpen }) {
+  const image = (facility.images || []).find(isDisplayableImage);
   return (
-    <div className="flex h-full flex-col rounded-3xl bg-card p-5 shadow-sm ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-      <h4 className="text-base font-semibold leading-snug">{facility.name}</h4>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
-        {facility.description}
-      </p>
-      <FacilityRates facility={facility} />
-    </div>
+    <button
+      type="button"
+      onClick={() => onOpen(facility)}
+      className="flex h-full w-full flex-col overflow-hidden rounded-3xl bg-card text-left shadow-sm ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+    >
+      {image ? (
+        <img
+          src={image}
+          alt={facility.name}
+          className="h-40 w-full object-cover"
+        />
+      ) : null}
+      <div className="flex flex-1 flex-col p-5">
+        <h4 className="text-base font-semibold leading-snug">{facility.name}</h4>
+        <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+          {facility.description}
+        </p>
+        <FacilityRates facility={facility} />
+      </div>
+    </button>
   );
 }
 
@@ -60,7 +75,7 @@ function FacilityCard({ facility }) {
  * `open` is driven by the parent so a re-render (for example when the facility
  * list arrives) cannot collapse what the visitor expanded.
  */
-function VenueGroup({ group, open, onToggle }) {
+function VenueGroup({ group, open, onToggle, onOpen }) {
   const Icon = VENUE_ICONS[group.venueId] ?? Building2;
   const count = group.facilities.length;
 
@@ -90,7 +105,7 @@ function VenueGroup({ group, open, onToggle }) {
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {group.facilities.map((facility) => (
             <li key={facility.facilityId} className="h-full">
-              <FacilityCard facility={facility} />
+              <FacilityCard facility={facility} onOpen={onOpen} />
             </li>
           ))}
         </ul>
@@ -118,6 +133,7 @@ export function LandingFacilities() {
   const { byVenue, loading } = useLandingFacilities();
   // The first venue starts expanded; the rest stay collapsed until asked for.
   const [openVenues, setOpenVenues] = React.useState(() => [1]);
+  const [detailsFacility, setDetailsFacility] = React.useState(null);
 
   const handleToggle = React.useCallback((venueId, isOpen) => {
     setOpenVenues((previous) => {
@@ -178,6 +194,7 @@ export function LandingFacilities() {
                   group={group}
                   open={openVenues.includes(group.venueId)}
                   onToggle={handleToggle}
+                  onOpen={setDetailsFacility}
                 />
               </Reveal>
             ))}
@@ -217,6 +234,14 @@ export function LandingFacilities() {
           </ul>
         </Reveal>
       </div>
+
+      <FacilityDetailsDialog
+        facility={detailsFacility}
+        open={!!detailsFacility}
+        onOpenChange={(open) => {
+          if (!open) setDetailsFacility(null);
+        }}
+      />
     </section>
   );
 }

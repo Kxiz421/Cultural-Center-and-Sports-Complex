@@ -280,6 +280,8 @@ model Announcement {
   content        String   @map("content") @db.Text
   recipientType  String   @map("recipient_type") @db.VarChar(50)
   datePosted     DateTime @map("date_posted")
+  startDate      DateTime? @map("start_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
   staffId        Int      @map("staff_id")
   statusId       Int      @map("status_id")
 

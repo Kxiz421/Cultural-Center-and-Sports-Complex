@@ -22,7 +22,10 @@ import {
 } from "@/lib/reservation-advance-booking";
 import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
 import { RescheduleScopePanel } from "@/components/reschedule-scope-panel";
+import { Pagination } from "@/components/pagination";
 import { currentReservationScope } from "@/lib/reschedule-scope";
+
+const PAGE_SIZE = 10;
 
 /** Comparable signature of a scope draft (facilities / particulars / time slot). */
 function scopeSignature(scope) {
@@ -40,6 +43,13 @@ function scopeSignature(scope) {
 export default function ProvincialReschedulingPage() {
   const [reservations, setReservations] = React.useState([]);
   const [requests, setRequests] = React.useState([]);
+  const [page, setPage] = React.useState(1);
+  const requestsTotalPages = Math.max(1, Math.ceil(requests.length / PAGE_SIZE));
+  const requestsSafePage = Math.min(page, requestsTotalPages);
+  const paginatedRequests = requests.slice(
+    (requestsSafePage - 1) * PAGE_SIZE,
+    requestsSafePage * PAGE_SIZE
+  );
   const [loading, setLoading] = React.useState(true);
   const [selectedReservation, setSelectedReservation] = React.useState("");
   const [dateDrafts, setDateDrafts] = React.useState({});
@@ -516,7 +526,7 @@ export default function ProvincialReschedulingPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {requests.map((req) => (
+            {paginatedRequests.map((req) => (
               <Card key={req.id}>
                 <CardContent className="flex items-start justify-between p-4">
                   <div className="space-y-1">
@@ -566,6 +576,14 @@ export default function ProvincialReschedulingPage() {
             ))}
           </div>
         )}
+        <Pagination
+          page={requestsSafePage}
+          pageSize={PAGE_SIZE}
+          total={requests.length}
+          onPageChange={setPage}
+          itemLabel="requests"
+          className="pt-4"
+        />
       </div>
     </div>
   );

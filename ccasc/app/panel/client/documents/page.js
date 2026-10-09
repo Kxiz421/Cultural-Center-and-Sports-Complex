@@ -991,7 +991,13 @@ export default function ClientDocumentsPage() {
                               : "—"}
                           </p>
                           {doc.remarks && (
-                            <p className="text-xs text-red-500 mt-1">
+                            <p
+                              className={`text-xs mt-1 ${
+                                status === "Declined"
+                                  ? "text-red-500"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
                               Remarks: {doc.remarks}
                             </p>
                           )}

@@ -256,6 +256,8 @@ export async function createAnnouncement({
   clientIds = [],
   staffIds = [],
   authorStaffId,
+  startDate = null,
+  endDate = null,
 }) {
   const authorId = Number.parseInt(
     String(authorStaffId ?? "").replace(/^[A-Za-z]+-/, ""),
@@ -285,6 +287,8 @@ export async function createAnnouncement({
       content,
       recipientType,
       datePosted: sentAt,
+      startDate,
+      endDate,
       staffId: authorId,
       statusId: ANNOUNCEMENT_STATUS.ACTIVE,
     },

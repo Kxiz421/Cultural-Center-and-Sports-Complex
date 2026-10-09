@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/pagination";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -77,10 +78,13 @@ function getPaymentBadgeProps(paymentStatus) {
   return { variant: "outline", className: "" };
 }
 
+const PAGE_SIZE = 10;
+
 export default function LTOOCancellationsPage() {
   const [bookings, setBookings] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
   const [venueFilter, setVenueFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [detailOpen, setDetailOpen] = React.useState(false);
@@ -165,6 +169,17 @@ export default function LTOOCancellationsPage() {
     }
     return true;
   });
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, venueFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedBookings = filteredBookings.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const openDetail = (booking) => {
     setSelectedBooking(booking);
@@ -264,7 +279,7 @@ export default function LTOOCancellationsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredBookings.map((b) => {
+                paginatedBookings.map((b) => {
                   const badge = getPaymentBadgeProps(b.paymentStatus);
                   return (
                     <TableRow
@@ -329,6 +344,13 @@ export default function LTOOCancellationsPage() {
               )}
             </TableBody>
           </Table>
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredBookings.length}
+            onPageChange={setPage}
+            itemLabel="bookings"
+          />
         </CardContent>
       </Card>
 

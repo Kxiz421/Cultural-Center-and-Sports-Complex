@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { Search, CheckCircle2, XCircle, AlertTriangle, FileText, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
 import { notifyPanelNotificationsUpdated } from "@/lib/panel-notifications";
 import { formatEventDateLabel } from "@/lib/document-event-date";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 10;
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -53,6 +56,9 @@ function CoordinatorBookingsContent() {
   const [reservations, setReservations] = useState([]);
   const [historyReservations, setHistoryReservations] = useState([]);
   const [cancelledReservations, setCancelledReservations] = useState([]);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [cancelledPage, setCancelledPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [cancelledLoading, setCancelledLoading] = useState(false);
@@ -307,6 +313,29 @@ function CoordinatorBookingsContent() {
     return hay.includes(searchQuery.toLowerCase());
   });
 
+  const pendingTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pendingSafePage = Math.min(pendingPage, pendingTotalPages);
+  const paginatedFiltered = filtered.slice(
+    (pendingSafePage - 1) * PAGE_SIZE,
+    pendingSafePage * PAGE_SIZE
+  );
+  const historyTotalPages = Math.max(1, Math.ceil(historyReservations.length / PAGE_SIZE));
+  const historySafePage = Math.min(historyPage, historyTotalPages);
+  const paginatedHistory = historyReservations.slice(
+    (historySafePage - 1) * PAGE_SIZE,
+    historySafePage * PAGE_SIZE
+  );
+  const cancelledTotalPages = Math.max(1, Math.ceil(cancelledReservations.length / PAGE_SIZE));
+  const cancelledSafePage = Math.min(cancelledPage, cancelledTotalPages);
+  const paginatedCancelled = cancelledReservations.slice(
+    (cancelledSafePage - 1) * PAGE_SIZE,
+    cancelledSafePage * PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setPendingPage(1);
+  }, [searchQuery]);
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -392,7 +421,7 @@ function CoordinatorBookingsContent() {
                   {getVenueParam().includes("venueId=2") ? "No pending bookings awaiting payment." : "No fully paid bookings awaiting confirmation."}
                 </p>
               ) : (
-                filtered.map((res) => (
+                paginatedFiltered.map((res) => (
                   <div
                     key={res.id}
                     className="flex flex-col gap-2 rounded-lg border p-4 cursor-pointer hover:bg-muted/50 transition-colors"
@@ -430,6 +459,13 @@ function CoordinatorBookingsContent() {
                 ))
               )}
             </div>
+            <Pagination
+              page={pendingSafePage}
+              pageSize={PAGE_SIZE}
+              total={filtered.length}
+              onPageChange={setPendingPage}
+              itemLabel="bookings"
+            />
           </CardContent>
         </Card>
       )}
@@ -450,7 +486,7 @@ function CoordinatorBookingsContent() {
               ) : historyReservations.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8 text-center">No confirmed bookings yet.</p>
               ) : (
-                historyReservations.map((res) => (
+                paginatedHistory.map((res) => (
                   <div
                     key={res.id}
                     className="flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50/30 p-4"
@@ -481,6 +517,13 @@ function CoordinatorBookingsContent() {
                 ))
               )}
             </div>
+            <Pagination
+              page={historySafePage}
+              pageSize={PAGE_SIZE}
+              total={historyReservations.length}
+              onPageChange={setHistoryPage}
+              itemLabel="bookings"
+            />
           </CardContent>
         </Card>
       )}
@@ -501,7 +544,7 @@ function CoordinatorBookingsContent() {
               ) : cancelledReservations.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8 text-center">No cancelled bookings.</p>
               ) : (
-                cancelledReservations.map((res) => (
+                paginatedCancelled.map((res) => (
                   <div
                     key={res.id}
                     className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50/30 p-4"
@@ -532,6 +575,13 @@ function CoordinatorBookingsContent() {
                 ))
               )}
             </div>
+            <Pagination
+              page={cancelledSafePage}
+              pageSize={PAGE_SIZE}
+              total={cancelledReservations.length}
+              onPageChange={setCancelledPage}
+              itemLabel="bookings"
+            />
           </CardContent>
         </Card>
       )}

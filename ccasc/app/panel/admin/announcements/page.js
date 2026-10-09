@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/pagination";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -60,6 +61,26 @@ function userKey(user) {
   return `${user.type}-${user.dbId}`;
 }
 
+const PAGE_SIZE = 10;
+
+function formatDateOnly(value) {
+  if (!value) return "—";
+  const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return "—";
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatDateRange(start, end) {
+  if (!start && !end) return "—";
+  if (start && end) return `${formatDateOnly(start)} – ${formatDateOnly(end)}`;
+  if (start) return `From ${formatDateOnly(start)}`;
+  return `Until ${formatDateOnly(end)}`;
+}
+
 export default function AnnouncementsPage() {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -69,6 +90,8 @@ export default function AnnouncementsPage() {
   const [posting, setPosting] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [message, setMessage] = React.useState("");
+  const [startDate, setStartDate] = React.useState("");
+  const [endDate, setEndDate] = React.useState("");
   const [mode, setMode] = React.useState("roles");
   const [selectedRoles, setSelectedRoles] = React.useState([]);
   const [selectedUsers, setSelectedUsers] = React.useState([]);
@@ -77,6 +100,7 @@ export default function AnnouncementsPage() {
   const [directoryLoading, setDirectoryLoading] = React.useState(false);
   const [archivingId, setArchivingId] = React.useState(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = React.useState(null);
+  const [page, setPage] = React.useState(1);
 
   const loadAnnouncements = React.useCallback(async () => {
     try {
@@ -190,6 +214,8 @@ const activeAudienceCount = React.useMemo(() => {
   const resetForm = () => {
     setTitle("");
     setMessage("");
+    setStartDate("");
+    setEndDate("");
     setMode("roles");
     setSelectedRoles([]);
     setSelectedUsers([]);
@@ -205,9 +231,18 @@ const activeAudienceCount = React.useMemo(() => {
 
   const postAnnouncement = async () => {
     if (!canPost || posting) return;
+    if (startDate && endDate && endDate < startDate) {
+      toast.error("The end date must be on or after the start date.");
+      return;
+    }
     setPosting(true);
 
-    const payload = { title: title.trim(), message: message.trim() };
+    const payload = {
+      title: title.trim(),
+      message: message.trim(),
+      startDate: startDate || null,
+      endDate: endDate || null,
+    };
     if (mode === "all") {
       payload.roles = allRoleIds;
     } else if (mode === "roles") {
@@ -279,6 +314,13 @@ const activeAudienceCount = React.useMemo(() => {
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedItems = items.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -331,6 +373,29 @@ const activeAudienceCount = React.useMemo(() => {
                   onChange={(event) => setMessage(event.target.value)}
                 />
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Start date</Label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End date</Label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(event) => setEndDate(event.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Optional validity window, recorded in the history. It does not
+                delay or hide delivery.
+              </p>
               <div className="space-y-2">
                 <Label>Recipients</Label>
                 <Select value={mode} onValueChange={setMode}>
@@ -502,6 +567,7 @@ const activeAudienceCount = React.useMemo(() => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Posted</TableHead>
+                  <TableHead>Valid</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Recipients</TableHead>
                   <TableHead>Notified</TableHead>
@@ -510,7 +576,7 @@ const activeAudienceCount = React.useMemo(() => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((announcement) => (
+                {paginatedItems.map((announcement) => (
                   <TableRow
                     key={announcement.id}
                     className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -518,6 +584,9 @@ const activeAudienceCount = React.useMemo(() => {
                   >
                     <TableCell className="text-sm whitespace-nowrap">
                       {new Date(announcement.postedAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {formatDateRange(announcement.startDate, announcement.endDate)}
                     </TableCell>
                     <TableCell className="whitespace-normal">
                       <div
@@ -581,6 +650,13 @@ const activeAudienceCount = React.useMemo(() => {
               </TableBody>
             </Table>
           )}
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={items.length}
+            onPageChange={setPage}
+            itemLabel="announcements"
+          />
         </CardContent>
       </Card>
 
@@ -616,6 +692,22 @@ const activeAudienceCount = React.useMemo(() => {
                       </Label>
                       <p className="text-sm font-medium">
                         {new Date(selectedAnnouncement.postedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Valid from
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {formatDateOnly(selectedAnnouncement.startDate)}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Valid until
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {formatDateOnly(selectedAnnouncement.endDate)}
                       </p>
                     </div>
                     <div>
