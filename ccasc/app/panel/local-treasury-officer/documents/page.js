@@ -75,15 +75,6 @@ function StatusIcon({ status }) {
   return <Clock className="size-4 text-amber-500" />;
 }
 
-function typeStatus(docs) {
-  const items = (docs || []).filter(Boolean);
-  if (items.length === 0) return "Pending";
-  if (items.every((doc) => doc.documentStatus === "Verified")) return "Verified";
-  if (items.some((doc) => doc.documentStatus === "Pending")) return "Pending";
-  if (items.some((doc) => doc.documentStatus === "Declined")) return "Declined";
-  return "Pending";
-}
-
 export default function LTOODocumentsPage() {
   const [reservations, setReservations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -345,12 +336,10 @@ export default function LTOODocumentsPage() {
                 </TableRow>
               ) : (
                 filteredReservations.map((group) => {
-                  const billingStatus = typeStatus(
-                    (group.dateGroups || []).map((entry) => entry.billingStatement)
-                  );
-                  const receiptStatus = typeStatus(
-                    (group.dateGroups || []).map((entry) => entry.officialReceipt)
-                  );
+                  const billingStatus =
+                    group.billingStatement?.documentStatus || "Pending";
+                  const receiptStatus =
+                    group.officialReceipt?.documentStatus || "Pending";
                   return (
                     <TableRow key={group.id}>
                       <TableCell>
@@ -477,6 +466,16 @@ export default function LTOODocumentsPage() {
                     <span className="font-medium">{selectedGroup.venue}</span>
                   </div>
                 )}
+                {selectedGroup.eventDates?.length > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Event date(s):</span>
+                    <span className="font-medium">
+                      {selectedGroup.eventDates
+                        .map(formatEventDateLabel)
+                        .join(", ")}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">Overall status:</span>
                   <div className="flex items-center gap-1">
@@ -486,19 +485,12 @@ export default function LTOODocumentsPage() {
                 </div>
               </div>
 
-              {(selectedGroup.dateGroups || []).map((dateGroup) => (
-                <div key={dateGroup.eventDate || "date"} className="space-y-3">
-                  <p className="text-sm font-medium">
-                    Event date: {formatEventDateLabel(dateGroup.eventDate)}
-                  </p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {!selectedGroup.venue?.toLowerCase().includes("sports complex") && (
-                      renderDocumentCard(dateGroup.billingStatement, "Billing Statement")
-                    )}
-                    {renderDocumentCard(dateGroup.officialReceipt, "Official Receipt")}
-                  </div>
-                </div>
-              ))}
+              <div className="grid gap-3 md:grid-cols-2">
+                {!selectedGroup.venue?.toLowerCase().includes("sports complex") && (
+                  renderDocumentCard(selectedGroup.billingStatement, "Billing Statement")
+                )}
+                {renderDocumentCard(selectedGroup.officialReceipt, "Official Receipt")}
+              </div>
             </div>
           )}
         </DialogContent>

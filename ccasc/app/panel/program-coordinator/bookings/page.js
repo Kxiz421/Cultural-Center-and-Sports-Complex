@@ -611,7 +611,12 @@ function CoordinatorBookingsContent() {
                 {/* Documents Section */}
                 {selectedRes.documents && selectedRes.documents.length > 0 && (
                   <div>
-                    <span className="text-muted-foreground text-xs block mb-2">Uploaded Documents</span>
+                    <span className="text-muted-foreground text-xs block mb-2">
+                      Uploaded Documents for{" "}
+                      {selectedRes.eventDates?.length > 1
+                        ? selectedRes.eventDates.map(formatEventDateLabel).join(", ")
+                        : formatEventDateLabel(selectedRes.eventDate)}
+                    </span>
                     <div className="space-y-2">
                       {selectedRes.documents.map((doc) => (
                         <div key={doc.id} className="rounded-md border p-2">
@@ -621,8 +626,6 @@ function CoordinatorBookingsContent() {
                               <div>
                                 <p className="text-sm font-medium">{doc.type}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  For {formatEventDateLabel(doc.eventDate)}
-                                  {" · "}
                                   Status: {doc.status}
                                   {doc.submittedAt && ` • ${new Date(doc.submittedAt).toLocaleDateString()}`}
                                 </p>

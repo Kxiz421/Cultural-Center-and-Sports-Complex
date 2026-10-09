@@ -3,9 +3,7 @@ import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import {
   documentEventDateKey,
-  documentsForEventDate,
   reservationEventDateKeys,
-  resolveReservationEventDate,
 } from "@/lib/document-event-date";
 import {
   isCulturalCenterVenue,
@@ -129,16 +127,6 @@ function formatDocument(doc, primaryKey = null) {
     forEventDate,
     eventDate: forEventDate,
   };
-}
-
-function computeDatePhases(documents, eventDates, primaryKey, venueId = null) {
-  const datePhases = {};
-  for (const dateKey of eventDates) {
-    datePhases[dateKey] = computePhase(
-      documentsForEventDate(documents, dateKey, primaryKey), venueId
-    );
-  }
-  return datePhases;
 }
 
 async function ensureBookingForReservation(reservationId) {
@@ -379,19 +367,8 @@ export async function POST(request) {
       reservation = resolved.reservation;
       primaryDateKey = formatDbDate(reservation.eventDate);
       eventDates = reservationEventDateKeys(reservation);
-      const dated = resolveReservationEventDate(
-        reservation,
-        formData.get("eventDate")
-      );
-      if (dated.error) {
-        return NextResponse.json(
-          { error: dated.error, eventDates: dated.eventDates || eventDates },
-          { status: dated.status || 400 }
-        );
-      }
-      eventDateKey = dated.eventDateKey;
-      const allDocs = await getBookingDocuments(booking.bookingId);
-      existing = documentsForEventDate(allDocs, eventDateKey, primaryDateKey);
+      eventDateKey = primaryDateKey;
+      existing = await getBookingDocuments(booking.bookingId);
       phase = computePhase(existing, reservation?.venueId);
     }
 
@@ -697,7 +674,6 @@ export async function GET(request) {
     const clientId = parseId(searchParams.get("clientId"));
     const reservationId = parseId(searchParams.get("reservationId"));
     const bookingId = parseId(searchParams.get("bookingId"));
-    const requestedEventDate = searchParams.get("eventDate");
 
     if (searchParams.get("eligibleBookings") === "true") {
       if (!clientId) {
@@ -845,33 +821,16 @@ export async function GET(request) {
       const primaryKey = reservation
         ? formatDbDate(reservation.eventDate)
         : null;
-      const selectedDate = requestedEventDate
-        ? resolveReservationEventDate(reservation, requestedEventDate)
-        : { eventDateKey: null };
-      const scopedDocs = selectedDate.eventDateKey
-        ? documentsForEventDate(
-            bookingDocs,
-            selectedDate.eventDateKey,
-            primaryKey
-          )
-        : bookingDocs;
       const scopedFormatted = formatted.filter((d) => {
         if (targetBookingId && d.bookingId !== targetBookingId) return false;
-        if (
-          selectedDate.eventDateKey &&
-          d.forEventDate !== selectedDate.eventDateKey
-        ) {
-          return false;
-        }
         return d.reservationId === reservationId || !d.reservationId;
       });
 
       return noCacheJson({
         documents: scopedFormatted,
-        phase: computePhase(scopedDocs, reservation?.venueId),
-        datePhases: computeDatePhases(bookingDocs, eventDates, primaryKey, reservation?.venueId),
+        phase: computePhase(bookingDocs, reservation?.venueId),
         eventDates,
-        eventDate: selectedDate.eventDateKey || null,
+        eventDate: primaryKey,
         reservationId,
         bookingId: targetBookingId,
       });
@@ -982,12 +941,7 @@ export async function PATCH(request) {
         INITIAL_TYPES.includes(document.documentTypeId)
       ) {
         const bookingDocs = await getBookingDocuments(document.bookingId);
-        const sameDateDocs = documentsForEventDate(
-          bookingDocs,
-          forEventDate,
-          primaryKey
-        );
-        const phase = computePhase(sameDateDocs);
+        const phase = computePhase(bookingDocs);
         if (phase.initialApproved) {
           await notifyClient({
             clientId,

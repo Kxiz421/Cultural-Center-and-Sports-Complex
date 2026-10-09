@@ -95,7 +95,6 @@ function docStatus(doc) {
 
 export default function ProvincialDocumentsPage() {
   const [documents, setDocuments] = React.useState([]);
-  const [selectedEventDate, setSelectedEventDate] = React.useState("");
   const [phase, setPhase] = React.useState(EMPTY_PHASE);
   const [bookingsLoading, setBookingsLoading] = React.useState(true);
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
@@ -139,15 +138,7 @@ export default function ProvincialDocumentsPage() {
     return [...new Set(dates)].sort();
   }, [selectedBooking]);
 
-  const isMultiDate = eventDates.length > 1;
-  const displayedDocuments = React.useMemo(
-    () =>
-      documents.filter((doc) => {
-        if (!selectedEventDate) return true;
-        return (doc.forEventDate || doc.eventDate) === selectedEventDate;
-      }),
-    [documents, selectedEventDate]
-  );
+  const displayedDocuments = documents;
 
   const showInitialForm =
     isSportsComplex
@@ -339,9 +330,6 @@ export default function ProvincialDocumentsPage() {
       formData.append("mode", "initial");
       formData.append("reservationId", selectedReservationId);
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       if (phase.needsBilling && billingFile) {
         formData.append("billingFile", billingFile);
       }
@@ -415,9 +403,6 @@ export default function ProvincialDocumentsPage() {
       formData.append("mode", "final");
       formData.append("reservationId", selectedReservationId);
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       if (phase.needsCertification && certFile) {
         formData.append("certificationFile", certFile);
       }
@@ -473,9 +458,6 @@ export default function ProvincialDocumentsPage() {
       formData.append("mode", "single");
       formData.append("reservationId", selectedReservationId);
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       formData.append("documentTypeId", resubmitTypeId);
       formData.append("file", resubmitFile);
 
@@ -551,11 +533,6 @@ export default function ProvincialDocumentsPage() {
               disabled={bookingsLoading}
               onValueChange={(value) => {
                 setSelectedReservationId(value);
-                const item = bookings.find((b) => String(b.id) === String(value));
-                const dates = item?.eventDates?.length
-                  ? item.eventDates
-                  : [item?.eventDate].filter(Boolean);
-                setSelectedEventDate(dates.length === 1 ? dates[0] : "");
                 resetInitialFiles();
                 resetFinalFiles();
                 resetResubmit();
@@ -603,53 +580,6 @@ export default function ProvincialDocumentsPage() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          {isMultiDate && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Select Event Date</CardTitle>
-                <CardDescription>
-                  This reservation has multiple dates. Choose a date to submit
-                  the Official Receipt.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {eventDates.map((date) => {
-                  const receiptSubmitted = documents.some(
-                    (d) =>
-                      d.type === "Official Receipt" &&
-                      d.forEventDate === date
-                  );
-                  return (
-                    <Button
-                      key={date}
-                      type="button"
-                      variant={selectedEventDate === date ? "default" : "outline"}
-                      onClick={() => {
-                        setSelectedEventDate(date);
-                        resetInitialFiles();
-                        resetFinalFiles();
-                        resetResubmit();
-                      }}
-                      className="h-auto flex-col items-start gap-1 px-3 py-2"
-                    >
-                      <span>{formatEventDateLabel(date)}</span>
-                      {receiptSubmitted && (
-                        <CheckCircle className="size-3 text-green-500" />
-                      )}
-                    </Button>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
-          {isMultiDate && !selectedEventDate ? (
-            <Card>
-              <CardContent className="py-10 text-center text-muted-foreground">
-                Select an event date above to submit documents for that day.
-              </CardContent>
-            </Card>
-          ) : (
         <>
           <Card>
             <CardHeader>
@@ -1000,9 +930,7 @@ export default function ProvincialDocumentsPage() {
                 </div>
               ) : displayedDocuments.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
-                  {selectedEventDate
-                    ? `No documents submitted for ${formatEventDateLabel(selectedEventDate)} yet.`
-                    : "No documents submitted for this booking yet."}
+                  No documents submitted for this reservation yet.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1060,8 +988,6 @@ export default function ProvincialDocumentsPage() {
               )}
             </CardContent>
           </Card>
-        </>
-          )}
         </>
       )}
 

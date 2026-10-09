@@ -42,7 +42,6 @@ import {
 import { toast } from "sonner";
 import {
   formatEventDateLabel,
-  phaseSubmittedCount,
 } from "@/lib/document-event-date";
 
 const VALID_IMAGE_TYPES = [
@@ -106,13 +105,12 @@ function docStatus(doc) {
 
 export default function ClientDocumentsPage() {
   const [documents, setDocuments] = React.useState([]);
-  const [datePhases, setDatePhases] = React.useState({});
+  const [phase, setPhase] = React.useState(EMPTY_PHASE);
   const [bookingsLoading, setBookingsLoading] = React.useState(true);
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [bookings, setBookings] = React.useState([]);
   const [selectedKey, setSelectedKey] = React.useState("");
-  const [selectedEventDate, setSelectedEventDate] = React.useState("");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [viewDoc, setViewDoc] = React.useState(null);
@@ -144,18 +142,7 @@ export default function ClientDocumentsPage() {
     return [...new Set(dates)].sort();
   }, [selectedItem]);
 
-  const isMultiDate = eventDates.length > 1;
-  const phase = selectedEventDate
-    ? { ...EMPTY_PHASE, ...(datePhases[selectedEventDate] || {}) }
-    : EMPTY_PHASE;
-  const displayedDocuments = React.useMemo(
-    () =>
-      documents.filter((doc) => {
-        if (!selectedEventDate) return true;
-        return (doc.forEventDate || doc.eventDate) === selectedEventDate;
-      }),
-    [documents, selectedEventDate]
-  );
+  const displayedDocuments = documents;
 
   const filteredTargets = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -232,7 +219,7 @@ export default function ClientDocumentsPage() {
   const loadDocumentsForReservation = React.useCallback(async (item) => {
     if (!item?.reservationId) {
       setDocuments([]);
-      setDatePhases({});
+      setPhase(EMPTY_PHASE);
       return;
     }
     setDocumentsLoading(true);
@@ -254,16 +241,16 @@ export default function ClientDocumentsPage() {
 
       if (Array.isArray(data)) {
         setDocuments(data);
-        setDatePhases({});
+        setPhase(EMPTY_PHASE);
       } else {
         setDocuments(data.documents || []);
-        setDatePhases(data.datePhases || {});
+        setPhase({ ...EMPTY_PHASE, ...(data.phase || {}) });
       }
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to load documents");
       setDocuments([]);
-      setDatePhases({});
+      setPhase(EMPTY_PHASE);
     } finally {
       setDocumentsLoading(false);
     }
@@ -295,17 +282,6 @@ export default function ClientDocumentsPage() {
 
   function selectTarget(item) {
     setSelectedKey(item.id);
-    const dates = item.eventDates?.length
-      ? item.eventDates
-      : [item.eventDate].filter(Boolean);
-    setSelectedEventDate(dates.length === 1 ? dates[0] : "");
-    resetInitialFiles();
-    resetFinalFiles();
-    resetResubmit();
-  }
-
-  function selectEventDate(date) {
-    setSelectedEventDate(date);
     resetInitialFiles();
     resetFinalFiles();
     resetResubmit();
@@ -328,10 +304,6 @@ export default function ClientDocumentsPage() {
     e.preventDefault();
     if (!selectedItem) {
       toast.error("Please select a booking or reservation first.");
-      return;
-    }
-    if (isMultiDate && !selectedEventDate) {
-      toast.error("Select an event date first.");
       return;
     }
     if (!showInitialForm) {
@@ -365,9 +337,6 @@ export default function ClientDocumentsPage() {
         formData.append("bookingId", String(selectedItem.bookingId));
       }
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       if (phase.needsBilling && billingFile) {
         formData.append("billingFile", billingFile);
       }
@@ -402,10 +371,6 @@ export default function ClientDocumentsPage() {
     e.preventDefault();
     if (!selectedItem) {
       toast.error("Please select a booking or reservation first.");
-      return;
-    }
-    if (isMultiDate && !selectedEventDate) {
-      toast.error("Select an event date first.");
       return;
     }
     if (!phase.initialApproved) {
@@ -445,9 +410,6 @@ export default function ClientDocumentsPage() {
         formData.append("bookingId", String(selectedItem.bookingId));
       }
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       if (phase.needsCertification && certFile) {
         formData.append("certificationFile", certFile);
       }
@@ -484,10 +446,6 @@ export default function ClientDocumentsPage() {
       toast.error("Please select a booking or reservation first.");
       return;
     }
-    if (isMultiDate && !selectedEventDate) {
-      toast.error("Select an event date first.");
-      return;
-    }
     if (!resubmitTypeId) {
       toast.error("Select which declined document to resubmit.");
       return;
@@ -510,9 +468,6 @@ export default function ClientDocumentsPage() {
         formData.append("bookingId", String(selectedItem.bookingId));
       }
       formData.append("clientId", getClientId());
-      if (selectedEventDate) {
-        formData.append("eventDate", selectedEventDate);
-      }
       formData.append("documentTypeId", resubmitTypeId);
       formData.append("file", resubmitFile);
 
@@ -715,67 +670,13 @@ export default function ClientDocumentsPage() {
         </Card>
       ) : (
         <>
-          {isMultiDate && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Select Event Date</CardTitle>
-                <CardDescription>
-                  This reservation has multiple dates. Choose a date to submit
-                  its own set of four documents.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {eventDates.map((date) => {
-                    const datePhase = datePhases[date] || {};
-                    const count = phaseSubmittedCount(datePhase);
-                    const isSelected = selectedEventDate === date;
-                    return (
-                      <Button
-                        key={date}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        onClick={() => selectEventDate(date)}
-                        className="h-auto flex-col items-start gap-1 px-3 py-2"
-                      >
-                        <span className="font-medium">
-                          {formatEventDateLabel(date)}
-                        </span>
-                        <span className="text-xs opacity-80">
-                          {count}/4 documents
-                        </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-                {selectedEventDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Submitting documents for{" "}
-                    <span className="font-medium text-foreground">
-                      {formatEventDateLabel(selectedEventDate)}
-                    </span>
-                    .
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {isMultiDate && !selectedEventDate ? (
-            <Card>
-              <CardContent className="py-10 text-center text-muted-foreground">
-                Select an event date above to submit documents for that day.
-              </CardContent>
-            </Card>
-          ) : (
-        <>
           <Card>
             <CardHeader>
               <CardTitle>Document Progress</CardTitle>
               <CardDescription>
-                {selectedEventDate
-                  ? `Step 1 and Step 2 for ${formatEventDateLabel(selectedEventDate)}. Each date has its own four documents.`
-                  : "Step 1: Billing Statement + Official Receipt (LTOO). Step 2 unlocks after both are verified."}
+                Step 1: Billing Statement + Official Receipt (LTOO). Step 2
+                unlocks after both are verified. A multi-date reservation shares
+                one set of four documents.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-2 sm:grid-cols-2">
@@ -1059,9 +960,7 @@ export default function ClientDocumentsPage() {
                 </div>
               ) : displayedDocuments.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
-                  {selectedEventDate
-                    ? `No documents submitted for ${formatEventDateLabel(selectedEventDate)} yet.`
-                    : "No documents submitted for this booking yet."}
+                  No documents submitted for this booking yet.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1080,9 +979,11 @@ export default function ClientDocumentsPage() {
                           </p>
                           <p className="text-xs text-muted-foreground">
                             For:{" "}
-                            {formatEventDateLabel(
-                              doc.forEventDate || doc.eventDate
-                            )}
+                            {eventDates.length
+                              ? eventDates.map(formatEventDateLabel).join(", ")
+                              : formatEventDateLabel(
+                                  doc.forEventDate || doc.eventDate
+                                )}
                             {" · "}
                             Submitted:{" "}
                             {doc.submittedAt
@@ -1124,8 +1025,6 @@ export default function ClientDocumentsPage() {
               )}
             </CardContent>
           </Card>
-        </>
-          )}
         </>
       )}
 

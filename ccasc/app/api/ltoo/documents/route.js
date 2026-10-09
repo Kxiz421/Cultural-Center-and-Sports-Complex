@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
-import { documentEventDateKey } from "@/lib/document-event-date";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth } from "@/lib/api-auth";
@@ -12,7 +11,7 @@ const LTOO_DOCUMENT_TYPES = [1, 5];
 const BILLING_TYPE_ID = 1;
 const RECEIPT_TYPE_ID = 5;
 
-function toDocItem(doc, eventDate) {
+function toDocItem(doc) {
   return {
     documentId: doc.documentId,
     documentTypeId: doc.documentTypeId,
@@ -21,7 +20,6 @@ function toDocItem(doc, eventDate) {
     filePath: doc.filePath,
     remarks: doc.remarks,
     submittedAt: doc.submittedAt,
-    eventDate,
   };
 }
 
@@ -56,15 +54,6 @@ function pairStatus(billing, receipt) {
   if (statuses.some((status) => status === "Pending") || statuses.length < 2) {
     return "Pending";
   }
-  if (statuses.some((status) => status === "Declined")) return "Declined";
-  return "Pending";
-}
-
-function groupStatus(dateGroups) {
-  const statuses = dateGroups.map((group) => group.overallStatus);
-  if (statuses.length === 0) return "Pending";
-  if (statuses.every((status) => status === "Verified")) return "Verified";
-  if (statuses.some((status) => status === "Pending")) return "Pending";
   if (statuses.some((status) => status === "Declined")) return "Declined";
   return "Pending";
 }
@@ -136,12 +125,14 @@ export async function GET() {
           ? `bkg-${bookingId}`
           : `doc-${doc.documentId}`;
 
-      const eventDate = documentEventDateKey(
-        doc,
-        formatDbDate(reservation?.eventDate)
-      );
-
       if (!groups.has(groupId)) {
+        const primaryEventDate = formatDbDate(reservation?.eventDate);
+        const eventDates = [
+          primaryEventDate,
+          ...(reservation?.additionalDates || []).map((ad) =>
+            formatDbDate(ad.eventDate)
+          ),
+        ].filter(Boolean);
         groups.set(groupId, {
           id: groupId,
           reservationId,
@@ -150,44 +141,23 @@ export async function GET() {
           clientType,
           eventType: reservation?.eventType || null,
           venue: reservation?.venue?.venue || null,
-          primaryEventDate: formatDbDate(reservation?.eventDate),
+          eventDate: primaryEventDate || null,
+          eventDates: [...new Set(eventDates)].sort(),
           items: [],
         });
       }
 
-      groups.get(groupId).items.push(toDocItem(doc, eventDate));
+      groups.get(groupId).items.push(toDocItem(doc));
     }
 
     const mapped = [...groups.values()].map((group) => {
-      const byDate = new Map();
-      for (const item of group.items) {
-        const dateKey = item.eventDate || group.primaryEventDate || "unknown";
-        if (!byDate.has(dateKey)) {
-          byDate.set(dateKey, { eventDate: dateKey, docs: [] });
-        }
-        byDate.get(dateKey).docs.push(item);
-      }
-
-      const dateGroups = [...byDate.values()]
-        .map((entry) => {
-          const billingStatement = latestOf(entry.docs.filter(isBilling));
-          const officialReceipt = latestOf(entry.docs.filter(isReceipt));
-          return {
-            eventDate: entry.eventDate === "unknown" ? null : entry.eventDate,
-            billingStatement,
-            officialReceipt,
-            overallStatus: pairStatus(billingStatement, officialReceipt),
-          };
-        })
-        .sort((a, b) => String(a.eventDate || "").localeCompare(String(b.eventDate || "")));
+      const billingStatement = latestOf(group.items.filter(isBilling));
+      const officialReceipt = latestOf(group.items.filter(isReceipt));
 
       const submittedAt = group.items.reduce((latest, item) => {
         const time = item.submittedAt ? new Date(item.submittedAt).getTime() : 0;
         return time > latest ? time : latest;
       }, 0);
-
-      const billingStatement = dateGroups[0]?.billingStatement || null;
-      const officialReceipt = dateGroups[0]?.officialReceipt || null;
 
       return {
         id: group.id,
@@ -197,14 +167,11 @@ export async function GET() {
         clientType: group.clientType,
         eventType: group.eventType,
         venue: group.venue,
-        eventDate: dateGroups.length === 1
-          ? dateGroups[0].eventDate
-          : group.primaryEventDate,
-        eventDates: dateGroups.map((entry) => entry.eventDate).filter(Boolean),
-        dateGroups,
+        eventDate: group.eventDate,
+        eventDates: group.eventDates,
         billingStatement,
         officialReceipt,
-        documentStatus: groupStatus(dateGroups),
+        documentStatus: pairStatus(billingStatement, officialReceipt),
         submittedAt: submittedAt ? new Date(submittedAt).toISOString() : null,
         remarks:
           [billingStatement?.remarks, officialReceipt?.remarks]
