@@ -3,6 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { handleUpload } from "@vercel/blob/client";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { resolveBlobToken } from "@/lib/blob-token";
 
 const ALLOWED_TYPES = [
   "image/jpeg",
@@ -23,7 +24,7 @@ const MAX_SIZE_BYTES = 50 * 1024 * 1024;
  */
 export async function GET() {
   return noCacheJson({
-    blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    blobConfigured: Boolean(resolveBlobToken()),
   });
 }
 
@@ -36,13 +37,14 @@ export async function POST(request) {
     // a short-lived client token so the browser can PUT the file directly to
     // Blob storage — large files never pass through this serverless function.
     if (contentType.includes("application/json")) {
+      const token = resolveBlobToken();
       // No Blob token (e.g. localhost): tell the client to use the multipart
       // fallback instead of failing the token handshake with a 500.
-      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      if (!token) {
         return NextResponse.json(
           {
             error:
-              "Large-file Blob uploads require BLOB_READ_WRITE_TOKEN on this deployment.",
+              "Large-file Blob uploads require a Blob read/write token on this deployment.",
             code: "BLOB_NOT_CONFIGURED",
           },
           { status: 501 }
@@ -52,7 +54,7 @@ export async function POST(request) {
       const body = await request.json();
       try {
         const json = await handleUpload({
-          token: process.env.BLOB_READ_WRITE_TOKEN,
+          token,
           request,
           body,
           onBeforeGenerateToken: async () => ({
@@ -69,10 +71,7 @@ export async function POST(request) {
         console.error("[upload/id-proof] handleUpload failed:", handleError);
         return NextResponse.json(
           {
-            error:
-              process.env.BLOB_READ_WRITE_TOKEN
-                ? "Blob token is configured but the upload handshake failed."
-                : "Large-file Blob uploads require BLOB_READ_WRITE_TOKEN on this deployment.",
+            error: "The Blob upload handshake failed.",
           },
           { status: 500 }
         );

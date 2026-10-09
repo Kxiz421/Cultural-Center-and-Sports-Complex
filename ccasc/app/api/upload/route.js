@@ -1,18 +1,30 @@
 import { NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { handleUpload } from "@vercel/blob/client";
 
 import { requireApiAuth } from "@/lib/api-auth";
+import { noCacheJson } from "@/lib/api-cache-control";
+import { resolveBlobToken } from "@/lib/blob-token";
 
-const VALID_IMAGE_TYPES = [
+const ALLOWED_TYPES = [
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
   "image/jpg",
 ];
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+// Raised to 50MB like the ID-proof upload; on Vercel this is enforced by the
+// Blob direct upload (the file never passes through the serverless body).
+const MAX_SIZE_BYTES = 50 * 1024 * 1024;
+
+const UPLOAD_ROLES = [
+  "admin",
+  "accounting clerk",
+  "local treasury operations officer",
+  "program coordinator cultural",
+  "program coordinator sports",
+];
 
 const EXTENSION_BY_TYPE = {
   "image/jpeg": ".jpg",
@@ -32,17 +44,57 @@ function safeBaseName(name) {
   );
 }
 
+/**
+ * Reports whether this deployment can issue Vercel Blob client tokens, so the
+ * browser uploader can skip the direct-to-Blob handshake on localhost and use
+ * the disk fallback instead.
+ */
+export async function GET() {
+  const guard = await requireApiAuth(UPLOAD_ROLES);
+  if (guard.response) return guard.response;
+
+  return noCacheJson({ blobConfigured: Boolean(resolveBlobToken()) });
+}
+
 export async function POST(request) {
-  const guard = await requireApiAuth([
-    "admin",
-    "accounting clerk",
-    "local treasury operations officer",
-    "program coordinator cultural",
-    "program coordinator sports",
-  ]);
+  const guard = await requireApiAuth(UPLOAD_ROLES);
   if (guard.response) return guard.response;
 
   try {
+    const contentType = request.headers.get("content-type") || "";
+
+    // Direct browser-to-Blob upload: the client `upload()` helper first sends a
+    // JSON handshake here; we answer with a short-lived client token so large
+    // files go straight to Blob without hitting the serverless body limit.
+    if (contentType.includes("application/json")) {
+      const token = resolveBlobToken();
+      if (!token) {
+        return NextResponse.json(
+          {
+            error:
+              "Large-file Blob uploads require a Vercel Blob read/write token on this deployment.",
+            code: "BLOB_NOT_CONFIGURED",
+          },
+          { status: 501 }
+        );
+      }
+
+      const body = await request.json();
+      const json = await handleUpload({
+        token,
+        request,
+        body,
+        onBeforeGenerateToken: async () => ({
+          allowedContentTypes: ALLOWED_TYPES,
+          maximumSizeInBytes: MAX_SIZE_BYTES,
+          addRandomSuffix: true,
+        }),
+        onUploadCompleted: async () => {},
+      });
+      return NextResponse.json(json);
+    }
+
+    // Fallback (multipart, local dev): validate and write to disk.
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -50,7 +102,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!VALID_IMAGE_TYPES.includes(file.type)) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
         {
           error:
@@ -60,9 +112,9 @@ export async function POST(request) {
       );
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_SIZE_BYTES) {
       return NextResponse.json(
-        { error: "File size too large. Maximum is 5MB." },
+        { error: "File size too large. Maximum is 50MB." },
         { status: 400 }
       );
     }
@@ -72,16 +124,6 @@ export async function POST(request) {
       path.extname(String(file.name || "")).toLowerCase();
     const filename = `${Date.now()}-${safeBaseName(file.name)}${extension}`;
 
-    // Production uses Vercel Blob. When no token is configured (local dev), we
-    // fall back to the public/uploads folder so the feature still works.
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const blob = await put(`facilities/${filename}`, file, {
-        access: "public",
-        contentType: file.type,
-      });
-      return NextResponse.json({ url: blob.url, filename: blob.pathname });
-    }
-
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const uploadDir = path.join(process.cwd(), "public", "uploads", "facilities");
@@ -89,7 +131,7 @@ export async function POST(request) {
     await writeFile(path.join(uploadDir, filename), buffer);
 
     console.warn(
-      "BLOB_READ_WRITE_TOKEN is not set - saved the image to public/uploads instead of Vercel Blob."
+      "No Vercel Blob token detected - saved the image to public/uploads instead."
     );
 
     return NextResponse.json({
@@ -99,7 +141,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Failed to upload file:", error);
     return NextResponse.json(
-      { error: "Failed to upload file" },
+      { error: error.message || "Failed to upload file" },
       { status: 500 }
     );
   }

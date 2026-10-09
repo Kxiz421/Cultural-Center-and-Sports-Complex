@@ -55,6 +55,7 @@ import {
 import { formatPhp } from "@/lib/utils";
 import { Pagination } from "@/components/pagination";
 import { isDisplayableImage } from "@/components/facility-details-dialog";
+import { uploadFacilityImage } from "@/lib/upload-facility-image";
 
 const STATUS_OPTIONS = [
   { id: 1, name: "Available" },
@@ -150,21 +151,7 @@ export default function FacilitiesPage() {
     try {
       const uploaded = [];
       for (const file of list) {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `Failed to upload ${file.name}`);
-        }
-
-        const data = await res.json();
-        uploaded.push(data.url);
+        uploaded.push(await uploadFacilityImage(file));
       }
 
       if (targetForm === "edit") {
