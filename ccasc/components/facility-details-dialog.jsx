@@ -45,6 +45,9 @@ export function FacilityNameButton({ facility, onOpen }) {
           src={thumbnail}
           alt={facility.name}
           className="size-8 shrink-0 rounded object-cover"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
         />
       )}
       <button

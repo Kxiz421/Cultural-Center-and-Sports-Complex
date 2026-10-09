@@ -449,6 +449,9 @@ export default function FacilitiesPage() {
                               src={thumb}
                               alt={f.name}
                               className="size-8 shrink-0 rounded object-cover"
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
                             />
                           )}
                           <span>{f.name}</span>

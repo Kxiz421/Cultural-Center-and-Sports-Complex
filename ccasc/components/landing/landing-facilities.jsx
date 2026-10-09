@@ -56,6 +56,9 @@ function FacilityCard({ facility, onOpen }) {
           src={image}
           alt={facility.name}
           className="h-40 w-full object-cover"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
         />
       ) : null}
       <div className="flex flex-1 flex-col p-5">
