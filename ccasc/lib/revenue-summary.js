@@ -11,22 +11,43 @@
  * stops a release from crashing a route that forgot the null check.
  */
 
-/** Start of the day / week / month / year that `now` falls in (local time). */
+/**
+ * Business timezone for revenue: Philippine Time (UTC+8). Revenue days are PHT
+ * calendar days regardless of the server's own timezone, so the numbers are the
+ * same on a local machine and on a UTC host (e.g. Vercel).
+ */
+const BUSINESS_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** The y/m/d/weekday that `date` falls on in the business timezone. */
+function businessDateParts(date) {
+  const shifted = new Date(date.getTime() + BUSINESS_TZ_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+    weekday: shifted.getUTCDay(),
+  };
+}
+
+/** The instant of PHT midnight for a PHT calendar date. */
+function businessDayStart(year, month, day) {
+  return new Date(Date.UTC(year, month, day) - BUSINESS_TZ_OFFSET_MS);
+}
+
+/** Start of the day / week / month / year that `now` falls in (Philippine Time). */
 export function revenueWindowStart(period, now = new Date()) {
+  const { year, month, day, weekday } = businessDateParts(now);
   switch (period) {
-    case "week": {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    case "week":
       // Week starts on Sunday, matching the week anchor the dashboards used.
-      start.setDate(start.getDate() - start.getDay());
-      return start;
-    }
+      return businessDayStart(year, month, day - weekday);
     case "month":
-      return new Date(now.getFullYear(), now.getMonth(), 1);
+      return businessDayStart(year, month, 1);
     case "year":
-      return new Date(now.getFullYear(), 0, 1);
+      return businessDayStart(year, 0, 1);
     case "day":
     default:
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return businessDayStart(year, month, day);
   }
 }
 

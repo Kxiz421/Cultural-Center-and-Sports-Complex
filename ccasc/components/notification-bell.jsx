@@ -204,7 +204,7 @@ export function NotificationBell({ audience = "staff", scope = "" }) {
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg">
+        <div className="fixed inset-x-2 top-16 z-50 overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-[26rem]">
           <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
             <span className="text-sm font-semibold">Notifications</span>
             <Button
