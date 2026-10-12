@@ -16,12 +16,7 @@ const SPORTS_VENUE_IDS = [2];
  * documents).
  */
 const REQUIRED_DOCUMENT_TYPES_BY_VENUE = {
-  1: [
-    "Billing Statement",
-    "Official Receipt",
-    "Certification",
-    "Contract of Lease",
-  ],
+  1: ["Certification", "Contract of Lease"],
   2: ["Official Receipt"],
 };
 

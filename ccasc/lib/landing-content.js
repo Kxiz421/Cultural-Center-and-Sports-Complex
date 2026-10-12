@@ -113,7 +113,7 @@ export const STEPS = [
   {
     title: "Submit your documents",
     description:
-      "Upload the documents for verification from your dashboard: the Official Receipt for a Sports Complex booking, or the Billing Statement and Official Receipt for the Cultural Center followed by its Certification and Contract of Lease.",
+      "Upload the documents for verification from your dashboard: the Certification and Contract of Lease for a Cultural Center booking, or the Official Receipt for a Sports Complex booking.",
   },
   {
     title: "Booking confirmed",

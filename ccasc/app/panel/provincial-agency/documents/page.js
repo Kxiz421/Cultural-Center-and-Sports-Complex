@@ -53,8 +53,11 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const EMPTY_PHASE = {
   receiptStatus: null,
-  canUploadInitial: true,
-  needsReceipt: true,
+  leaseStatus: null,
+  certStatus: null,
+  needsReceipt: false,
+  needsLease: false,
+  needsCertification: false,
 };
 
 function validateImageFile(file, label) {
@@ -104,9 +107,7 @@ export default function ProvincialDocumentsPage() {
   const [viewDoc, setViewDoc] = React.useState(null);
   
 
-  const [billingFile, setBillingFile] = React.useState(null);
   const [receiptFile, setReceiptFile] = React.useState(null);
-  const [billingPreview, setBillingPreview] = React.useState("");
   const [receiptPreview, setReceiptPreview] = React.useState("");
 
   const [certFile, setCertFile] = React.useState(null);
@@ -140,43 +141,24 @@ export default function ProvincialDocumentsPage() {
 
   const displayedDocuments = documents;
 
-  const showInitialForm =
-    isSportsComplex
-      ? !phase.receiptStatus && phase.needsReceipt
-      : !phase.initialApproved && (phase.needsBilling || phase.needsReceipt);
-  const requireBothInitial = isSportsComplex ? false : phase.needsBilling && phase.needsReceipt;
+  const showInitialForm = isSportsComplex && phase.needsReceipt;
   const showFinalForm =
-    isSportsComplex
-      ? false
-      : phase.initialApproved && (phase.needsCertification || phase.needsLease);
-  const requireBothFinal =
-    isSportsComplex
-      ? false
-      : phase.needsCertification && phase.needsLease;
+    !isSportsComplex && (phase.needsCertification || phase.needsLease);
+  const requireBothFinal = phase.needsCertification && phase.needsLease;
 
   const declinedResubmitOptions = React.useMemo(() => {
     if (isSportsComplex) {
-      // Sports Complex: only receipt
       if (phase.receiptStatus === "Declined") {
         return [{ id: "5", name: "Official Receipt" }];
       }
       return [];
     }
-    // Cultural Center: all document types
     const options = [];
-    if (phase.billingStatus === "Declined") {
-      options.push({ id: "1", name: "Billing Statement" });
+    if (phase.certStatus === "Declined") {
+      options.push({ id: "3", name: "Certification" });
     }
-    if (phase.receiptStatus === "Declined") {
-      options.push({ id: "5", name: "Official Receipt" });
-    }
-    if (phase.initialApproved) {
-      if (phase.certStatus === "Declined") {
-        options.push({ id: "3", name: "Certification" });
-      }
-      if (phase.leaseStatus === "Declined") {
-        options.push({ id: "2", name: "Contract of Lease" });
-      }
+    if (phase.leaseStatus === "Declined") {
+      options.push({ id: "2", name: "Contract of Lease" });
     }
     return options;
   }, [phase, isSportsComplex]);
@@ -262,9 +244,7 @@ export default function ProvincialDocumentsPage() {
   }, [selectedReservationId, loadDocumentsForReservation]);
 
   const resetInitialFiles = () => {
-    setBillingFile(null);
     setReceiptFile(null);
-    setBillingPreview("");
     setReceiptPreview("");
   };
 
@@ -302,20 +282,11 @@ export default function ProvincialDocumentsPage() {
     }
     if (!showInitialForm) {
       toast.error(
-        isSportsComplex
-          ? "Official Receipt is not available for upload on this reservation."
-          : "Billing Statement and Official Receipt are not available for upload on this reservation."
+        "Official Receipt is not available for upload on this reservation."
       );
       return;
     }
 
-    if (phase.needsBilling) {
-      const err = validateImageFile(billingFile, "Billing Statement");
-      if (err) {
-        toast.error(err);
-        return;
-      }
-    }
     if (phase.needsReceipt) {
       const err = validateImageFile(receiptFile, "Official Receipt");
       if (err) {
@@ -330,9 +301,6 @@ export default function ProvincialDocumentsPage() {
       formData.append("mode", "initial");
       formData.append("reservationId", selectedReservationId);
       formData.append("clientId", getClientId());
-      if (phase.needsBilling && billingFile) {
-        formData.append("billingFile", billingFile);
-      }
       if (phase.needsReceipt && receiptFile) {
         formData.append("receiptFile", receiptFile);
       }
@@ -346,13 +314,7 @@ export default function ProvincialDocumentsPage() {
         throw new Error(data.error || "Failed to submit documents");
       }
 
-      toast.success(
-        isSportsComplex
-          ? "Official Receipt submitted for LTOO review."
-          : requireBothInitial
-            ? "Billing Statement and Official Receipt submitted for LTOO review."
-            : "Document submitted for LTOO review."
-      );
+      toast.success("Official Receipt submitted for review.");
       resetInitialFiles();
       await loadDocumentsForReservation(selectedReservationId);
     } catch (err) {
@@ -367,12 +329,6 @@ export default function ProvincialDocumentsPage() {
     if (isSportsComplex) return;
     if (!selectedReservationId) {
       toast.error("Please select a reservation first.");
-      return;
-    }
-    if (!phase.initialApproved) {
-      toast.error(
-        "Wait for LTOO to approve Billing Statement and Official Receipt first."
-      );
       return;
     }
     if (!showFinalForm) {
@@ -500,9 +456,7 @@ export default function ProvincialDocumentsPage() {
   );
 
   const initialSubmitDisabled =
-    uploading ||
-    (phase.needsBilling && !billingFile) ||
-    (phase.needsReceipt && !receiptFile);
+    uploading || (phase.needsReceipt && !receiptFile);
 
   const finalSubmitDisabled =
     uploading ||
@@ -514,7 +468,9 @@ export default function ProvincialDocumentsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Documents</h2>
         <p className="text-muted-foreground text-sm">
-          Select a reservation to view and submit documents. {isSportsComplex ? "Only the Official Receipt is required for Sports Complex reservations." : "Billing Statement and Official Receipt come first for Cultural Center; Certification and Contract of Lease unlock after LTOO approval."}
+          Select a reservation to submit your documents: the Certification and
+          Contract of Lease for the Cultural Center, or the Official Receipt for
+          the Sports Complex.
         </p>
       </div>
 
@@ -586,25 +542,29 @@ export default function ProvincialDocumentsPage() {
               <CardTitle>Document Progress</CardTitle>
               <CardDescription>
                 {isSportsComplex
-                  ? "Submit the Official Receipt for LTOO verification."
-                  : "Step 1: Billing Statement + Official Receipt (LTOO). Step 2 unlocks after both are verified."}
+                  ? "Submit the Official Receipt for review."
+                  : "Submit your Certification and Contract of Lease. A multi-date reservation shares one document set."}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-2 sm:grid-cols-1">
-              {!isSportsComplex && statusPill("Billing Statement", phase.billingStatus)}
-              {statusPill("Official Receipt", phase.receiptStatus)}
-              {!isSportsComplex && statusPill("Certification", phase.certStatus)}
-              {!isSportsComplex && statusPill("Contract of Lease", phase.leaseStatus)}
+              {isSportsComplex ? (
+                statusPill("Official Receipt", phase.receiptStatus)
+              ) : (
+                <>
+                  {statusPill("Certification", phase.certStatus)}
+                  {statusPill("Contract of Lease", phase.leaseStatus)}
+                </>
+              )}
             </CardContent>
           </Card>
 
-          {isSportsComplex ? (
+          {isSportsComplex && (
             <Card>
               <CardHeader>
                 <CardTitle>Upload Official Receipt</CardTitle>
                 <CardDescription>
                   {showInitialForm
-                    ? "Upload the Official Receipt for LTOO verification."
+                    ? "Upload the Official Receipt for review."
                     : "Official Receipt already submitted or pending review."}
                 </CardDescription>
               </CardHeader>
@@ -647,98 +607,7 @@ export default function ProvincialDocumentsPage() {
                     </div>
                     <Button type="submit" disabled={initialSubmitDisabled}>
                       <Upload className="mr-2 size-4" />
-                      {uploading
-                        ? "Uploading..."
-                        : "Upload Official Receipt"}
-                    </Button>
-                  </form>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Step 1 — Billing Statement & Official Receipt
-                </CardTitle>
-                <CardDescription>
-                  {requireBothInitial
-                    ? "Upload both images together. They are reviewed by the Local Treasury Operations Officer."
-                    : "Upload the remaining required document(s) for LTOO review."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {!showInitialForm ? (
-                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                    {phase.initialApproved
-                      ? "Both documents are verified. You can proceed to Step 2."
-                      : "These documents are already pending review for this booking."}
-                  </div>
-                ) : (
-                  <form onSubmit={handleUploadInitial} className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {phase.needsBilling && (
-                        <div className="space-y-2">
-                          <Label htmlFor="billing-file">Billing Statement</Label>
-                          <Input
-                            id="billing-file"
-                            type="file"
-                            accept="image/jpeg,image/png,image/gif,image/webp"
-                            onChange={(e) =>
-                              onPickFile(
-                                e,
-                                setBillingFile,
-                                setBillingPreview,
-                                "Billing Statement"
-                              )
-                            }
-                          />
-                          {billingPreview && (
-                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                              <img
-                                src={billingPreview}
-                                alt="Billing Statement preview"
-                                className="h-full w-full object-contain"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {phase.needsReceipt && (
-                        <div className="space-y-2">
-                          <Label htmlFor="receipt-file">Official Receipt</Label>
-                          <Input
-                            id="receipt-file"
-                            type="file"
-                            accept="image/jpeg,image/png,image/gif,image/webp"
-                            onChange={(e) =>
-                              onPickFile(
-                                e,
-                                setReceiptFile,
-                                setReceiptPreview,
-                                "Official Receipt"
-                              )
-                            }
-                          />
-                          {receiptPreview && (
-                            <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
-                              <img
-                                src={receiptPreview}
-                                alt="Official Receipt preview"
-                                className="h-full w-full object-contain"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <Button type="submit" disabled={initialSubmitDisabled}>
-                      <Upload className="mr-2 size-4" />
-                      {uploading
-                        ? "Uploading..."
-                        : requireBothInitial
-                          ? "Upload Both Documents"
-                          : "Upload Document"}
+                      {uploading ? "Uploading..." : "Upload Official Receipt"}
                     </Button>
                   </form>
                 )}
@@ -749,26 +618,14 @@ export default function ProvincialDocumentsPage() {
           {!isSportsComplex && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {!phase.initialApproved && (
-                    <Lock className="size-4 text-muted-foreground" />
-                  )}
-                  Step 2 — Certification & Contract of Lease
-                </CardTitle>
+                <CardTitle>Certification &amp; Contract of Lease</CardTitle>
                 <CardDescription>
-                  Available after LTOO verifies both Billing Statement and
-                  Official Receipt.
+                  Upload your Certification and Contract of Lease.
                   {requireBothFinal ? " Upload both together." : ""}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!phase.initialApproved ? (
-                  <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground flex items-start gap-2">
-                    <Lock className="size-4 mt-0.5 shrink-0" />
-                    Locked until LTOO approves Billing Statement and Official
-                    Receipt for this booking.
-                  </div>
-                ) : !showFinalForm ? (
+                {!showFinalForm ? (
                   <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
                     Certification and Contract of Lease are already pending review
                     or verified for this booking.

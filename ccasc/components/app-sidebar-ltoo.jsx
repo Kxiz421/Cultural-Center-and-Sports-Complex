@@ -5,7 +5,6 @@ import {
   Wallet,
   BellRing,
   XCircle,
-  FileText,
   FileBarChart,
   Megaphone,
 } from "lucide-react";
@@ -43,11 +42,6 @@ const navMain = [
     title: "Booking Cancellation",
     url: "/panel/local-treasury-officer/cancellations",
     icon: XCircle,
-  },
-  {
-    title: "Documents",
-    url: "/panel/local-treasury-officer/documents",
-    icon: FileText,
   },
   {
     title: "Notifications",

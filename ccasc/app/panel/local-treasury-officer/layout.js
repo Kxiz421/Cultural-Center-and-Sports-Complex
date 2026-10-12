@@ -13,7 +13,6 @@ const TITLES = {
   "/panel/local-treasury-officer/notifications": "Notifications",
   "/panel/local-treasury-officer/announcements": "Announcements",
   "/panel/local-treasury-officer/cancellations": "Booking Cancellation",
-  "/panel/local-treasury-officer/documents": "Documents",
   "/panel/local-treasury-officer/reports": "Report Generation",
 };
 

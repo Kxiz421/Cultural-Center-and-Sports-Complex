@@ -10,20 +10,21 @@ import {
   isSportsComplexVenue,
   notifyCulturalCenterCoordinators,
   notifySportsComplexCoordinators,
-  notifyLtooStaff,
 } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth, ownClientId } from "@/lib/api-auth";
 const DOC_TYPE = {
-  BILLING_STATEMENT: 1,
   CONTRACT_OF_LEASE: 2,
   CERTIFICATION: 3,
   OFFICIAL_RECEIPT: 5,
 };
 
-const INITIAL_TYPES = [DOC_TYPE.BILLING_STATEMENT, DOC_TYPE.OFFICIAL_RECEIPT];
+// Cultural Center submits Certification + Contract of Lease (no longer gated);
+// Sports Complex submits only an Official Receipt. Billing Statement is retired.
 const FINAL_TYPES = [DOC_TYPE.CONTRACT_OF_LEASE, DOC_TYPE.CERTIFICATION];
+const RECEIPT_TYPES = [DOC_TYPE.OFFICIAL_RECEIPT];
+const ALLOWED_CLIENT_TYPES = [...RECEIPT_TYPES, ...FINAL_TYPES];
 const VALID_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -80,31 +81,20 @@ function isBlocking(status) {
 
 function computePhase(documents, venueId = null) {
   const byType = latestStatusByType(documents);
-  const billingStatus = byType[DOC_TYPE.BILLING_STATEMENT] || null;
   const receiptStatus = byType[DOC_TYPE.OFFICIAL_RECEIPT] || null;
   const leaseStatus = byType[DOC_TYPE.CONTRACT_OF_LEASE] || null;
   const certStatus = byType[DOC_TYPE.CERTIFICATION] || null;
 
   const isSportsComplex = venueId === 2;
 
-  const initialApproved =
-     isVerified(billingStatus) && isVerified(receiptStatus);
-
   return {
-    billingStatus: isSportsComplex ? null : billingStatus,
-    receiptStatus,
+    isSportsComplex,
+    receiptStatus: isSportsComplex ? receiptStatus : null,
     leaseStatus: isSportsComplex ? null : leaseStatus,
     certStatus: isSportsComplex ? null : certStatus,
-    initialApproved: isSportsComplex ? false : initialApproved,
-    canUploadInitial:
-      isSportsComplex
-        ? !isBlocking(receiptStatus)
-        : !isBlocking(billingStatus) || !isBlocking(receiptStatus),
-    canUploadFinal: isSportsComplex ? false : initialApproved,
-    needsBilling: isSportsComplex ? false : !isBlocking(billingStatus),
-    needsReceipt: !isBlocking(receiptStatus),
-    needsLease: isSportsComplex ? false : initialApproved && !isBlocking(leaseStatus),
-    needsCertification: isSportsComplex ? false : initialApproved && !isBlocking(certStatus),
+    needsReceipt: isSportsComplex ? !isBlocking(receiptStatus) : false,
+    needsLease: isSportsComplex ? false : !isBlocking(leaseStatus),
+    needsCertification: isSportsComplex ? false : !isBlocking(certStatus),
   };
 }
 
@@ -255,9 +245,6 @@ async function notifyDocumentRecipients({
   const hasReceipt = documentTypes.some((name) =>
     /official receipt/i.test(name)
   );
-  const hasBilling = documentTypes.some((name) =>
-    /billing statement/i.test(name)
-  );
 
   // For Sports Complex, notify coordinators when an Official Receipt is uploaded
   if (hasReceipt && isSportsComplexVenue(reservation.venueId)) {
@@ -266,16 +253,6 @@ async function notifyDocumentRecipients({
       type: "document",
       message: `New ${message}`,
       link: coordinatorLink,
-    });
-  }
-
-  // A client / provincial agency submitting the Billing Statement or Official
-  // Receipt is filing it for treasury review — notify the LTOO.
-  if (submittedByClient && (hasBilling || hasReceipt)) {
-    await notifyLtooStaff({
-      clientId,
-      type: "document",
-      message: `New ${message}`,
     });
   }
 }
@@ -373,83 +350,40 @@ export async function POST(request) {
     }
 
     if (mode === "initial" || mode === "bs-or") {
-      if (isVerified(phase.billingStatus) && isVerified(phase.receiptStatus)) {
+      if (!phase.isSportsComplex) {
+        return NextResponse.json(
+          { error: "Official Receipt is not required for this venue." },
+          { status: 400 }
+        );
+      }
+      if (!phase.needsReceipt) {
         return NextResponse.json(
           {
             error:
-              "Billing Statement and Official Receipt are already approved for this event date.",
+              "Official Receipt is already pending or approved for this event date.",
           },
           { status: 400 }
         );
       }
 
-      const billingFile =
-        formData.get("billingFile") || formData.get("billingStatement");
       const receiptFile =
         formData.get("receiptFile") || formData.get("officialReceipt");
-
-      if (phase.needsBilling && phase.needsReceipt) {
-        const billingErr = validateImageFile(billingFile, "Billing Statement");
-        const receiptErr = validateImageFile(receiptFile, "Official Receipt");
-        if (billingErr || receiptErr) {
-          return NextResponse.json(
-            { error: [billingErr, receiptErr].filter(Boolean).join(" ") },
-            { status: 400 }
-          );
-        }
-      } else {
-        if (phase.needsBilling) {
-          const err = validateImageFile(billingFile, "Billing Statement");
-          if (err) return NextResponse.json({ error: err }, { status: 400 });
-        }
-        if (phase.needsReceipt) {
-          const err = validateImageFile(receiptFile, "Official Receipt");
-          if (err) return NextResponse.json({ error: err }, { status: 400 });
-        }
-        if (!phase.needsBilling && !phase.needsReceipt) {
-          return NextResponse.json(
-            {
-              error:
-                "Billing Statement and Official Receipt are already pending or approved for this event date. Wait for LTOO review.",
-            },
-            { status: 400 }
-          );
-        }
-      }
-
-      const toCreate = [];
-      if (phase.needsBilling && billingFile && typeof billingFile !== "string") {
-        toCreate.push({
-          documentTypeId: DOC_TYPE.BILLING_STATEMENT,
-          file: billingFile,
-          bookingId: booking.bookingId,
-          eventDate: eventDateKey,
-        });
-      }
-      if (phase.needsReceipt && receiptFile && typeof receiptFile !== "string") {
-        toCreate.push({
-          documentTypeId: DOC_TYPE.OFFICIAL_RECEIPT,
-          file: receiptFile,
-          bookingId: booking.bookingId,
-          eventDate: eventDateKey,
-        });
-      }
-
-      if (toCreate.length === 0) {
-        return NextResponse.json(
-          {
-            error:
-              "No documents were uploaded. Please select the required files.",
-          },
-          { status: 400 }
-        );
+      const receiptErr = validateImageFile(receiptFile, "Official Receipt");
+      if (receiptErr) {
+        return NextResponse.json({ error: receiptErr }, { status: 400 });
       }
 
       const created = await prisma.$transaction((tx) =>
-        createDocuments(tx, toCreate)
+        createDocuments(tx, [
+          {
+            documentTypeId: DOC_TYPE.OFFICIAL_RECEIPT,
+            file: receiptFile,
+            bookingId: booking.bookingId,
+            eventDate: eventDateKey,
+          },
+        ])
       );
 
-      // Billing Statement / Official Receipt submitted for treasury review.
       await notifyDocumentRecipients({
         reservation,
         clientId: reservation.clientId,
@@ -471,11 +405,11 @@ export async function POST(request) {
     }
 
     if (mode === "final" || mode === "cert-lease") {
-      if (!phase.initialApproved) {
+      if (phase.isSportsComplex) {
         return NextResponse.json(
           {
             error:
-              "Certification and Contract of Lease unlock after LTOO approves both the Billing Statement and Official Receipt.",
+              "Certification and Contract of Lease are not required for this venue.",
           },
           { status: 400 }
         );
@@ -584,7 +518,7 @@ export async function POST(request) {
       );
     }
 
-    if (![...INITIAL_TYPES, ...FINAL_TYPES].includes(documentTypeId)) {
+    if (!ALLOWED_CLIENT_TYPES.includes(documentTypeId)) {
       return NextResponse.json(
         { error: "Invalid document type for client submission." },
         { status: 400 }
@@ -599,16 +533,6 @@ export async function POST(request) {
     if (!booking) {
       return NextResponse.json(
         { error: "A reservation/booking is required to submit documents." },
-        { status: 400 }
-      );
-    }
-
-    if (FINAL_TYPES.includes(documentTypeId) && !phase.initialApproved) {
-      return NextResponse.json(
-        {
-          error:
-            "Certification and Contract of Lease unlock after LTOO approves both the Billing Statement and Official Receipt.",
-        },
         { status: 400 }
       );
     }
@@ -935,23 +859,6 @@ export async function PATCH(request) {
           eventBits ? ` for ${eventBits}` : ""
         }.`,
       });
-
-      if (
-        document.bookingId &&
-        INITIAL_TYPES.includes(document.documentTypeId)
-      ) {
-        const bookingDocs = await getBookingDocuments(document.bookingId);
-        const phase = computePhase(bookingDocs);
-        if (phase.initialApproved) {
-          await notifyClient({
-            clientId,
-            type: "document",
-            message: `Billing Statement and Official Receipt are approved${
-              eventBits ? ` for ${eventBits}` : ""
-            }. You may now submit your Certification and Contract of Lease.`,
-          });
-        }
-      }
     }
 
     return NextResponse.json({

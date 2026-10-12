@@ -21,8 +21,6 @@ export async function GET() {
       where: { isRead: false },
     });
 
-    const totalDocuments = await prisma.document.count();
-
     // Daily / weekly / monthly / yearly revenue for the cards, from the same
     // receipt rows the payments module lists (see lib/revenue-summary.js).
     const transactions = await prisma.transaction.findMany({
@@ -34,7 +32,6 @@ export async function GET() {
     return noCacheJson({
       totalPayments,
       pendingNotifications,
-      totalDocuments,
       revenue,
     });
   } catch (error) {

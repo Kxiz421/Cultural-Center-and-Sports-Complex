@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
-import { Wallet, BellRing, FileText } from "lucide-react";
+import { Wallet, BellRing } from "lucide-react";
 
 export default function LTOODashboardPage() {
   const [stats, setStats] = React.useState(null);
@@ -62,18 +62,6 @@ export default function LTOODashboardPage() {
               {loading ? "..." : stats?.pendingNotifications ?? 0}
             </div>
             <p className="text-xs text-muted-foreground">Awaiting notify</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Documents</CardTitle>
-            <FileText className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? "..." : stats?.totalDocuments ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Submitted documents</p>
           </CardContent>
         </Card>
       </div>

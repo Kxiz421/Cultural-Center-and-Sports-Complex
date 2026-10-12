@@ -32,7 +32,7 @@ function formatPhp(amount) {
 
 /** Required-and-verified documents per venue (walk-ins are exempt). */
 const REQUIRED_DOCUMENT_TYPES_BY_VENUE = {
-  1: ["Billing Statement", "Official Receipt", "Certification", "Contract of Lease"],
+  1: ["Certification", "Contract of Lease"],
   2: ["Official Receipt"],
 };
 
