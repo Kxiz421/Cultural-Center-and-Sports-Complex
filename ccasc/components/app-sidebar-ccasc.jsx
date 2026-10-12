@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
+import { PAGE_LOGO } from "@/lib/constants";
 
 const navMain = [
   {
@@ -84,10 +85,11 @@ export function AppSidebarCCASC(props) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="h-auto py-3">
-              <span className="text-base font-semibold leading-tight">
+            <SidebarMenuButton className="h-auto items-center gap-2 py-3">
+              <img src={PAGE_LOGO} alt="" className="size-8 shrink-0" />
+              <span className="min-w-0 text-base font-semibold leading-tight">
                 South Cotabato Gymnasium
-                <span className="text-muted-foreground block text-xs font-normal">
+                <span className="block text-xs font-normal text-white/70">
                   Cultural Center & Sports Complex
                 </span>
               </span>

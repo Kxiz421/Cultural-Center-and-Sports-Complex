@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Building2, Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
+import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -34,7 +36,14 @@ export default function ProvincialAgencyLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
   const { unreadCount } = useUnreadNotificationCount("client");
+  const { data: session } = useSession();
   const logout = useLogout();
+
+  const displayName =
+    [session?.user?.firstName, session?.user?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "Provincial Agency";
 
   const confirmLogout = async () => {
     localStorage.clear();
@@ -58,19 +67,22 @@ export default function ProvincialAgencyLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:static lg:translate-x-0",
+          "navbar-surface fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/20 text-white transition-transform duration-200 lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b px-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="size-6 text-primary" />
-            <span className="text-sm font-semibold">Provincial Agency</span>
-          </div>
+        <div className="flex h-16 items-center gap-2 border-b border-white/20 px-4">
+          <img src={PAGE_LOGO} alt="" className="size-8 shrink-0" />
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-semibold"
+            title={displayName}
+          >
+            {displayName}
+          </span>
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="shrink-0 text-white hover:bg-white/10 hover:text-white lg:hidden"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="size-5" />
@@ -84,9 +96,10 @@ export default function ProvincialAgencyLayout({ children }) {
             return (
               <Button
                 key={item.href}
-                variant={isActive ? "secondary" : "ghost"}
+                variant="ghost"
                 className={cn(
-                  "w-full justify-start gap-3 relative",
+                  "w-full justify-start gap-3 relative text-white/85 hover:bg-white/10 hover:text-white",
+                  isActive && "bg-white/15 font-semibold text-white hover:bg-white/20 hover:text-white",
                   item.wrap && "h-auto py-2"
                 )}
                 onClick={() => {
@@ -116,10 +129,10 @@ export default function ProvincialAgencyLayout({ children }) {
           })}
         </nav>
 
-        <div className="border-t p-3">
+        <div className="border-t border-white/20 p-3">
           <Button
             variant="ghost"
-            className="w-full justify-start gap-3 text-red-600 hover:text-red-700"
+            className="w-full justify-start gap-3 text-red-200 hover:bg-white/10 hover:text-white"
             onClick={() => setLogoutOpen(true)}
           >
             <LogOut className="size-4" />
@@ -130,11 +143,11 @@ export default function ProvincialAgencyLayout({ children }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6">
+        <header className="navbar-surface flex h-16 items-center gap-4 border-b border-white/20 px-4 text-white lg:px-6">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="text-white hover:bg-white/10 hover:text-white lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="size-5" />

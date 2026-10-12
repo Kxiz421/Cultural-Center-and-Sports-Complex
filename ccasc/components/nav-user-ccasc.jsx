@@ -36,7 +36,7 @@ export function NavUserCCASC() {
           <SidebarMenuButton
             type="button"
             onClick={() => setLogoutOpen(true)}
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="text-red-200 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="mr-2 size-4 shrink-0" />
             Log out

@@ -33,7 +33,7 @@ export function NavMain({ items, unreadBadgeCount = 0 }) {
                     tooltip={item.title}
                     className={cn(
                       "relative flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors",
-                      pathname === item.url && "bg-muted text-primary font-semibold"
+                      pathname === item.url && "bg-white/15 text-white font-semibold hover:bg-white/20 hover:text-white"
                     )}
                   >
                     {item.icon && <item.icon className="h-5 w-5 shrink-0" />}

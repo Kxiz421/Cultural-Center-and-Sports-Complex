@@ -385,3 +385,44 @@
       transform 560ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
   }
 }
+
+/*
+ * Blue navbar surfaces: the panel sidebars and the top header bar.
+ *
+ * `--sidebar*` drives the shadcn sidebar (and its hover/active states), while
+ * `.navbar-surface` is applied to the custom client / provincial rails and the
+ * shared header. The repeating gradient adds a light diagonal texture, and the
+ * outline plus inset line give the bar a defined edge instead of a flat fill.
+ */
+:root,
+.dark {
+  --sidebar: #1e3a8a;
+  --sidebar-foreground: #eef2ff;
+  --sidebar-primary: #1d4ed8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 255, 255, 0.14);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.22);
+  --sidebar-ring: rgba(255, 255, 255, 0.45);
+}
+
+.navbar-surface,
+[data-slot="sidebar-inner"],
+[data-sidebar="sidebar"][data-mobile="true"] {
+  background-color: #1e3a8a;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.055) 0 2px,
+      transparent 2px 9px
+    ),
+    linear-gradient(180deg, #24479e 0%, #17307a 100%);
+  color: #eef2ff;
+}
+
+[data-slot="sidebar-inner"],
+[data-sidebar="sidebar"][data-mobile="true"] {
+  outline: 1px solid rgba(255, 255, 255, 0.22);
+  outline-offset: -1px;
+  box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.16);
+}
