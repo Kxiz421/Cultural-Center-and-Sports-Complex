@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
+import { isSessionTokenCurrent } from "@/lib/session-guard";
 import { ALL_AUTHENTICATED_TYPES, CLIENT_TYPES } from "@/lib/auth-roles";
 
 function jsonError(message, status) {
@@ -42,6 +43,21 @@ export async function requireApiAuth(allowedTypes = null) {
   if (!allowed.includes(user.type)) {
     return {
       response: jsonError("You do not have access to this resource.", 403),
+    };
+  }
+
+  // A session that has been replaced by a newer sign-in can no longer act.
+  const stillActive = await isSessionTokenCurrent(user.userId, user.sessionToken);
+  if (!stillActive) {
+    return {
+      response: NextResponse.json(
+        {
+          error:
+            "You were signed out because this account signed in on another device.",
+          code: "session_replaced",
+        },
+        { status: 401 },
+      ),
     };
   }
 
