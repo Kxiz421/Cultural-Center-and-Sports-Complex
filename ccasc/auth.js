@@ -85,34 +85,54 @@ async function passwordsMatch(plain, hash) {
   }
 }
 
+// Explicit field lists so the sign-in lookup never selects `active_session`
+// (a session can still be validated even if that column is missing).
+const STAFF_AUTH_SELECT = {
+  staffId: true,
+  password: true,
+  status: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  staffOrgId: true,
+  staffRole: { select: { roleName: true } },
+  staffOrg: { select: { orgName: true } },
+};
+
+const CLIENT_AUTH_SELECT = {
+  clientId: true,
+  password: true,
+  accountStatus: true,
+  verificationStatus: true,
+  remarks: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  clientRole: { select: { roleName: true, clientRoleId: true } },
+};
+
 function findStaffByIdentifier(identifier) {
   return prisma.staff
-    .findUnique({
-      where: { email: identifier },
-      include: { staffRole: true, staffOrg: true },
-    })
+    .findUnique({ where: { email: identifier }, select: STAFF_AUTH_SELECT })
     .then(
       (found) =>
         found ??
         prisma.staff.findUnique({
           where: { username: identifier },
-          include: { staffRole: true, staffOrg: true },
+          select: STAFF_AUTH_SELECT,
         }),
     );
 }
 
 function findClientByIdentifier(identifier) {
   return prisma.client
-    .findUnique({
-      where: { email: identifier },
-      include: { clientRole: true },
-    })
+    .findUnique({ where: { email: identifier }, select: CLIENT_AUTH_SELECT })
     .then(
       (found) =>
         found ??
         prisma.client.findUnique({
           where: { username: identifier },
-          include: { clientRole: true },
+          select: CLIENT_AUTH_SELECT,
         }),
     );
 }
