@@ -56,6 +56,18 @@ const ROLE_LABELS = {
 
 const PAGE_SIZE = 5;
 
+const VERIFICATION_FILTERS = [
+  { value: "all", label: "All Verification" },
+  { value: "Pending", label: "Pending" },
+  { value: "Verified", label: "Verified" },
+  { value: "Declined", label: "Declined" },
+];
+
+function verificationStatusOf(user) {
+  if (!user || user.type !== "client") return null;
+  return user.verificationStatus || "Pending";
+}
+
 function nextAccountId(existing, roleValue) {
   const prefix =
     roleValue === "provincial-agency"
@@ -78,6 +90,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(1);
   const [roleFilter, setRoleFilter] = React.useState("all");
+  const [verificationFilter, setVerificationFilter] = React.useState("all");
   const [documents, setDocuments] = React.useState([]);
   const [docUser, setDocUser] = React.useState(null);
   const [docLoading, setDocLoading] = React.useState(false);
@@ -296,14 +309,12 @@ export default function UserManagementPage() {
   const handleSaveProfile = async () => {
     if (!selectedUser) return;
 
-    const fn = editForm.firstName.trim();
-    const ln = editForm.lastName.trim();
     const email = editForm.email.trim();
     // Legacy rows may hold "N/A" or other free text - keep digits only.
     const contact = String(editForm.contact || "").replace(/\D/g, "").slice(0, 11);
 
-    if (!fn || !ln) {
-      toast.error("First and last name are required.");
+    if (!email) {
+      toast.error("Email is required.");
       return;
     }
 
@@ -356,9 +367,6 @@ export default function UserManagementPage() {
     try {
       const body = {
         userId: selectedUser.id,
-        firstName: fn,
-        middleName: editForm.middleName,
-        lastName: ln,
         email,
         contact,
         performedBy: currentUserId,
@@ -540,6 +548,13 @@ export default function UserManagementPage() {
   const filtered = users.filter((u) => {
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
 
+    if (
+      verificationFilter !== "all" &&
+      verificationStatusOf(u) !== verificationFilter
+    ) {
+      return false;
+    }
+
     const hay = [
       u.id,
       u.firstName,
@@ -565,20 +580,23 @@ export default function UserManagementPage() {
     setPage(1);
   };
 
-  // When "All Roles" is picked, display from oldest to newest by account
-  // creation date instead of the API's role-grouped order.
-  const ordered =
-    roleFilter === "all"
-      ? [...filtered].sort(
-          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-        )
-      : filtered;
+  const handleVerificationFilterChange = (value) => {
+    setVerificationFilter(value);
+    setPage(1);
+  };
+
+  const ordered = [...filtered].sort(
+    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+  );
 
   const totalPages = Math.ceil(ordered.length / PAGE_SIZE);
   const paginatedUsers = ordered.slice(
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE
   );
+
+  const showQueue = verificationFilter === "Pending";
+  const columnCount = showQueue ? 8 : 7;
 
   return (
     <div className="flex flex-col gap-6">
@@ -588,6 +606,14 @@ export default function UserManagementPage() {
             User management
           </h2>
         </div>
+        <Button
+          variant="outline"
+          className="md:ml-auto"
+          onClick={handleOpenHistory}
+        >
+          <History className="mr-2 size-4" />
+          History
+        </Button>
         <Dialog
           open={addOpen}
           onOpenChange={(open) => {
@@ -1125,27 +1151,21 @@ export default function UserManagementPage() {
               {/* Editable fields */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold">Personal Information</h4>
+                <p className="text-muted-foreground text-xs">
+                  Name cannot be changed. Only the email, contact number, and password can be updated.
+                </p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label>First name</Label>
-                    <Input
-                      value={editForm.firstName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
-                    />
+                    <Input className="bg-muted" readOnly value={editForm.firstName} />
                   </div>
                   <div className="space-y-2">
                     <Label>Middle name</Label>
-                    <Input
-                      value={editForm.middleName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, middleName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
-                    />
+                    <Input className="bg-muted" readOnly value={editForm.middleName} />
                   </div>
                   <div className="space-y-2">
                     <Label>Last name</Label>
-                    <Input
-                      value={editForm.lastName}
-                      onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))}
-                    />
+                    <Input className="bg-muted" readOnly value={editForm.lastName} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1352,7 +1372,8 @@ export default function UserManagementPage() {
         <CardHeader className="gap-3 space-y-0">
           <CardTitle>Directory</CardTitle>
           <CardDescription>
-            Search by name, role, or account ID. Click a name to view and edit account details.
+            Search by name, role, or account ID. Filter by verification to work
+            through pending accounts in the order they registered.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -1380,12 +1401,32 @@ export default function UserManagementPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="w-[190px]">
+              <Select
+                value={verificationFilter}
+                onValueChange={handleVerificationFilterChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Verification" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VERIFICATION_FILTERS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
+                {showQueue && (
+                  <TableHead className="w-[72px]">Queue</TableHead>
+                )}
                 <TableHead>Name</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Organization</TableHead>
@@ -1398,19 +1439,24 @@ export default function UserManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={columnCount} className="text-center">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : paginatedUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={columnCount} className="text-center">
                     No users found
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedUsers.map((u) => (
+                paginatedUsers.map((u, index) => (
                   <TableRow key={u.id}>
+                    {showQueue && (
+                      <TableCell className="text-sm font-medium text-muted-foreground">
+                        {(page - 1) * PAGE_SIZE + index + 1}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <button
                         className="flex flex-col text-left hover:underline"
@@ -1562,17 +1608,6 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
 
-      {/* History Button - Bottom Right */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button
-          onClick={handleOpenHistory}
-          className="shadow-lg"
-          size="lg"
-        >
-          <History className="mr-2 size-5" />
-          History
-        </Button>
-      </div>
     </div>
   );
 }

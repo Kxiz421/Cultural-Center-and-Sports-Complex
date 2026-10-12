@@ -86,6 +86,45 @@ export async function POST(request) {
     const parsedVenueId = parseInt(venueId, 10);
     const venueIds = parsedVenueId === 3 ? [1, 2] : [parsedVenueId];
 
+    const blockDateValue = new Date(blockDate);
+    const conflictingReservation = await prisma.reservation.findFirst({
+      where: {
+        venueId: { in: venueIds },
+        reservationStatus: { notIn: ["Cancelled", "Declined"] },
+        OR: [
+          { eventDate: blockDateValue },
+          { additionalDates: { some: { eventDate: blockDateValue } } },
+        ],
+      },
+      select: { reservationId: true, eventType: true },
+    });
+
+    if (conflictingReservation) {
+      return NextResponse.json(
+        {
+          error: `This date already has a scheduled event ("${conflictingReservation.eventType}") in the selected venue, so it cannot be blocked.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    const existingBlock = await prisma.calendarBlock.findFirst({
+      where: {
+        blockDate: blockDateValue,
+        blockType,
+        venueId: { in: venueIds },
+      },
+      select: { blockId: true },
+    });
+    if (existingBlock) {
+      return NextResponse.json(
+        {
+          error: `A ${blockType.toLowerCase()} is already set for this date at the selected venue.`,
+        },
+        { status: 409 }
+      );
+    }
+
     const created = await Promise.all(
       venueIds.map((vid) =>
         prisma.calendarBlock.create({

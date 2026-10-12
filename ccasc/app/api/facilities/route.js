@@ -197,7 +197,7 @@ export async function PUT(request) {
 
   try {
     const data = await request.json();
-    const { facilityId, name, description, capacity, rateId, statusId, venueId, rateDay, rateNight, images } = data;
+    const { facilityId, name, description, capacity, rateId, statusId, rateDay, rateNight, images } = data;
 
     if (!facilityId) {
       return NextResponse.json(
@@ -245,16 +245,13 @@ export async function PUT(request) {
           { status: 400 }
         );
       }
-      const targetVenueId =
-        venueId !== undefined ? parseInt(venueId, 10) : existingFacility.venueId;
       const nameChanged =
         trimmedName.toLowerCase() !==
         existingFacility.facilityName.trim().toLowerCase();
-      const venueChanged = targetVenueId !== existingFacility.venueId;
-      if (nameChanged || venueChanged) {
+      if (nameChanged) {
         const duplicate = await prisma.facility.findFirst({
           where: {
-            venueId: targetVenueId,
+            venueId: existingFacility.venueId,
             facilityName: { equals: trimmedName },
             facilityId: { not: facilityIdNum },
           },
@@ -279,7 +276,6 @@ export async function PUT(request) {
     }
     if (rateId !== undefined) updateData.rateId = parseInt(rateId);
     if (statusId !== undefined) updateData.statusId = parseInt(statusId);
-    if (venueId !== undefined) updateData.venueId = parseInt(venueId);
 
     if (Object.keys(updateData).length > 0) {
       await prisma.facility.update({

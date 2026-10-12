@@ -3,11 +3,13 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, Bell, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { Calendar, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
+import { useSessionGuard } from "@/hooks/use-session-guard";
 import {
   Dialog,
   DialogContent,
@@ -17,12 +19,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const NAV_ITEMS = [
   { href: "/panel/provincial-agency/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/panel/provincial-agency/calendar", label: "Facility Calendar", icon: Calendar },
-  { href: "/panel/provincial-agency/notifications", label: "Notifications", icon: Bell, showBadge: true },
   { href: "/panel/provincial-agency/documents", label: "Documents", icon: FileText },
   { href: "/panel/provincial-agency/rescheduling", label: "Rescheduling", icon: CalendarRange },
   // `wrap` lets this longer label break onto a second line instead of running
@@ -35,9 +35,9 @@ export default function ProvincialAgencyLayout({ children }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
-  const { unreadCount } = useUnreadNotificationCount("client");
   const { data: session } = useSession();
   const logout = useLogout();
+  useSessionGuard();
 
   const displayName =
     [session?.user?.firstName, session?.user?.lastName]
@@ -116,14 +116,6 @@ export default function ProvincialAgencyLayout({ children }) {
                 >
                   {item.label}
                 </span>
-                {item.showBadge && unreadCount > 0 && (
-                  <span
-                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
-                    aria-label={`${unreadCount} unread notifications`}
-                  >
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
               </Button>
             );
           })}
@@ -153,6 +145,7 @@ export default function ProvincialAgencyLayout({ children }) {
             <Menu className="size-5" />
           </Button>
           <div className="flex-1" />
+          <NotificationBell audience="client" />
           <ThemeToggle />
         </header>
         <main className="flex-1 p-4 lg:p-6">

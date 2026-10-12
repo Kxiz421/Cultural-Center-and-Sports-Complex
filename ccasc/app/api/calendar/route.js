@@ -24,10 +24,12 @@ export async function GET(request) {
     const now = new Date();
 
     // Fetch reservations without client include to avoid orphaned FK errors
+    const EXCLUDED_STATUSES = ["Cancelled", "Declined"];
+
     const reservations = await prisma.reservation.findMany({
       where: ownEventsOnly
-        ? { clientId: Number.isFinite(mineClientId) ? mineClientId : -1, reservationStatus: { not: "Cancelled" } }
-        : { ...(venueId ? { venueId: parseInt(venueId) } : undefined), reservationStatus: { not: "Cancelled" } },
+        ? { clientId: Number.isFinite(mineClientId) ? mineClientId : -1, reservationStatus: { notIn: EXCLUDED_STATUSES } }
+        : { ...(venueId ? { venueId: parseInt(venueId) } : undefined), reservationStatus: { notIn: EXCLUDED_STATUSES } },
       include: {
         venue: true,
         package: {
@@ -41,6 +43,17 @@ export async function GET(request) {
         },
         additionalDates: {
           select: { eventDate: true },
+        },
+        reservedParticulars: {
+          select: {
+            quantity: true,
+            particular: { select: { particularName: true } },
+          },
+        },
+        schedules: {
+          select: {
+            facility: { select: { facilityName: true } },
+          },
         },
         bookings: {
           select: {
@@ -134,6 +147,15 @@ export async function GET(request) {
             ? `${client.firstName} ${client.lastName}`
             : walkInDisplayName(r.notes),
           packageName: r.package?.packageName || null,
+          facilities: [
+            ...new Set(
+              r.schedules.map((s) => s.facility?.facilityName).filter(Boolean)
+            ),
+          ],
+          particulars: r.reservedParticulars.map((rp) => ({
+            name: rp.particular?.particularName || "",
+            quantity: rp.quantity,
+          })),
           bookingStatus,
           isPrimary: idx === 0,
           eventDates: activeDates,

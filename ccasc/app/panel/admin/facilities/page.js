@@ -32,6 +32,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -54,7 +60,10 @@ import {
 } from "lucide-react";
 import { formatPhp } from "@/lib/utils";
 import { Pagination } from "@/components/pagination";
-import { isDisplayableImage } from "@/components/facility-details-dialog";
+import {
+  FacilityDetailsDialog,
+  isDisplayableImage,
+} from "@/components/facility-details-dialog";
 import { uploadFacilityImage } from "@/lib/upload-facility-image";
 
 const STATUS_OPTIONS = [
@@ -75,7 +84,7 @@ export default function FacilitiesPage() {
   const [facilities, setFacilities] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState("");
-  const [venueFilter, setVenueFilter] = React.useState("all");
+  const [activeTab, setActiveTab] = React.useState("cultural");
   const [culturalPage, setCulturalPage] = React.useState(1);
   const [sportsPage, setSportsPage] = React.useState(1);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -105,6 +114,7 @@ export default function FacilitiesPage() {
     images: [],
   });
   const [uploading, setUploading] = React.useState(false);
+  const [facilityDetails, setFacilityDetails] = React.useState(null);
   const editFormRef = React.useRef(editForm);
   
   // Keep ref in sync with state
@@ -212,7 +222,6 @@ export default function FacilitiesPage() {
         capacity: snapshot.capacity,
         rateDay: snapshot.rateHourly,
         rateNight: snapshot.rateDaily,
-        venueId: snapshot.venueId,
         statusId: snapshot.statusId,
         images: snapshot.images,
       };
@@ -373,8 +382,6 @@ export default function FacilitiesPage() {
   };
 
   const filtered = facilities.filter((f) => {
-    if (venueFilter !== "all" && String(f.venueId) !== venueFilter) return false;
-
     const statusLabel = getStatusName(f.statusId);
     const hay = [f.id, f.name, f.description, f.site, statusLabel]
       .filter(Boolean)
@@ -386,10 +393,11 @@ export default function FacilitiesPage() {
   const culturalFacilities = filtered.filter((f) => f.venueId === 1);
   const sportsFacilities = filtered.filter((f) => f.venueId === 2);
 
-  React.useEffect(() => {
+  const handleSearchChange = (value) => {
+    setQuery(value);
     setCulturalPage(1);
     setSportsPage(1);
-  }, [query, venueFilter]);
+  };
 
   const renderFacilityTable = (facilitiesList, title, Icon, color, hideCapacity, page, setPage) => {
     const totalPages = Math.max(1, Math.ceil(facilitiesList.length / PAGE_SIZE));
@@ -445,14 +453,21 @@ export default function FacilitiesPage() {
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {thumb && (
-                            <img
-                              src={thumb}
-                              alt={f.name}
-                              className="size-8 shrink-0 rounded object-cover"
-                              onError={(event) => {
-                                event.currentTarget.style.display = "none";
-                              }}
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setFacilityDetails(f)}
+                              title="View facility images"
+                              className="size-8 shrink-0 cursor-zoom-in overflow-hidden rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <img
+                                src={thumb}
+                                alt={f.name}
+                                className="size-8 object-cover"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = "none";
+                                }}
+                              />
+                            </button>
                           )}
                           <span>{f.name}</span>
                         </div>
@@ -777,8 +792,8 @@ export default function FacilitiesPage() {
         <CardHeader className="pb-3">
           <CardTitle>Facilities Directory</CardTitle>
           <CardDescription>
-            Search facilities by name, description, or status. Click the edit
-            icon to update facility details.
+            Search facilities by name, description, or status. Switch tabs to
+            manage each venue separately.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -787,63 +802,55 @@ export default function FacilitiesPage() {
                 className="pl-8"
                 placeholder="Search facilities..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
-            </div>
-            <div className="w-[200px]">
-              <Select
-                value={venueFilter}
-                onValueChange={(v) => setVenueFilter(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Venues" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Venues</SelectItem>
-                  <SelectItem value="1">Cultural Center</SelectItem>
-                  <SelectItem value="2">Sports Complex</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Loading State */}
+      {/* Venue Tabs */}
       {loading ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardContent className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">Loading facilities...</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">Loading facilities...</p>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">Loading facilities...</p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {renderFacilityTable(
-            culturalFacilities,
-            "Cultural Center",
-            Building2,
-            "border-l-4 border-l-blue-500",
-            false,
-            culturalPage,
-            setCulturalPage
-          )}
-          {renderFacilityTable(
-            sportsFacilities,
-            "Sports Complex",
-            Trophy,
-            "border-l-4 border-l-orange-500",
-            true,
-            sportsPage,
-            setSportsPage
-          )}
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList>
+            <TabsTrigger value="cultural">
+              <Building2 className="size-4" />
+              Cultural Center ({culturalFacilities.length})
+            </TabsTrigger>
+            <TabsTrigger value="sports">
+              <Trophy className="size-4" />
+              Sports Complex ({sportsFacilities.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="cultural">
+            {renderFacilityTable(
+              culturalFacilities,
+              "Cultural Center",
+              Building2,
+              "border-l-4 border-l-blue-500",
+              false,
+              culturalPage,
+              setCulturalPage
+            )}
+          </TabsContent>
+          <TabsContent value="sports">
+            {renderFacilityTable(
+              sportsFacilities,
+              "Sports Complex",
+              Trophy,
+              "border-l-4 border-l-orange-500",
+              true,
+              sportsPage,
+              setSportsPage
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Edit Facility Dialog */}
@@ -912,8 +919,7 @@ export default function FacilitiesPage() {
                   }
                 />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {editForm.venueId !== "2" && (
+              {editForm.venueId !== "2" && (
                 <div className="space-y-2">
                   <Label htmlFor="edit-capacity">Capacity (pax)</Label>
                   <Input
@@ -927,28 +933,7 @@ export default function FacilitiesPage() {
                     }
                   />
                 </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="edit-venue">Venue</Label>
-                  <Select
-                    value={editForm.venueId}
-                    onValueChange={(v) =>
-                      setEditForm((f) => ({ ...f, venueId: v }))
-                    }
-                  >
-                    <SelectTrigger id="edit-venue">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VENUE_OPTIONS.map((v) => (
-                        <SelectItem key={v.id} value={String(v.id)}>
-                          {v.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="edit-rate-hr">Day Rate (₱)</Label>
@@ -1048,13 +1033,11 @@ export default function FacilitiesPage() {
                 const nameChanged =
                   String(editForm.name || "").trim().toLowerCase() !==
                   String(editFacility?.name || "").trim().toLowerCase();
-                const venueChanged =
-                  String(editForm.venueId) !== String(editFacility?.venueId);
                 if (
-                  (nameChanged || venueChanged) &&
+                  nameChanged &&
                   findDuplicateFacility(
                     editForm.name,
-                    editForm.venueId,
+                    editFacility?.venueId,
                     editFacility?.facilityId
                   )
                 ) {
@@ -1205,6 +1188,15 @@ export default function FacilitiesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Facility Images / Details Viewer */}
+      <FacilityDetailsDialog
+        facility={facilityDetails}
+        open={!!facilityDetails}
+        onOpenChange={(open) => {
+          if (!open) setFacilityDetails(null);
+        }}
+      />
     </div>
   );
 }

@@ -3,10 +3,8 @@
 import {
   LayoutDashboard,
   Wallet,
-  BellRing,
   XCircle,
   FileBarChart,
-  Megaphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -20,7 +18,6 @@ import {
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
 import { PAGE_LOGO } from "@/lib/constants";
-import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const navMain = [
   {
@@ -34,20 +31,9 @@ const navMain = [
     icon: Wallet,
   },
   {
-    title: "Announcements",
-    url: "/panel/local-treasury-officer/announcements",
-    icon: Megaphone,
-    showBadge: true,
-  },
-  {
     title: "Booking Cancellation",
     url: "/panel/local-treasury-officer/cancellations",
     icon: XCircle,
-  },
-  {
-    title: "Notifications",
-    url: "/panel/local-treasury-officer/notifications",
-    icon: BellRing,
   },
   {
     title: "Report Generation",
@@ -57,13 +43,6 @@ const navMain = [
 ];
 
 export function AppSidebarLTOO(props) {
-  const { unreadCount } = useUnreadNotificationCount("staff");
-
-  const navItems = navMain.map((item) =>
-    item.url === "/panel/local-treasury-officer/announcements"
-      ? { ...item, showBadge: true, badgeCount: unreadCount }
-      : item
-  );
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -82,7 +61,7 @@ export function AppSidebarLTOO(props) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navItems} />
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
         <NavUserCCASC />

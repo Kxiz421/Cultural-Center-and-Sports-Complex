@@ -1,5 +1,6 @@
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
 import prisma from "@/lib/prisma";
@@ -47,6 +48,32 @@ class RateLimitedError extends CredentialsSignin {
 
 /** Account statuses that must never produce a usable session. */
 const BLOCKED_STATUSES = ["Deactivated", "Inactive", "Suspended"];
+
+/**
+ * Overwrite the account's single active-session token. Signing in on one device
+ * invalidates every other device holding the previous token. If the column has
+ * not been migrated yet the login still succeeds (it just isn't enforced).
+ */
+async function rotateSessionToken(kind, id) {
+  const token = randomUUID();
+  try {
+    if (kind === "staff") {
+      await prisma.staff.update({
+        where: { staffId: id },
+        data: { activeSession: token },
+      });
+    } else {
+      await prisma.client.update({
+        where: { clientId: id },
+        data: { activeSession: token },
+      });
+    }
+  } catch (err) {
+    console.error("Failed to record active session:", err.message);
+    return null;
+  }
+  return token;
+}
 
 /** bcrypt.compare throws on malformed hashes (legacy plain-text rows). */
 async function passwordsMatch(plain, hash) {
@@ -143,6 +170,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientId: null,
             orgName: staff.staffOrg?.orgName ?? null,
             remarks: null,
+            sessionToken: await rotateSessionToken("staff", staff.staffId),
           };
         }
 
@@ -175,6 +203,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               clientId: client.clientId,
               orgName: null,
               remarks: client.remarks ?? null,
+              sessionToken: await rotateSessionToken("client", client.clientId),
             };
           }
 
@@ -194,6 +223,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientId: client.clientId,
             orgName: null,
             remarks: null,
+            sessionToken: await rotateSessionToken("client", client.clientId),
           };
         }
 

@@ -6,7 +6,6 @@ import {
   ClipboardCheck,
   CalendarSync,
   FileBarChart,
-  Bell,
   Calendar,
   Package,
 } from "lucide-react";
@@ -22,7 +21,6 @@ import {
 import { NavMain } from "@/components/nav-main";
 import { NavUserCCASC } from "@/components/nav-user-ccasc";
 import { PAGE_LOGO } from "@/lib/constants";
-import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 import { useCoordinatorPendingCounts } from "@/hooks/use-coordinator-pending-counts";
 
 const navMain = [
@@ -52,12 +50,6 @@ const navMain = [
     icon: CalendarSync,
   },
   {
-    title: "Notifications",
-    url: "/panel/program-coordinator/notifications",
-    icon: Bell,
-    showBadge: true,
-  },
-  {
     title: "Report Generation",
     url: "/panel/program-coordinator/reports",
     icon: FileBarChart,
@@ -70,9 +62,6 @@ const navMain = [
 ];
 
 export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props }) {
-  const { unreadCount } = useUnreadNotificationCount("staff", {
-    scope: "coordinator",
-  });
   const { pendingBookings, pendingReschedules } = useCoordinatorPendingCounts();
 
   const navItems = navMain.map((item) => {
@@ -81,9 +70,6 @@ export function AppSidebarCoordinator({ venueType = "Cultural Center", ...props 
     }
     if (item.url === "/panel/program-coordinator/rescheduling") {
       return { ...item, showBadge: true, badgeCount: pendingReschedules };
-    }
-    if (item.url === "/panel/program-coordinator/notifications") {
-      return { ...item, showBadge: true, badgeCount: unreadCount };
     }
     // Hide Reservations for Cultural Center
     if (item.url === "/panel/program-coordinator/reservations") {

@@ -30,22 +30,20 @@ const MONTHS = [
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getEventColor(status, type) {
+function getEventColor(status) {
   if (status === "Holiday")
-    return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
+    return { bg: "bg-rose-600", text: "text-white" };
   if (status === "Maintenance")
-    return { bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-800 dark:text-orange-300" };
+    return { bg: "bg-orange-500", text: "text-white" };
   if (status === "Approved" || status === "Confirmed")
-    return { bg: "bg-green-100 dark:bg-green-900/40", text: "text-green-800 dark:text-green-300" };
+    return { bg: "bg-emerald-600", text: "text-white" };
   if (status === "Pending")
-    return { bg: "bg-yellow-100 dark:bg-yellow-900/40", text: "text-yellow-800 dark:text-yellow-300" };
-  if (status === "Declined" || status === "Cancelled")
-    return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
+    return { bg: "bg-amber-400", text: "text-amber-950" };
   if (status === "Ongoing")
-    return { bg: "bg-indigo-100 dark:bg-indigo-900/40", text: "text-indigo-800 dark:text-indigo-300" };
+    return { bg: "bg-sky-600", text: "text-white" };
   if (status === "Completed")
-    return { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-800 dark:text-blue-300" };
-  return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
+    return { bg: "bg-violet-600", text: "text-white" };
+  return { bg: "bg-slate-500", text: "text-white" };
 }
 
 function MonthGrid({ events, onEventClick, venueLabel }) {
@@ -211,12 +209,10 @@ function MonthGrid({ events, onEventClick, venueLabel }) {
 
           {/* Color Legend */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-xs text-muted-foreground">
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-indigo-100 dark:bg-indigo-900/40" /> Ongoing</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-blue-100 dark:bg-blue-900/40" /> Completed</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-100 dark:bg-red-900/40" /> Holiday / Declined / Cancelled</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-100 dark:bg-orange-900/40" /> Maintenance</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-emerald-600" /> Confirmed / Approved</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-400" /> Pending</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-rose-600" /> Holiday</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-500" /> Maintenance</div>
           </div>
       </CardContent>
     </Card>

@@ -445,7 +445,7 @@ function CoordinatorBookingsContent() {
                     )}
                     </div>
                     <p className="text-muted-foreground text-sm">
-                      {res.venue} &middot; {res.eventDate} &middot; {res.eventType}
+                      {res.venue} &middot; {res.eventDate}
                     </p>
                     <div className="flex items-center justify-between">
                       <p className="text-muted-foreground text-xs">
@@ -503,7 +503,7 @@ function CoordinatorBookingsContent() {
                     <p className="text-muted-foreground text-sm">
                       {res.venue} &middot; {res.eventDates && res.eventDates.length > 1
                         ? `${res.eventDates[0]} — ${res.eventDates[res.eventDates.length - 1]} (${res.eventDates.length} days)`
-                        : res.eventDate} &middot; {res.eventType}
+                        : res.eventDate}
                     </p>
                     <div className="flex items-center justify-between">
                       <p className="text-muted-foreground text-xs">
@@ -561,7 +561,7 @@ function CoordinatorBookingsContent() {
                     <p className="text-muted-foreground text-sm">
                       {res.venue} &middot; {res.eventDates && res.eventDates.length > 1
                         ? `${res.eventDates[0]} — ${res.eventDates[res.eventDates.length - 1]} (${res.eventDates.length} days)`
-                        : res.eventDate} &middot; {res.eventType}
+                        : res.eventDate}
                     </p>
                     <div className="flex items-center justify-between">
                       <p className="text-muted-foreground text-xs">
@@ -652,6 +652,18 @@ function CoordinatorBookingsContent() {
                       {selectedRes.facilities.map((fac, idx) => (
                         <Badge key={idx} variant="secondary" className="text-xs">
                           {fac.facilityName}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedRes.particulars && selectedRes.particulars.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-xs block mb-1">Particulars</span>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedRes.particulars.map((p, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {p.name}{p.quantity > 1 ? ` ×${p.quantity}` : ""}
                         </Badge>
                       ))}
                     </div>

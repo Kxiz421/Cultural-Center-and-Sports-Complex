@@ -127,6 +127,7 @@ export function isCoordinatorInboxNotification(notification) {
 export const NOTIFICATION_FILTER_PRESETS = {
   client: [
     { id: "all", label: "All" },
+    { id: "unread", label: "Unread" },
     { id: "announcement", label: "Announcements" },
     { id: "payment", label: "Payments" },
     { id: "reservation", label: "Reservations" },
@@ -136,6 +137,7 @@ export const NOTIFICATION_FILTER_PRESETS = {
   ],
   provincial: [
     { id: "all", label: "All" },
+    { id: "unread", label: "Unread" },
     { id: "announcement", label: "Announcements" },
     { id: "payment", label: "Payments" },
     { id: "reservation", label: "Reservations" },
@@ -145,6 +147,7 @@ export const NOTIFICATION_FILTER_PRESETS = {
   ],
   coordinator: [
     { id: "all", label: "All" },
+    { id: "unread", label: "Unread" },
     { id: "announcement", label: "Announcements" },
     { id: "reschedule", label: "Rescheduling" },
     { id: "document", label: "Documents" },
@@ -152,6 +155,7 @@ export const NOTIFICATION_FILTER_PRESETS = {
   ],
   staff: [
     { id: "all", label: "All" },
+    { id: "unread", label: "Unread" },
     { id: "announcement", label: "Announcements" },
     { id: "booking", label: "Bookings" },
     { id: "reservation", label: "Reservations" },

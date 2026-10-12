@@ -38,6 +38,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Pagination } from "@/components/pagination";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -46,22 +47,20 @@ const MONTHS = [
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getEventColor(status, type) {
+function getEventColor(status) {
   if (status === "Holiday")
-    return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
+    return { bg: "bg-rose-600", text: "text-white" };
   if (status === "Maintenance")
-    return { bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-800 dark:text-orange-300" };
+    return { bg: "bg-orange-500", text: "text-white" };
   if (status === "Approved" || status === "Confirmed")
-    return { bg: "bg-green-100 dark:bg-green-900/40", text: "text-green-800 dark:text-green-300" };
+    return { bg: "bg-emerald-600", text: "text-white" };
   if (status === "Pending")
-    return { bg: "bg-yellow-100 dark:bg-yellow-900/40", text: "text-yellow-800 dark:text-yellow-300" };
+    return { bg: "bg-amber-400", text: "text-amber-950" };
   if (status === "Ongoing")
-    return { bg: "bg-indigo-100 dark:bg-indigo-900/40", text: "text-indigo-800 dark:text-indigo-300" };
+    return { bg: "bg-sky-600", text: "text-white" };
   if (status === "Completed")
-    return { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-800 dark:text-blue-300" };
-  if (status === "Declined" || status === "Cancelled")
-    return { bg: "bg-red-100 dark:bg-red-900/40", text: "text-red-800 dark:text-red-300" };
-  return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-700 dark:text-slate-300" };
+    return { bg: "bg-violet-600", text: "text-white" };
+  return { bg: "bg-slate-500", text: "text-white" };
 }
 
 function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEventClick }) {
@@ -231,12 +230,10 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEve
         </div>
 {/* Color Legend */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-xs text-muted-foreground">
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-green-100 dark:bg-green-900/40" /> Confirmed</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-yellow-100 dark:bg-yellow-900/40" /> Pending</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-indigo-100 dark:bg-indigo-900/40" /> Ongoing</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-blue-100 dark:bg-blue-900/40" /> Completed</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-100 dark:bg-red-900/40" /> Holiday / Declined / Cancelled</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-100 dark:bg-orange-900/40" /> Maintenance</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-emerald-600" /> Confirmed / Approved</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-400" /> Pending</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-rose-600" /> Holiday</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-500" /> Maintenance</div>
           </div>
       </CardContent>
     </Card>
@@ -257,6 +254,8 @@ export default function CalendarPage() {
     notes: "",
   });
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [blocksPage, setBlocksPage] = useState(1);
+  const [addingBlock, setAddingBlock] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -308,6 +307,7 @@ export default function CalendarPage() {
   };
 
   const handleAddBlock = async () => {
+    if (addingBlock) return;
     const { title, blockDate, blockType, venueId, notes } = blockForm;
 
     if (!title || !blockDate || !blockType || !venueId) {
@@ -326,6 +326,7 @@ export default function CalendarPage() {
       return;
     }
 
+    setAddingBlock(true);
     try {
       const res = await fetch("/api/calendar/blocks", {
         method: "POST",
@@ -344,6 +345,8 @@ export default function CalendarPage() {
       fetchData();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setAddingBlock(false);
     }
   };
 
@@ -364,17 +367,24 @@ export default function CalendarPage() {
     }
   };
 
-  // Blocks grouped by date (ascending) so the list stays compact and scannable
-  // no matter how many holiday / maintenance days have been set.
-  const blockGroups = [];
-  for (const block of [...blocks].sort((a, b) =>
+  const sortedBlocks = [...blocks].sort((a, b) =>
     String(a.date).localeCompare(String(b.date))
-  )) {
+  );
+  const blocksPerPage = 10;
+  const blocksTotalPages = Math.max(
+    1,
+    Math.ceil(sortedBlocks.length / blocksPerPage)
+  );
+  const safeBlocksPage = Math.min(blocksPage, blocksTotalPages);
+  const pagedBlocks = sortedBlocks.slice(
+    (safeBlocksPage - 1) * blocksPerPage,
+    safeBlocksPage * blocksPerPage
+  );
+  const blockDateCounts = sortedBlocks.reduce((acc, block) => {
     const key = String(block.date).split("T")[0];
-    const last = blockGroups[blockGroups.length - 1];
-    if (last && last.key === key) last.blocks.push(block);
-    else blockGroups.push({ key, blocks: [block] });
-  }
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="flex flex-col gap-6">
@@ -466,90 +476,13 @@ export default function CalendarPage() {
               <Button type="button" variant="outline" onClick={() => { setAddOpen(false); resetBlockForm(); }}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleAddBlock}>
-                Add Block
+              <Button type="button" onClick={handleAddBlock} disabled={addingBlock}>
+                {addingBlock ? "Adding..." : "Add Block"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* Blocks list - grouped by date and scrollable so it never fills the page */}
-      {blocks.length > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-            <div>
-              <CardTitle className="text-lg">Blocks</CardTitle>
-              <CardDescription>
-                Holidays and maintenance days currently set.
-              </CardDescription>
-            </div>
-            <Badge variant="secondary" className="shrink-0">
-              {blocks.length} total
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-              {blockGroups.map((group) => (
-                <div key={group.key} className="space-y-1">
-                  <div className="flex items-baseline justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {new Date(`${group.key}T00:00:00`).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </p>
-                    <span className="text-xs text-muted-foreground">
-                      {group.blocks.length}
-                    </span>
-                  </div>
-                  {group.blocks.map((block) => (
-                    <div
-                      key={block.id}
-                      className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm"
-                    >
-                      <span
-                        className={`size-2 shrink-0 rounded-full ${
-                          block.blockType === "Holiday" ? "bg-red-500" : "bg-orange-500"
-                        }`}
-                      />
-                      <span className="min-w-0 flex-1 truncate font-medium">
-                        {block.title}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className={`shrink-0 ${
-                          block.blockType === "Holiday"
-                            ? "border-red-300 text-red-700 dark:text-red-300"
-                            : "border-orange-300 text-orange-700 dark:text-orange-300"
-                        }`}
-                      >
-                        {block.blockType}
-                      </Badge>
-                      <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
-                        {block.venueId === 1
-                          ? "Cultural Center"
-                          : block.venueId === 2
-                            ? "Sports Complex"
-                            : block.venue}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteBlock(block.id)}
-                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
-                        title="Remove block"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {loading ? (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -593,9 +526,97 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {blocks.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+            <div>
+              <CardTitle className="text-lg">Holidays & Maintenance</CardTitle>
+              <CardDescription>
+                Holiday and maintenance days currently set.
+              </CardDescription>
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {blocks.length} total
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pagedBlocks.map((block, index) => {
+                const key = String(block.date).split("T")[0];
+                const prevKey =
+                  index > 0
+                    ? String(pagedBlocks[index - 1].date).split("T")[0]
+                    : null;
+                return (
+                  <div key={block.id} className="space-y-1">
+                    {key !== prevKey && (
+                      <div className="flex items-baseline justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {new Date(`${key}T00:00:00`).toLocaleDateString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {blockDateCounts[key]}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                      <span
+                        className={`size-2 shrink-0 rounded-full ${
+                          block.blockType === "Holiday" ? "bg-red-500" : "bg-orange-500"
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {block.title}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 ${
+                          block.blockType === "Holiday"
+                            ? "border-red-300 text-red-700 dark:text-red-300"
+                            : "border-orange-300 text-orange-700 dark:text-orange-300"
+                        }`}
+                      >
+                        {block.blockType}
+                      </Badge>
+                      <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                        {block.venueId === 1
+                          ? "Cultural Center"
+                          : block.venueId === 2
+                            ? "Sports Complex"
+                            : block.venue}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteBlock(block.id)}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                        title="Remove block"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <Pagination
+              page={safeBlocksPage}
+              pageSize={blocksPerPage}
+              total={sortedBlocks.length}
+              onPageChange={setBlocksPage}
+              itemLabel="blocks"
+              className="pr-1"
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Event Detail Dialog */}
       <Dialog open={selectedEvent !== null} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {selectedEvent?.type === "event" ? "Reservation Details" : "Block Details"}
@@ -607,7 +628,7 @@ export default function CalendarPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedEvent?.type === "event" ? (
-            <div className="space-y-3 py-2">
+            <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-xs">Event Type</Label>
@@ -640,17 +661,56 @@ export default function CalendarPage() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">Package</Label>
-                  <p className="text-sm font-medium">{selectedEvent.packageName || "N/A"}</p>
+                  <p className="text-sm font-medium">{selectedEvent.packageName || "None"}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">Reservation Status</Label>
-                  <Badge variant="outline" className={`${getEventColor(selectedEvent.status).bg} ${getEventColor(selectedEvent.status).text}`}>
+                  <Badge variant="outline" className={`border-transparent ${getEventColor(selectedEvent.status).bg} ${getEventColor(selectedEvent.status).text}`}>
                     {selectedEvent.status}
                   </Badge>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-xs">Booking Status</Label>
                   <p className="text-sm font-medium">{selectedEvent.bookingStatus}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Facilities
+                  </p>
+                  {selectedEvent.facilities?.length > 0 ? (
+                    <ul className="space-y-1">
+                      {selectedEvent.facilities.map((name, i) => (
+                        <li key={`${name}-${i}`} className="flex items-center gap-2 text-sm">
+                          <span className="size-1.5 shrink-0 rounded-full bg-foreground/50" />
+                          {name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">None</p>
+                  )}
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Particulars
+                  </p>
+                  {selectedEvent.particulars?.length > 0 ? (
+                    <ul className="space-y-1">
+                      {selectedEvent.particulars.map((p, i) => (
+                        <li key={`${p.name}-${i}`} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="min-w-0 truncate">{p.name}</span>
+                          {p.quantity > 1 && (
+                            <span className="shrink-0 text-xs text-muted-foreground">×{p.quantity}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">None</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -686,7 +746,20 @@ export default function CalendarPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {selectedEvent?.type === "block" && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  handleDeleteBlock(selectedEvent.id);
+                  setSelectedEvent(null);
+                }}
+              >
+                <Trash2 className="mr-2 size-4" />
+                Remove
+              </Button>
+            )}
             <Button type="button" onClick={() => setSelectedEvent(null)}>
               Close
             </Button>

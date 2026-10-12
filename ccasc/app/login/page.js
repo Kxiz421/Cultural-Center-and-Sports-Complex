@@ -29,6 +29,7 @@ import {
 import { getSession, signIn } from "next-auth/react";
 import { USER_TYPE, homeForUserType } from "@/lib/auth-roles";
 import { MOCK_ADMIN_USER } from "@/lib/data/admin-mock";
+import { SESSION_REPLACED_REASON } from "@/lib/session-reason";
 
 const OTP_LENGTH = 6;
 const DEMO_RESET_PW_KEY = "ccasc_demo_reset_password";
@@ -68,6 +69,16 @@ export default function LoginPage() {
   );
   const otpInputRefs = React.useRef([]);
   const [fpLoading, setFpLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === SESSION_REPLACED_REASON) {
+      toast.error(
+        "You were signed out because this account signed in on another device.",
+      );
+      window.history.replaceState(null, "", "/login");
+    }
+  }, []);
 
   const emailLooksValid = (value) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());

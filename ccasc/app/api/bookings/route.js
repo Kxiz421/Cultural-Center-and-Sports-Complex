@@ -16,21 +16,18 @@ export async function GET(request) {
   const clientId = resolveClientScope(guard.user, requestedClientId);
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
-  const statusFilter = searchParams.get("status");
   const clientType = searchParams.get("clientType");
   const search = searchParams.get("search");
 
   try {
-    const whereClause = clientId
-      ? { reservation: { client: { clientId: parseInt(clientId, 10) } } }
-      : {};
-
-    // Status filter
-    if (statusFilter && statusFilter !== "all") {
-      whereClause.status = {
-        status: statusFilter,
-      };
-    }
+    // The admin Bookings module is a read-only view of confirmed bookings only.
+    // "Confirmed" is the reservation status that the facility calendar shows.
+    const whereClause = {
+      reservation: {
+        reservationStatus: "Confirmed",
+        ...(clientId ? { client: { clientId: parseInt(clientId, 10) } } : {}),
+      },
+    };
 
     const bookings = await prisma.booking.findMany({
       where: whereClause,
@@ -55,22 +52,27 @@ export async function GET(request) {
                 nightRate: true,
               },
             },
-          },
-        },
-        status: { select: { status: true, bookingStatusId: true } },
-        staff: { select: { firstName: true, lastName: true } },
-        payments: { select: { amountPaid: true, status: { select: { status: true } } } },
-        schedules: {
-          include: {
-            facility: {
+            reservedParticulars: {
               select: {
-                facilityName: true,
-                description: true,
-                capacity: true,
+                quantity: true,
+                particular: { select: { particularName: true } },
+              },
+            },
+            schedules: {
+              include: {
+                facility: {
+                  select: {
+                    facilityName: true,
+                    description: true,
+                    capacity: true,
+                  },
+                },
               },
             },
           },
         },
+        staff: { select: { firstName: true, lastName: true } },
+        payments: { select: { amountPaid: true, status: { select: { status: true } } } },
       },
       orderBy: { confirmationDate: { sort: "desc", nulls: "last" } },
     });
@@ -123,7 +125,7 @@ export async function GET(request) {
       clientRole: b.reservation.client?.clientRole?.roleName || "N/A",
       eventType: b.reservation.eventType,
       eventDate: b.reservation.eventDate.toISOString().split("T")[0],
-      status: b.status.status,
+      status: b.reservation.reservationStatus,
       staffName: b.staff ? `${b.staff.firstName} ${b.staff.lastName}` : null,
       confirmationDate: b.confirmationDate?.toISOString().split("T")[0] || null,
       amountPaid: b.payments.reduce((sum, p) => sum + Number(p.amountPaid), 0),
@@ -131,10 +133,14 @@ export async function GET(request) {
       packageName: b.reservation.package?.packageName || null,
       packageDayRate: b.reservation.package?.dayRate ? Number(b.reservation.package.dayRate) : null,
       packageNightRate: b.reservation.package?.nightRate ? Number(b.reservation.package.nightRate) : null,
-      facilities: b.schedules.map((s) => ({
+      facilities: b.reservation.schedules.map((s) => ({
         facilityName: s.facility.facilityName,
         description: s.facility.description,
         capacity: s.facility.capacity,
+      })),
+      particulars: b.reservation.reservedParticulars.map((rp) => ({
+        name: rp.particular.particularName,
+        quantity: rp.quantity,
       })),
     }));
 

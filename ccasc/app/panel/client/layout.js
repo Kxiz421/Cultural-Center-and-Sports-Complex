@@ -3,11 +3,13 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, CalendarRange, FileText, Bell, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
+import { Calendar, CalendarRange, FileText, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
+import { useSessionGuard } from "@/hooks/use-session-guard";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count";
 
 const NAV_ITEMS = [
   { href: "/panel/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -25,7 +26,6 @@ const NAV_ITEMS = [
   { href: "/panel/client/reservations", label: "Reservations", icon: ClipboardEdit },
   { href: "/panel/client/rescheduling", label: "Rescheduling", icon: CalendarRange },
   { href: "/panel/client/documents", label: "Documents", icon: FileText },
-  { href: "/panel/client/notifications", label: "Notifications", icon: Bell, showBadge: true },
   // `wrap` lets this longer label break onto a second line instead of running
   // past the fixed-width rail and overlapping the page content.
   { href: "/panel/client/history", label: "Booking & Reservation History", icon: History, wrap: true },
@@ -37,9 +37,9 @@ export default function ClientLayout({ children }) {
   const isOrderOfPayment = pathname?.includes("/order-of-payment");
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
-  const { unreadCount } = useUnreadNotificationCount("client");
   const { data: session } = useSession();
   const logout = useLogout();
+  useSessionGuard();
 
   const displayName =
     [session?.user?.firstName, session?.user?.lastName]
@@ -119,14 +119,6 @@ export default function ClientLayout({ children }) {
                 >
                   {item.label}
                 </span>
-                {item.showBadge && unreadCount > 0 && (
-                  <span
-                    className="absolute right-2 flex size-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-none text-white"
-                    aria-label={`${unreadCount} unread notifications`}
-                  >
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
               </Button>
             );
           })}
@@ -156,6 +148,7 @@ export default function ClientLayout({ children }) {
             <Menu className="size-5" />
           </Button>
           <div className="flex-1" />
+          <NotificationBell audience="client" />
           <ThemeToggle />
         </header>
         <main className={cn("flex-1", isOrderOfPayment ? "p-4 lg:p-6 print:p-0" : "p-4 lg:p-6")}>

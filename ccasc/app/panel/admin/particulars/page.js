@@ -499,6 +499,10 @@ export default function ParticularsPage() {
             Generate Report
           </Link>
         </Button>
+        <Button variant="outline" onClick={handleOpenHistory}>
+          <History className="mr-2 size-4" />
+          History
+        </Button>
         <Dialog
           open={addOpen}
           onOpenChange={(open) => {
@@ -1263,17 +1267,6 @@ export default function ParticularsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* History Button - Bottom Right */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button
-          onClick={handleOpenHistory}
-          className="shadow-lg"
-          size="lg"
-        >
-          <History className="mr-2 size-5" />
-          History
-        </Button>
-      </div>
     </div>
   );
 }

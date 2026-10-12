@@ -57,40 +57,30 @@ export async function GET(request) {
     if (clientId) whereClause.clientId = clientId;
     if (staffId) whereClause.staffId = parseInt(staffId, 10);
 
+    const keyOf = (n) => `${n.type || ""}\u0000${n.message || ""}`;
+
     if (searchParams.get("unreadCountOnly") === "true") {
       if (clientId) {
         const parsedClientId = parseInt(clientId, 10);
         if (isNaN(parsedClientId)) {
           return noCacheJson({ unreadCount: 0 });
         }
-        const unreadCount = await prisma.notification.count({
-          where: {
-            clientId: parsedClientId,
-            isRead: false,
-          },
+        const unread = await prisma.notification.findMany({
+          where: { clientId: parsedClientId, isRead: false },
+          select: { type: true, message: true },
         });
-        return noCacheJson({ unreadCount });
+        return noCacheJson({ unreadCount: new Set(unread.map(keyOf)).size });
       }
       if (staffId) {
-        if (scope === "coordinator") {
-          const unread = await prisma.notification.findMany({
-            where: {
-              staffId: parseInt(staffId, 10),
-              isRead: false,
-            },
-            select: { type: true, message: true },
-          });
-          return noCacheJson({
-            unreadCount: unread.filter(isCoordinatorInboxNotification).length,
-          });
-        }
-        const unreadCount = await prisma.notification.count({
-          where: {
-            staffId: parseInt(staffId, 10),
-            isRead: false,
-          },
+        const unread = await prisma.notification.findMany({
+          where: { staffId: parseInt(staffId, 10), isRead: false },
+          select: { type: true, message: true },
         });
-        return noCacheJson({ unreadCount });
+        const visibleUnread =
+          scope === "coordinator"
+            ? unread.filter(isCoordinatorInboxNotification)
+            : unread;
+        return noCacheJson({ unreadCount: new Set(visibleUnread.map(keyOf)).size });
       }
     }
 
@@ -105,7 +95,20 @@ export async function GET(request) {
         ? notifications.filter(isCoordinatorInboxNotification).slice(0, 50)
         : notifications;
 
-    const formatted = visible.map((n) => ({
+    // The same event can be written more than once (e.g. a document approved
+    // repeatedly), so collapse identical items into a single entry.
+    const grouped = new Map();
+    for (const n of visible) {
+      const key = keyOf(n);
+      const existing = grouped.get(key);
+      if (existing) {
+        if (!n.isRead) existing.isRead = false;
+      } else {
+        grouped.set(key, { ...n });
+      }
+    }
+
+    const formatted = [...grouped.values()].map((n) => ({
       id: n.notificationId,
       message: n.message,
       type: n.type,
@@ -130,7 +133,27 @@ export async function PUT(request) {
   if (guard.response) return guard.response;
 
   try {
-    const { notificationId } = await request.json();
+    const { notificationId, markAllRead, clientId, staffId } = await request.json();
+
+    if (markAllRead) {
+      const where = { isRead: false };
+      const scopedClient = resolveClientScope(guard.user, clientId);
+      if (scopedClient !== null && scopedClient !== undefined && !isNaN(scopedClient)) {
+        where.clientId = Number(scopedClient);
+      } else if (staffId) {
+        where.staffId = parseInt(staffId, 10);
+      } else {
+        return NextResponse.json(
+          { error: "Recipient required" },
+          { status: 400 }
+        );
+      }
+      const result = await prisma.notification.updateMany({
+        where,
+        data: { isRead: true },
+      });
+      return NextResponse.json({ updated: result.count });
+    }
 
     if (!notificationId) {
       return NextResponse.json(

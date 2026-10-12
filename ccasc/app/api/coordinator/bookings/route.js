@@ -81,6 +81,12 @@ export async function GET(request) {
         timeSlot: { select: { startTime: true, endTime: true } },
         package: { select: { packageName: true } },
         additionalDates: { select: { eventDate: true } },
+        reservedParticulars: {
+          select: {
+            quantity: true,
+            particular: { select: { particularName: true } },
+          },
+        },
         schedules: {
           include: {
             facility: { select: { facilityName: true } },
@@ -171,6 +177,10 @@ export async function GET(request) {
         packageName: r.package?.packageName || null,
         facilities: (r.schedules || []).map((s) => ({
           facilityName: s.facility.facilityName,
+        })),
+        particulars: (r.reservedParticulars || []).map((rp) => ({
+          name: rp.particular.particularName,
+          quantity: rp.quantity,
         })),
         documents: docs,
         notes: r.notes || "",

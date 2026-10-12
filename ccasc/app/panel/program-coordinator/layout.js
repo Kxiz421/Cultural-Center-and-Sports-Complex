@@ -73,7 +73,7 @@ function CoordinatorAuthShell({ children }) {
     <SidebarProvider>
       <AppSidebarCoordinator venueType={venueType} />
       <SidebarInset>
-        <SiteHeaderCCASC title={title} />
+        <SiteHeaderCCASC title={title} notificationScope="coordinator" />
         <div className="border-b bg-muted/50 px-4 py-2.5 text-sm text-foreground lg:px-6">
           Signed in as{" "}
           <span className="font-medium text-foreground">{displayName}</span>

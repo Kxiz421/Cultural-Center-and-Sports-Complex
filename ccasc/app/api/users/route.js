@@ -334,7 +334,7 @@ export async function PUT(request) {
 
   try {
     const body = await request.json();
-    const { userId, firstName, middleName, lastName, email, contact, password } = body;
+    const { userId, email, contact, password } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -366,6 +366,9 @@ export async function PUT(request) {
     // accounts can ever share an address (the create route enforces this too).
     // The user's own current email is allowed.
     const trimmedEmail = email === undefined ? undefined : String(email).trim();
+    if (trimmedEmail === "") {
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    }
     if (trimmedEmail) {
       const [staffWithEmail, clientWithEmail] = await Promise.all([
         prisma.staff.findUnique({
@@ -409,9 +412,6 @@ export async function PUT(request) {
 
     if (prefix === "STF") {
       const updateData = {};
-      if (firstName !== undefined) updateData.firstName = firstName.trim();
-      if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
-      if (lastName !== undefined) updateData.lastName = lastName.trim();
       if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
       if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
@@ -422,9 +422,6 @@ export async function PUT(request) {
       });
     } else if (prefix === "CLT") {
       const updateData = {};
-      if (firstName !== undefined) updateData.firstName = firstName.trim();
-      if (middleName !== undefined) updateData.middleName = middleName.trim() || null;
-      if (lastName !== undefined) updateData.lastName = lastName.trim();
       if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
       if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
@@ -441,18 +438,6 @@ export async function PUT(request) {
     // by email. A mail failure must never roll back a successful update, so
     // sendUserUpdatedEmail catches its own errors and returns a boolean.
     const changes = [];
-    if (firstName !== undefined && firstName.trim() !== existing.firstName) {
-      changes.push({ label: "First name", from: existing.firstName, to: firstName.trim() });
-    }
-    if (middleName !== undefined) {
-      const newMiddle = middleName.trim() || null;
-      if (newMiddle !== existing.middleName) {
-        changes.push({ label: "Middle name", from: existing.middleName, to: newMiddle });
-      }
-    }
-    if (lastName !== undefined && lastName.trim() !== existing.lastName) {
-      changes.push({ label: "Last name", from: existing.lastName, to: lastName.trim() });
-    }
     if (trimmedEmail !== undefined && trimmedEmail !== existing.email) {
       changes.push({ label: "Email", from: existing.email, to: trimmedEmail });
     }
@@ -465,8 +450,8 @@ export async function PUT(request) {
 
     if (changes.length > 0) {
       await sendUserUpdatedEmail(trimmedEmail || existing.email, {
-        firstName: firstName !== undefined ? firstName.trim() : existing.firstName,
-        lastName: lastName !== undefined ? lastName.trim() : existing.lastName,
+        firstName: existing.firstName,
+        lastName: existing.lastName,
         changes,
         updatedByName: acting.performedByName,
       });

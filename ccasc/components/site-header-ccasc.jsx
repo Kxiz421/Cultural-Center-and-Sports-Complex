@@ -3,9 +3,13 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
+import { useSessionGuard } from "@/hooks/use-session-guard";
 import { PAGE_LOGO } from "@/lib/constants";
 
-export function SiteHeaderCCASC({ title }) {
+export function SiteHeaderCCASC({ title, notificationAudience = "staff", notificationScope = "" }) {
+  useSessionGuard();
+
   return (
     <header className="navbar-surface flex h-14 shrink-0 items-center gap-2 border-b border-white/20 px-4 text-white lg:px-6">
       <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" />
@@ -17,7 +21,8 @@ export function SiteHeaderCCASC({ title }) {
         </p>
         <h1 className="truncate text-base font-semibold">{title}</h1>
       </div>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1">
+        <NotificationBell audience={notificationAudience} scope={notificationScope} />
         <ThemeToggle />
       </div>
     </header>

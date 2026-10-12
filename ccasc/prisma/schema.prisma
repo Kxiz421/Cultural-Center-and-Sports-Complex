@@ -39,6 +39,7 @@ model Staff {
   staffOrg       StaffOrganization @relation(fields: [staffOrgId], references: [staffOrgId])
   otp            String?           @map("otp") @db.VarChar(10)
   otpExpiration  DateTime?         @map("otp_expiration")
+  activeSession  String?           @map("active_session") @db.VarChar(64)
 
   bookings        Booking[]
   announcements   Announcement[]
@@ -86,6 +87,7 @@ model Client {
   profilePhoto       String? @map("profile_photo") @db.VarChar(255)
   otp                String? @map("otp") @db.VarChar(10)
   otpExpiration      DateTime? @map("otp_expiration")
+  activeSession      String? @map("active_session") @db.VarChar(64)
   clientRoleId       String  @map("client_role_id") @db.VarChar(10)
   clientOrgId        Int     @map("client_org_id")
   createdAt          DateTime @default(now()) @map("created_at")

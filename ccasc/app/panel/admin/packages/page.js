@@ -374,6 +374,10 @@ export default function PackagesPage() {
             Bundle particulars into priced offerings for clients. Add, edit, archive, or restore packages.
           </p>
         </div>
+        <Button variant="outline" className="md:ml-auto" onClick={handleOpenHistory}>
+          <History className="mr-2 size-4" />
+          History
+        </Button>
         <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetAddForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 size-4" />Add Package</Button>
@@ -770,12 +774,6 @@ export default function PackagesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* History Button */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button onClick={handleOpenHistory} className="shadow-lg" size="lg">
-          <History className="mr-2 size-5" />History
-        </Button>
-      </div>
     </div>
   );
 }

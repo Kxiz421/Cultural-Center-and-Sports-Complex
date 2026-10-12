@@ -32,6 +32,7 @@ export const authConfig = {
         token.clientId = user.clientId ?? null;
         token.orgName = user.orgName ?? null;
         token.remarks = user.remarks ?? null;
+        token.sessionToken = user.sessionToken ?? null;
       }
       return token;
     },
@@ -46,6 +47,7 @@ export const authConfig = {
         session.user.clientId = token.clientId ?? null;
         session.user.orgName = token.orgName ?? null;
         session.user.remarks = token.remarks ?? null;
+        session.user.sessionToken = token.sessionToken ?? null;
       }
       return session;
     },

@@ -23,7 +23,9 @@ import {
   RefreshCw,
   ClipboardCheck,
   Megaphone,
+  CheckCheck,
 } from "lucide-react";
+import { Pagination } from "@/components/pagination";
 import {
   ANNOUNCEMENT_MESSAGE_LABEL,
   ANNOUNCEMENT_TITLE_LABEL,
@@ -32,6 +34,8 @@ import {
   notifyPanelNotificationsUpdated,
   parseAnnouncementBody,
 } from "@/lib/panel-notifications";
+
+const PAGE_SIZE = 10;
 
 export function PanelNotificationsInbox({
   audience = "client",
@@ -45,6 +49,8 @@ export function PanelNotificationsInbox({
   const [loading, setLoading] = React.useState(true);
   const [selectedNotif, setSelectedNotif] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
+  const [page, setPage] = React.useState(1);
+  const [markingAll, setMarkingAll] = React.useState(false);
   const router = useRouter();
 
   const queryKey = audience === "client" ? "clientId" : "staffId";
@@ -94,6 +100,30 @@ export function PanelNotificationsInbox({
       notifyPanelNotificationsUpdated();
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
+    }
+  }
+
+  async function markAllAsRead() {
+    const raw = localStorage.getItem("user_id");
+    const id =
+      audience === "client"
+        ? raw?.replace(/^CLT-/, "")
+        : raw?.replace(/^STF-/, "");
+    if (!id) return;
+    setMarkingAll(true);
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAllRead: true, [queryKey]: id, scope }),
+      });
+      if (!res.ok) throw new Error("Failed to mark all as read");
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      notifyPanelNotificationsUpdated();
+    } catch (err) {
+      console.error("Failed to mark all notifications as read:", err);
+    } finally {
+      setMarkingAll(false);
     }
   }
 
@@ -155,13 +185,22 @@ export function PanelNotificationsInbox({
       const cat = categorizeNotificationType(n.type);
       if (base[cat] != null) base[cat] += 1;
     }
+    base.unread = notifications.filter((n) => !n.isRead).length;
     return base;
   }, [notifications, filters]);
 
   const filteredNotifications = React.useMemo(() => {
     if (filter === "all") return notifications;
+    if (filter === "unread") return notifications.filter((n) => !n.isRead);
     return notifications.filter((n) => categorizeNotificationType(n.type) === filter);
   }, [notifications, filter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedNotifications = filteredNotifications.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
 
   const dialogDescription = (() => {
     if (!selectedNotif) return "Notification details";
@@ -191,9 +230,22 @@ export function PanelNotificationsInbox({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Notifications</CardTitle>
-          <CardDescription>{listDescription}</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Recent Notifications</CardTitle>
+            <CardDescription>{listDescription}</CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={markAllAsRead}
+            disabled={markingAll || notifications.every((n) => n.isRead)}
+          >
+            <CheckCheck className="size-4" />
+            Mark all as read
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {filters.length > 0 && (
@@ -207,7 +259,10 @@ export function PanelNotificationsInbox({
                     type="button"
                     size="sm"
                     variant={active ? "default" : "outline"}
-                    onClick={() => setFilter(f.id)}
+                    onClick={() => {
+                      setFilter(f.id);
+                      setPage(1);
+                    }}
                     className="gap-1.5"
                   >
                     {f.label}
@@ -234,83 +289,90 @@ export function PanelNotificationsInbox({
                 : `No ${filters.find((f) => f.id === filter)?.label.toLowerCase() || ""} notifications.`}
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredNotifications.map((notif) => {
-                const announcementBody =
-                  categorizeNotificationType(notif.type) === "announcement"
-                    ? parseAnnouncementBody(notif.message)
-                    : null;
-                return (
-                  <div
-                    key={notif.id}
-                    className={`flex items-start gap-4 rounded-lg border p-4 transition-colors cursor-pointer hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring ${
-                      notif.isRead ? "bg-background" : "bg-muted/30 border-primary/20"
-                    }`}
-                    onClick={() => handleNotificationClick(notif)}
-                  >
-                    <div className="mt-0.5 shrink-0 text-muted-foreground">
-                      {getIcon(notif.type)}
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          {announcementBody ? (
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium break-words">
-                                <span className="text-muted-foreground">
-                                  {ANNOUNCEMENT_TITLE_LABEL} :{" "}
-                                </span>
-                                {announcementBody.title}
-                              </p>
-                              <p className="text-sm whitespace-pre-wrap break-words">
-                                <span className="text-muted-foreground">
-                                  {ANNOUNCEMENT_MESSAGE_LABEL} :{" "}
-                                </span>
-                                {announcementBody.content}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-sm font-medium whitespace-pre-wrap break-words">
-                              {notif.message}
-                            </p>
-                          )}
+            <>
+              <div className="divide-y overflow-hidden rounded-lg border">
+                {paginatedNotifications.map((notif) => {
+                  const announcementBody =
+                    categorizeNotificationType(notif.type) === "announcement"
+                      ? parseAnnouncementBody(notif.message)
+                      : null;
+                  const subject = announcementBody
+                    ? announcementBody.title
+                    : notif.message;
+                  return (
+                    <div
+                      key={notif.id}
+                      className={`flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-muted/50 ${
+                        notif.isRead ? "" : "bg-primary/5"
+                      }`}
+                      onClick={() => handleNotificationClick(notif)}
+                    >
+                      <span
+                        className={`mt-2 size-2 shrink-0 rounded-full ${
+                          notif.isRead ? "bg-transparent" : "bg-primary"
+                        }`}
+                      />
+                      <span className="mt-0.5 shrink-0 text-muted-foreground">
+                        {getIcon(notif.type)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p
+                            className={`min-w-0 flex-1 break-words text-sm ${
+                              notif.isRead
+                                ? "font-medium text-muted-foreground"
+                                : "font-semibold"
+                            }`}
+                          >
+                            {subject}
+                          </p>
+                          <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                            {new Date(notif.sentAt).toLocaleString()}
+                          </span>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        {announcementBody && (
+                          <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">
+                            {announcementBody.content}
+                          </p>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${getTypeColor(notif.type)}`}
+                          >
+                            {displayNotificationTypeLabel(notif.type)}
+                          </Badge>
                           {!notif.isRead && (
                             <Badge variant="secondary" className="text-xs">
                               New
                             </Badge>
                           )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleNotificationClick(notif);
-                            }}
-                          >
-                            View
-                          </Button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(notif.sentAt).toLocaleString()}
-                        </p>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${getTypeColor(notif.type)}`}
-                        >
-                          {displayNotificationTypeLabel(notif.type)}
-                        </Badge>
-                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 self-center"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleNotificationClick(notif);
+                        }}
+                      >
+                        View
+                      </Button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              <Pagination
+                page={safePage}
+                pageSize={PAGE_SIZE}
+                total={filteredNotifications.length}
+                onPageChange={setPage}
+                itemLabel="notifications"
+              />
+            </>
           )}
         </CardContent>
       </Card>

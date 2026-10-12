@@ -51,7 +51,6 @@ function getStatusColor(status) {
 const PAGE_SIZE = 10;
 
 export default function BookingsPage() {
-  const [status, setStatus] = React.useState("all");
   const [clientType, setClientType] = React.useState("all");
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
@@ -69,7 +68,6 @@ export default function BookingsPage() {
       try {
         setLoading(true);
         const params = new URLSearchParams();
-        if (status !== "all") params.set("status", status);
         if (clientType !== "all") params.set("clientType", clientType);
         if (dateFrom) params.set("dateFrom", dateFrom);
         if (dateTo) params.set("dateTo", dateTo);
@@ -86,7 +84,7 @@ export default function BookingsPage() {
     }
     loadBookings();
     return () => { cancelled = true; };
-  }, [status, clientType, dateFrom, dateTo, searchQuery]);
+  }, [clientType, dateFrom, dateTo, searchQuery]);
 
   const cultural = bookings.filter((b) => b.venueId === 1);
   const sports = bookings.filter((b) => b.venueId === 2);
@@ -94,7 +92,7 @@ export default function BookingsPage() {
   React.useEffect(() => {
     setCulturalPage(1);
     setSportsPage(1);
-  }, [status, clientType, dateFrom, dateTo, searchQuery]);
+  }, [clientType, dateFrom, dateTo, searchQuery]);
 
   const culturalTotalPages = Math.max(1, Math.ceil(cultural.length / PAGE_SIZE));
   const culturalSafePage = Math.min(culturalPage, culturalTotalPages);
@@ -110,22 +108,21 @@ export default function BookingsPage() {
   );
 
   const clearFilters = () => {
-    setStatus("all");
     setClientType("all");
     setDateFrom("");
     setDateTo("");
     setSearchQuery("");
   };
 
-  const hasActiveFilters = status !== "all" || clientType !== "all" || dateFrom || dateTo || searchQuery;
+  const hasActiveFilters = clientType !== "all" || dateFrom || dateTo || searchQuery;
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Bookings</h2>
         <p className="text-muted-foreground text-sm">
-          Read-only oversight — administrator monitors reservations & payment
-          progress across both venues.
+          Read-only oversight of confirmed bookings and payment progress across
+          both venues.
         </p>
       </div>
 
@@ -142,20 +139,6 @@ export default function BookingsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-[220px]"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Booking status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Confirmed">Confirmed</SelectItem>
-                  <SelectItem value="Declined">Declined</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Client Type</Label>
@@ -218,8 +201,7 @@ export default function BookingsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Event</TableHead>
+                  <TableHead className="w-[45%]">Client</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
@@ -228,13 +210,13 @@ export default function BookingsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : cultural.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                       No bookings
                     </TableCell>
                   </TableRow>
@@ -245,14 +227,11 @@ export default function BookingsPage() {
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => setSelectedBooking(b)}
                     >
-                      <TableCell className="max-w-[160px] truncate">
+                      <TableCell className="truncate">
                         <span className="font-medium">{b.clientName}</span>
                         <span className="block text-xs text-muted-foreground">
                           {b.clientOrg}
                         </span>
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-sm">
-                        {b.eventType}
                       </TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
                         {b.eventDate}
@@ -300,8 +279,7 @@ export default function BookingsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Event</TableHead>
+                  <TableHead className="w-[45%]">Client</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
@@ -310,13 +288,13 @@ export default function BookingsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : sports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                       No bookings
                     </TableCell>
                   </TableRow>
@@ -327,14 +305,11 @@ export default function BookingsPage() {
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => setSelectedBooking(b)}
                     >
-                      <TableCell className="max-w-[160px] truncate">
+                      <TableCell className="truncate">
                         <span className="font-medium">{b.clientName}</span>
                         <span className="block text-xs text-muted-foreground">
                           {b.clientOrg}
                         </span>
-                      </TableCell>
-                      <TableCell className="max-w-[160px] truncate text-sm">
-                        {b.eventType}
                       </TableCell>
                       <TableCell className="text-sm whitespace-nowrap">
                         {b.eventDate}
@@ -434,14 +409,14 @@ export default function BookingsPage() {
                 </div>
               </div>
 
-              {/* Booking Status */}
+              {/* Status */}
               <div>
                 <h4 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Booking Status
+                  Status
                 </h4>
                 <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <Label className="text-xs text-muted-foreground">Reservation Status</Label>
                     <Badge variant="outline" className={`mt-1 ${getStatusColor(selectedBooking.status)}`}>
                       {selectedBooking.status}
                     </Badge>
@@ -485,6 +460,31 @@ export default function BookingsPage() {
                 ) : (
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <p className="text-sm text-muted-foreground">No facilities assigned yet</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Particulars */}
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Particulars
+                </h4>
+                {selectedBooking.particulars && selectedBooking.particulars.length > 0 ? (
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <ul className="space-y-1">
+                      {selectedBooking.particulars.map((p, i) => (
+                        <li key={i} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="min-w-0 truncate">{p.name}</span>
+                          {p.quantity > 1 && (
+                            <span className="shrink-0 text-xs text-muted-foreground">×{p.quantity}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <p className="text-sm text-muted-foreground">No particulars selected</p>
                   </div>
                 )}
               </div>

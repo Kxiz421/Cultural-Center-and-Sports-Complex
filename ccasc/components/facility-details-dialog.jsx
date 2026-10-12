@@ -41,14 +41,21 @@ export function FacilityNameButton({ facility, onOpen }) {
   return (
     <>
       {thumbnail && (
-        <img
-          src={thumbnail}
-          alt={facility.name}
-          className="size-8 shrink-0 rounded object-cover"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-        />
+        <button
+          type="button"
+          onClick={open}
+          title="View facility images"
+          className="size-8 shrink-0 cursor-zoom-in overflow-hidden rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <img
+            src={thumbnail}
+            alt={facility.name}
+            className="size-8 object-cover"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
+          />
+        </button>
       )}
       <button
         type="button"
@@ -85,10 +92,12 @@ function statusClasses(status) {
 export function FacilityDetailsDialog({ facility, open, onOpenChange }) {
   const images = (facility?.images || []).filter(isDisplayableImage);
   const [index, setIndex] = React.useState(0);
-
-  React.useEffect(() => {
+  const viewerKey = `${facility?.facilityId ?? "none"}:${open}`;
+  const [lastViewerKey, setLastViewerKey] = React.useState(viewerKey);
+  if (viewerKey !== lastViewerKey) {
+    setLastViewerKey(viewerKey);
     setIndex(0);
-  }, [facility?.facilityId, open]);
+  }
 
   const count = images.length;
   const safeIndex = count > 0 ? Math.min(index, count - 1) : 0;
