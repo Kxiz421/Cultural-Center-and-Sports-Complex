@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { checkEmailDeliverability } from "@/lib/email-validation";
-import { getClientIP } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,18 +9,16 @@ export const runtime = "nodejs";
  * POST /api/auth/validate-email
  *
  * Public (pre-registration) endpoint. Checks whether an email is well-formed,
- * and - when `full` is true and a verification provider key is configured -
- * whether the specific mailbox exists. Supports any provider.
+ * whether its domain can receive mail, and flags common typos - so the
+ * registration form can warn the user while they type instead of only on
+ * submit. Supports any provider.
  *
- * Body: { email: string, full?: boolean }
+ * Body: { email: string }
  */
 export async function POST(request) {
   try {
-    const { email, full } = await request.json();
-    const result = await checkEmailDeliverability(email, {
-      ip: getClientIP(request),
-      allowProvider: full === true,
-    });
+    const { email } = await request.json();
+    const result = await checkEmailDeliverability(email);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Email validation error:", error);

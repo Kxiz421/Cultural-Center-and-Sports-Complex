@@ -56,7 +56,6 @@ export default function RegisterPage() {
   const [emailCheck, setEmailCheck] = useState(null);
   const [emailChecking, setEmailChecking] = useState(false);
   const emailRequestRef = useRef(0);
-  const emailDebounceRef = useRef(null);
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -74,10 +73,8 @@ export default function RegisterPage() {
     fetchOrgs();
   }, []);
 
-  // Check the email's legitimacy as the user types (debounced, local checks)
-  // and on blur (definitive mailbox check via the verification provider).
-  // Supports any email provider - the server does the verification.
-  const runEmailCheck = useCallback(async (value, full) => {
+  // Check the email as the user types (debounced). Supports any provider.
+  const runEmailCheck = useCallback(async (value) => {
     const email = value.trim();
     if (!email) return;
 
@@ -87,7 +84,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/validate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, full }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json();
       if (emailRequestRef.current === requestId) {
@@ -103,16 +100,9 @@ export default function RegisterPage() {
   useEffect(() => {
     const email = formData.email.trim();
     if (!email) return;
-    emailDebounceRef.current = setTimeout(() => runEmailCheck(email, false), 600);
-    return () => clearTimeout(emailDebounceRef.current);
+    const timer = setTimeout(() => runEmailCheck(email), 600);
+    return () => clearTimeout(timer);
   }, [formData.email, runEmailCheck]);
-
-  // Leaving the field runs the definitive mailbox check. The pending debounced
-  // local check is cancelled so it can't overwrite the provider's verdict.
-  const handleEmailBlur = () => {
-    clearTimeout(emailDebounceRef.current);
-    runEmailCheck(formData.email, true);
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -370,7 +360,6 @@ export default function RegisterPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
-                  onBlur={handleEmailBlur}
                   placeholder="juan.santos@email.com"
                   className="text-foreground placeholder:text-muted-foreground"
                   aria-invalid={emailInvalid}

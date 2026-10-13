@@ -1,10 +1,5 @@
 import dns from "node:dns/promises";
 
-import {
-  isEmailVerificationProviderConfigured,
-  verifyEmailWithProvider,
-} from "@/lib/email-verification-provider";
-
 /**
  * Provider-agnostic email validation used by the registration form to check an
  * address's legitimacy as the user types (not only on submit).
@@ -146,58 +141,15 @@ async function domainHasMailRecordsViaDoh(domain) {
   return null;
 }
 
-/** Translate a provider verdict into this module's result shape. */
-function mapProviderResult(provider, email) {
-  const status = String(provider.status || "").toLowerCase();
-
-  if (
-    provider.didYouMean &&
-    isValidEmailFormat(provider.didYouMean) &&
-    normalizeEmail(provider.didYouMean) !== normalizeEmail(email)
-  ) {
-    return {
-      status: "typo",
-      valid: true,
-      suggestion: provider.didYouMean,
-      message: `That looks like a typo - did you mean ${provider.didYouMean}?`,
-    };
-  }
-
-  if (status === "valid") {
-    return { status: "valid", valid: true, message: "" };
-  }
-  if (status === "invalid") {
-    return {
-      status: "undeliverable",
-      valid: false,
-      message: "This email address doesn't exist. Please check it.",
-    };
-  }
-  if (status === "spamtrap" || status === "abuse" || status === "do_not_mail") {
-    return {
-      status: "undeliverable",
-      valid: false,
-      message: "This email address can't be used. Please use a different one.",
-    };
-  }
-  // catch-all / unknown - the provider cannot confirm this mailbox.
-  return { status: "unknown", valid: true, message: "" };
-}
-
 /**
- * Check whether an address is well-formed and, ideally, whether the specific
- * mailbox exists.
- *
- * When a verification provider is configured and `allowProvider` is set, its
- * SMTP-based verdict is used (it can confirm a Gmail mailbox exists). Otherwise
- * it falls back to a DNS check of the domain. Unverifiable results degrade to
- * "unknown" (non-blocking) rather than a false negative.
+ * Check whether an address is well-formed and its domain can receive mail.
+ * Network/DNS failures degrade to an "unknown" status (non-blocking) rather
+ * than a false negative.
  *
  * @param {string} email
- * @param {{ ip?: string, allowProvider?: boolean }} [options]
  * @returns {Promise<{status: "empty"|"invalid"|"typo"|"undeliverable"|"valid"|"unknown", valid: boolean, message: string, suggestion?: string}>}
  */
-export async function checkEmailDeliverability(email, { ip, allowProvider = true } = {}) {
+export async function checkEmailDeliverability(email) {
   const trimmed = String(email ?? "").trim();
   if (!trimmed) {
     return { status: "empty", valid: false, message: "" };
@@ -218,13 +170,6 @@ export async function checkEmailDeliverability(email, { ip, allowProvider = true
       suggestion,
       message: `That domain looks like a typo - did you mean ${suggestion}?`,
     };
-  }
-
-  // A configured provider can confirm the mailbox itself, which a DNS check
-  // never can. Only run it for definitive ("full") checks to protect credits.
-  if (allowProvider && isEmailVerificationProviderConfigured()) {
-    const provider = await verifyEmailWithProvider(trimmed, { ip });
-    if (provider) return mapProviderResult(provider, trimmed);
   }
 
   const domain = getEmailDomain(trimmed);
