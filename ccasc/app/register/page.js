@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
@@ -53,6 +53,9 @@ export default function RegisterPage() {
   const [idProofFile, setIdProofFile] = useState(null);
   const [idProofPreview, setIdProofPreview] = useState(null);
   const [idProofData, setIdProofData] = useState(null);
+  const [emailCheck, setEmailCheck] = useState(null);
+  const [emailChecking, setEmailChecking] = useState(false);
+  const emailRequestRef = useRef(0);
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -69,6 +72,39 @@ export default function RegisterPage() {
     }
     fetchOrgs();
   }, []);
+
+  // Check the email's legitimacy as the user types (debounced, local checks)
+  // and on blur (definitive mailbox check via the verification provider).
+  // Supports any email provider - the server does the verification.
+  const runEmailCheck = useCallback(async (value, full) => {
+    const email = value.trim();
+    if (!email) return;
+
+    const requestId = ++emailRequestRef.current;
+    setEmailChecking(true);
+    try {
+      const res = await fetch("/api/auth/validate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, full }),
+      });
+      const data = await res.json();
+      if (emailRequestRef.current === requestId) {
+        setEmailCheck({ ...data, email });
+      }
+    } catch {
+      if (emailRequestRef.current === requestId) setEmailCheck(null);
+    } finally {
+      if (emailRequestRef.current === requestId) setEmailChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const email = formData.email.trim();
+    if (!email) return;
+    const timer = setTimeout(() => runEmailCheck(email, false), 600);
+    return () => clearTimeout(timer);
+  }, [formData.email, runEmailCheck]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -206,6 +242,20 @@ export default function RegisterPage() {
     }
   };
 
+  // Only surface a result that belongs to the email currently typed. The
+  // "unknown" status means the domain couldn't be verified (e.g. no network),
+  // which is not actionable - so it is never shown.
+  const trimmedEmail = formData.email.trim();
+  const activeEmailCheck =
+    emailCheck && emailCheck.email === trimmedEmail ? emailCheck : null;
+  const emailWarning =
+    activeEmailCheck && activeEmailCheck.status !== "unknown"
+      ? activeEmailCheck.message
+      : "";
+  const emailInvalid =
+    activeEmailCheck?.status === "invalid" ||
+    activeEmailCheck?.status === "undeliverable";
+
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
       <Image
@@ -312,10 +362,27 @@ export default function RegisterPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onBlur={() => runEmailCheck(formData.email, true)}
                   placeholder="juan.santos@email.com"
                   className="text-foreground placeholder:text-muted-foreground"
+                  aria-invalid={emailInvalid}
                   required
                 />
+                {trimmedEmail && emailChecking ? (
+                  <p className="text-xs text-muted-foreground">
+                    Checking email…
+                  </p>
+                ) : emailWarning ? (
+                  <p
+                    className={
+                      emailInvalid
+                        ? "text-xs text-destructive"
+                        : "text-xs text-amber-600"
+                    }
+                  >
+                    {emailWarning}
+                  </p>
+                ) : null}
               </div>
 
               {/* Username (optional) */}

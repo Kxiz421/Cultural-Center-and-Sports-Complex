@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
+import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
 
 
 import { requireApiAuth, resolveClientScope } from "@/lib/api-auth";
@@ -11,6 +12,15 @@ export async function GET(request) {
   if (guard.response) return guard.response;
 
   try {
+    // Unpaid reservations due within 3 days are reminded, and those due within
+    // 2 days are removed before the calendar is built, so unpaid reservations
+    // never appear on the facility calendar.
+    try {
+      await processUnpaidReservationRule();
+    } catch (cleanupError) {
+      console.error("Unpaid reservation rule failed:", cleanupError);
+    }
+
     const { searchParams } = new URL(request.url);
     const rawClientId = searchParams.get("clientId");
     const venueId = searchParams.get("venueId");

@@ -23,6 +23,7 @@ import {
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
+import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
 
 import { requireApiAuth, resolveClientScope, ownClientId } from "@/lib/api-auth";
 function parsePackageId(value) {
@@ -133,6 +134,13 @@ export async function GET(request) {
   if (guard.response) return guard.response;
 
   try {
+    // Remind unpaid reservations due in 3 days, then remove those due in 2.
+    try {
+      await processUnpaidReservationRule();
+    } catch (cleanupError) {
+      console.error("Unpaid reservation rule failed:", cleanupError);
+    }
+
     const { searchParams } = new URL(request.url);
     // Client-role sessions are pinned to their own reservations.
     const scopedClientId = resolveClientScope(guard.user, searchParams.get("clientId"));

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { formatPhp } from "@/lib/utils";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -453,6 +454,176 @@ export async function sendAccountVerificationEmail(
     return true;
   } catch (error) {
     console.error("Failed to send account verification email:", error);
+    return false;
+  }
+}
+
+/**
+ * Remind a client that their reservation still has no payment and will be
+ * automatically removed if nothing is paid by the removal date.
+ * @param {string} to - Recipient email address
+ * @param {object} details
+ * @param {string} [details.clientName]
+ * @param {string} [details.eventType]
+ * @param {string} [details.venue]
+ * @param {string} [details.eventDate] - Event date (YYYY-MM-DD)
+ * @param {string} [details.removalDate] - Date the reservation is auto-removed (YYYY-MM-DD)
+ * @param {string} [details.reservationRef] - e.g. RES-12
+ * @param {number} [details.amountDue] - Minimum amount expected (50% down + 10% deposit)
+ * @returns {Promise<boolean>} - Whether the email was sent successfully
+ */
+export async function sendUnpaidReservationReminderEmail(to, {
+  clientName,
+  eventType,
+  venue,
+  eventDate,
+  removalDate,
+  reservationRef,
+  amountDue,
+} = {}) {
+  if (!to) return false;
+  try {
+    const safeName = escapeHtml(clientName || "there");
+    const safeEventType = escapeHtml(eventType || "your scheduled event");
+    const safeVenue = escapeHtml(venue || "the venue");
+    const safeEventDate = escapeHtml(eventDate || "N/A");
+    const safeRemovalDate = escapeHtml(removalDate || "N/A");
+    const safeRef = escapeHtml(reservationRef || "N/A");
+    const amountLine =
+      amountDue != null && Number.isFinite(Number(amountDue))
+        ? `<p>Minimum payment expected: <strong>${escapeHtml(formatPhp(amountDue))}</strong> (50% down payment + 10% deposit).</p>`
+        : "";
+
+    const info = await transporter.sendMail({
+      from: `"CSASC - Provincial Government of South Cotabato" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `Payment Reminder: Reservation ${safeRef} May Be Cancelled - CSASC`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body {
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              margin: 0;
+              padding: 0;
+              background-color: #f4f4f4;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .header {
+              background: linear-gradient(135deg, #b45309, #f59e0b);
+              color: white;
+              padding: 30px 20px;
+              text-align: center;
+              border-radius: 12px 12px 0 0;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 22px;
+              font-weight: 700;
+            }
+            .header p {
+              margin: 8px 0 0;
+              font-size: 14px;
+              opacity: 0.9;
+            }
+            .body {
+              background: white;
+              padding: 30px 20px;
+              border-radius: 0 0 12px 12px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            }
+            .details {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 20px 0;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            .details td {
+              padding: 10px 12px;
+              border-bottom: 1px solid #e5e7eb;
+              font-size: 14px;
+            }
+            .details td:first-child {
+              font-weight: 600;
+              color: #92400e;
+              white-space: nowrap;
+              width: 40%;
+            }
+            .note {
+              background: #fef2f2;
+              border-left: 4px solid #dc2626;
+              padding: 12px 16px;
+              margin: 16px 0;
+              font-size: 13px;
+              color: #991b1b;
+              border-radius: 4px;
+            }
+            .footer {
+              text-align: center;
+              padding: 20px;
+              color: #6b7280;
+              font-size: 12px;
+              line-height: 1.6;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>⏳ Payment Reminder</h1>
+              <p>Provincial Government of South Cotabato</p>
+              <p>Gymnasium &amp; Cultural Center / Sports Complex</p>
+            </div>
+            <div class="body">
+              <p>Hello ${safeName},</p>
+              <p>We have not yet received any payment for your reservation. To keep it, please settle at least the down payment and deposit before the date below.</p>
+
+              <table class="details">
+                <tr><td>Reference</td><td>${safeRef}</td></tr>
+                <tr><td>Event</td><td>${safeEventType}</td></tr>
+                <tr><td>Venue</td><td>${safeVenue}</td></tr>
+                <tr><td>Event date</td><td>${safeEventDate}</td></tr>
+                <tr><td>Pay before</td><td>${safeRemovalDate}</td></tr>
+              </table>
+
+              ${amountLine}
+
+              <div class="note">
+                <strong>Please note:</strong><br>
+                If no payment is recorded by ${safeRemovalDate} (2 days before the event), your reservation will be automatically cancelled and removed from the facility calendar.
+              </div>
+
+              <p style="font-size: 13px; color: #6b7280; margin-top: 20px;">
+                If you have already settled your payment, please disregard this message or contact our office for assistance.
+              </p>
+            </div>
+            <div class="footer">
+              <p>
+                <strong>CSASC - Provincial Government of South Cotabato</strong><br>
+                Gymnasium &amp; Cultural Center / Sports Complex Management System
+              </p>
+              <p>
+                This is an automated message, please do not reply directly to this email.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    console.log(`Unpaid reservation reminder email sent to ${to}: ${info.messageId}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to send unpaid reservation reminder email:", error);
     return false;
   }
 }

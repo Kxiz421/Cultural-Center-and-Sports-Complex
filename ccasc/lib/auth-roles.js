@@ -101,6 +101,7 @@ export const API_RULES = [
   { prefix: "/api/auth/signout", types: PUBLIC_API },
   { prefix: "/api/auth/error", types: PUBLIC_API },
   { prefix: "/api/auth/register", types: PUBLIC_API },
+  { prefix: "/api/auth/validate-email", types: PUBLIC_API },
   { prefix: "/api/auth/password-reset", types: PUBLIC_API },
   // Restricted: only a declined client's limited session may resubmit.
   { prefix: "/api/auth/resubmit", types: [USER_TYPE.RESUBMIT_ONLY] },
