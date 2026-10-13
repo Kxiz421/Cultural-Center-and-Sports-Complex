@@ -56,6 +56,7 @@ export default function RegisterPage() {
   const [emailCheck, setEmailCheck] = useState(null);
   const [emailChecking, setEmailChecking] = useState(false);
   const emailRequestRef = useRef(0);
+  const emailDebounceRef = useRef(null);
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -102,9 +103,16 @@ export default function RegisterPage() {
   useEffect(() => {
     const email = formData.email.trim();
     if (!email) return;
-    const timer = setTimeout(() => runEmailCheck(email, false), 600);
-    return () => clearTimeout(timer);
+    emailDebounceRef.current = setTimeout(() => runEmailCheck(email, false), 600);
+    return () => clearTimeout(emailDebounceRef.current);
   }, [formData.email, runEmailCheck]);
+
+  // Leaving the field runs the definitive mailbox check. The pending debounced
+  // local check is cancelled so it can't overwrite the provider's verdict.
+  const handleEmailBlur = () => {
+    clearTimeout(emailDebounceRef.current);
+    runEmailCheck(formData.email, true);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -362,7 +370,7 @@ export default function RegisterPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
-                  onBlur={() => runEmailCheck(formData.email, true)}
+                  onBlur={handleEmailBlur}
                   placeholder="juan.santos@email.com"
                   className="text-foreground placeholder:text-muted-foreground"
                   aria-invalid={emailInvalid}
