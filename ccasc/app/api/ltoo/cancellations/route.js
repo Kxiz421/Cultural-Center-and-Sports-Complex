@@ -5,7 +5,7 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import { venueAcronym } from "@/lib/venues";
 import { formatDbDate, formatLocalDateKey } from "@/lib/utils";
 import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
-import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
+import { removeUnpaidReservationsDueSoon } from "@/lib/reservation-unpaid-cleanup";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -26,11 +26,12 @@ export async function GET() {
 
   try {
     // Unpaid reservations due within 2 days are removed here too, so this list
-    // stays in sync with the facility calendar.
+    // stays in sync with the facility calendar. (Removal only - the reminder
+    // emails are sent by the calendar/reservations endpoints.)
     try {
-      await processUnpaidReservationRule();
+      await removeUnpaidReservationsDueSoon();
     } catch (cleanupError) {
-      console.error("Unpaid reservation rule failed:", cleanupError);
+      console.error("Unpaid reservation cleanup failed:", cleanupError);
     }
 
     const bookings = await prisma.booking.findMany({
@@ -72,13 +73,12 @@ export async function GET() {
       const isWithin30Days =
         daysUntilEvent !== null && daysUntilEvent < 30 && daysUntilEvent >= 0;
 
-      // Cancellation is possible until 2 days before the event - inside that
-      // last-2-days window it is blocked. Cancelling within 30 days forfeits the
-      // 50% down payment and 10% deposit (shown as a warning, not a block).
+      // The only thing that blocks a cancellation is the last 2 days before the
+      // event. Cancelling within 30 days forfeits the 50% down payment and 10%
+      // deposit, but is still allowed.
       const canCancel =
-        reservationStatus === "Confirmed" &&
-        !isProvincial &&
-        paymentStatus !== "Fully Paid" &&
+        reservationStatus !== "Cancelled" &&
+        reservationStatus !== "Declined" &&
         daysUntilEvent !== null &&
         daysUntilEvent > 2;
 

@@ -240,7 +240,36 @@ export async function removeUnpaidReservationsDueSoon({ now = new Date() } = {})
       where: { reservationId: { in: reservationIds } },
     });
     if (bookingIds.length > 0) {
-      // Deposit and DepositDeduction cascade from Booking.
+      // Payment has a required FK to Booking (Restrict) and Deposit references
+      // Payment, so the money rows must be cleared before the bookings.
+      const [paymentRows, depositRows] = await Promise.all([
+        tx.payment.findMany({
+          where: { bookingId: { in: bookingIds } },
+          select: { paymentId: true },
+        }),
+        tx.deposit.findMany({
+          where: { bookingId: { in: bookingIds } },
+          select: { depositId: true },
+        }),
+      ]);
+      const paymentIds = paymentRows.map((p) => p.paymentId);
+      const depositIds = depositRows.map((d) => d.depositId);
+
+      if (paymentIds.length > 0 || depositIds.length > 0) {
+        await tx.transaction.deleteMany({
+          where: {
+            OR: [
+              ...(paymentIds.length > 0 ? [{ paymentId: { in: paymentIds } }] : []),
+              ...(depositIds.length > 0 ? [{ depositId: { in: depositIds } }] : []),
+            ],
+          },
+        });
+      }
+
+      // Deposit cascades to DepositDeduction.
+      await tx.deposit.deleteMany({ where: { bookingId: { in: bookingIds } } });
+      await tx.payment.deleteMany({ where: { bookingId: { in: bookingIds } } });
+      await tx.document.deleteMany({ where: { bookingId: { in: bookingIds } } });
       await tx.booking.deleteMany({ where: { bookingId: { in: bookingIds } } });
     }
     // ReservationDate and ReservedParticular cascade from Reservation.

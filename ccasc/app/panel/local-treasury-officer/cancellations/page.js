@@ -164,10 +164,6 @@ export default function LTOOCancellationsPage() {
     return true;
   });
 
-  React.useEffect(() => {
-    setPage(1);
-  }, [search, venueFilter, statusFilter]);
-
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paginatedBookings = filteredBookings.slice(
@@ -212,11 +208,11 @@ export default function LTOOCancellationsPage() {
                 className="pl-8"
                 placeholder="Search by client, activity, venue..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               />
             </div>
             <div className="w-[180px]">
-              <Select value={venueFilter} onValueChange={setVenueFilter}>
+              <Select value={venueFilter} onValueChange={(v) => { setVenueFilter(v); setPage(1); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="All venues" />
                 </SelectTrigger>
@@ -228,7 +224,7 @@ export default function LTOOCancellationsPage() {
               </Select>
             </div>
             <div className="w-[180px]">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
                 <SelectTrigger>
                   <Filter className="size-3.5 mr-1 text-muted-foreground" />
                   <SelectValue placeholder="All statuses" />
@@ -327,7 +323,7 @@ export default function LTOOCancellationsPage() {
                         </span>
                       </TableCell>
                       <TableCell className="px-2 text-right">
-                        {b.bookingStatus === "Confirmed" && canCancel(b) && (
+                        {canCancel(b) ? (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -341,14 +337,10 @@ export default function LTOOCancellationsPage() {
                           >
                             <XCircle className="size-4" />
                           </Button>
-                        )}
-                        {b.bookingStatus === "Confirmed" && !canCancel(b) && (
+                        ) : (
                           <span className="text-xs text-muted-foreground">
-                            {b.paymentStatus === "Fully Paid" ? "Paid" : b.clientType === "provincial" ? "Provincial" : "Locked"}
+                            {b.bookingStatus === "Cancelled" ? "—" : "Locked"}
                           </span>
-                        )}
-                        {b.bookingStatus !== "Confirmed" && (
-                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -486,12 +478,6 @@ export default function LTOOCancellationsPage() {
                   This booking has already been <strong>cancelled</strong>. No further action is available.
                 </div>
               )}
-
-              {selectedBooking.bookingStatus === "Pending" && (
-                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700">
-                  This booking is currently <strong>Pending</strong>. It must be confirmed by the Program Coordinator before cancellation can be processed.
-                </div>
-              )}
             </div>
           )}
 
@@ -500,7 +486,7 @@ export default function LTOOCancellationsPage() {
               Close
             </Button>
             <div className="flex items-center gap-2">
-              {selectedBooking?.bookingStatus === "Confirmed" && canCancel(selectedBooking) && (
+              {canCancel(selectedBooking) && (
                 <Button
                   variant="destructive"
                   onClick={() => { setConfirmOpen(true); }}
@@ -509,13 +495,9 @@ export default function LTOOCancellationsPage() {
                   Cancel Booking
                 </Button>
               )}
-              {selectedBooking?.bookingStatus === "Confirmed" && !canCancel(selectedBooking) && (
+              {selectedBooking && !canCancel(selectedBooking) && selectedBooking.bookingStatus !== "Cancelled" && (
                 <span className="text-xs text-muted-foreground max-w-[200px] text-right leading-tight">
-                  {selectedBooking?.paymentStatus === "Fully Paid"
-                    ? "Fully paid bookings cannot be cancelled"
-                    : selectedBooking?.clientType === "provincial"
-                    ? "Provincial bookings cannot be cancelled"
-                    : "Cannot cancel within 2 days of the event"}
+                  Cannot cancel within 2 days of the event
                 </span>
               )}
             </div>
