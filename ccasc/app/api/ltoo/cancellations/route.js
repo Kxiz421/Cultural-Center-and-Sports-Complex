@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { venueAcronym } from "@/lib/venues";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -84,6 +85,7 @@ export async function GET() {
           : "",
         venue: b.reservation?.venue?.venue,
         venueId: b.reservation?.venue?.venueId,
+        venueAcronym: venueAcronym(b.reservation?.venue?.venueId),
         timeSlot: b.reservation?.timeSlot
           ? `${b.reservation.timeSlot.startTime} - ${b.reservation.timeSlot.endTime}`
           : "",

@@ -10,17 +10,12 @@ import {
   toDateOnly,
   formatRescheduleDateChanges,
   validateRescheduleAvailability,
-  validateRescheduleFacilityAvailability,
 } from "@/lib/reschedule-utils";
 import {
-  canManageReservationScope,
   describeScopeChange,
   formatScopeChange,
-  normalizeScopeChangeInput,
   scopeChangeFromJson,
-  scopeChangeToJson,
 } from "@/lib/reschedule-scope";
-import { SPORTS_COMPLEX_VENUE_ID } from "@/lib/venues";
 import {
   isCulturalCenterVenue,
   notifyCulturalCenterCoordinators,
@@ -158,7 +153,6 @@ export async function POST(request) {
         timeSlot: { select: { startTime: true, endTime: true } },
         venue: { select: { venue: true } },
         client: { select: { clientId: true, firstName: true, lastName: true } },
-        bookings: { select: { payments: { select: { amountPaid: true } } } },
       },
     });
 
@@ -208,165 +202,37 @@ export async function POST(request) {
     }
 
     const normalized = normalizeDateChanges(body, reservation);
-    const requestedKeysForScope = (normalized.changes || []).map(
-      (c) => c.requestedDate
-    );
-
-    // Facilities / particulars / time slot the client wants to manage. This is
-    // allowed on the same date too, while the reservation is still editable:
-    // Cultural Center until the 10% deposit is applied, Sports Complex until
-    // the booking is confirmed.
-    const scopeInput = normalizeScopeChangeInput(body.scopeChange);
-    if (scopeInput.error) {
-      return NextResponse.json({ error: scopeInput.error }, { status: 400 });
-    }
-    const scope = scopeInput.scope;
-
-    // A request only fails when the caller asked for date changes it cannot
-    // make; a request that only manages the scope has no date changes at all.
-    const hasDateInput =
-      (Array.isArray(body.dateChanges) && body.dateChanges.length > 0) ||
-      Boolean(body.requestedDate);
-    if (normalized.error && (hasDateInput || !scope)) {
+    if (normalized.error) {
       return NextResponse.json({ error: normalized.error }, { status: 400 });
     }
 
-    const changes = normalized.changes || [];
-    const hasDateChange = changes.length > 0;
+    const changes = normalized.changes;
+    const requestedKeys = changes.map((c) => c.requestedDate);
 
-    const paidAmount = (reservation.bookings || []).reduce(
-      (sum, booking) =>
-        sum +
-        (booking.payments || []).reduce(
-          (s, p) => s + Number(p.amountPaid || 0),
-          0
-        ),
-      0
+    const advanceCheck = validateAdvanceBookingDates(requestedKeys);
+    if (!advanceCheck.valid) {
+      return NextResponse.json(
+        { error: advanceCheck.error, minDate: advanceCheck.minDate },
+        { status: 400 }
+      );
+    }
+
+    const availability = await validateRescheduleAvailability(
+      reservation,
+      changes
     );
-
-    let scopeRecords = null;
-    if (scope) {
-      const allowed = canManageReservationScope({
-        venueId: reservation.venueId,
-        reservationStatus: reservation.reservationStatus,
-        totalAmount: reservation.totalAmount,
-        paidAmount,
-      });
-      if (!allowed.allowed) {
-        return NextResponse.json({ error: allowed.reason }, { status: 409 });
-      }
-
-      // Facilities belong to the venue of the reservation.
-      if (scope.facilities.length > 0) {
-        const facilities = await prisma.facility.findMany({
-          where: {
-            facilityId: { in: scope.facilities.map((f) => f.facilityId) },
-          },
-          select: { facilityId: true, facilityName: true, venueId: true },
-        });
-        if (facilities.length !== scope.facilities.length) {
-          return NextResponse.json(
-            { error: "One of the selected facilities no longer exists." },
-            { status: 400 }
-          );
-        }
-        const foreign = facilities.filter(
-          (f) => Number(f.venueId) !== Number(reservation.venueId)
-        );
-        if (foreign.length > 0) {
-          return NextResponse.json(
-            {
-              error: `Facilities must belong to the ${
-                reservation.venue?.venue || "reservation's venue"
-              }: ${foreign.map((f) => f.facilityName).join(", ")} cannot be booked here.`,
-            },
-            { status: 400 }
-          );
-        }
-        scopeRecords = { facilities };
-      }
-
-      // The Sports Complex is booked per facility - at least one must stay.
-      if (
-        Number(reservation.venueId) === SPORTS_COMPLEX_VENUE_ID &&
-        scope.facilities.length === 0
-      ) {
-        return NextResponse.json(
-          { error: "Please keep at least one Sports Complex facility." },
-          { status: 400 }
-        );
-      }
-
-      if (scope.particulars.length > 0) {
-        const particulars = await prisma.particular.findMany({
-          where: {
-            particularId: { in: scope.particulars.map((p) => p.particularId) },
-          },
-          select: { particularId: true, particularName: true },
-        });
-        if (particulars.length !== scope.particulars.length) {
-          return NextResponse.json(
-            { error: "One of the selected particulars no longer exists." },
-            { status: 400 }
-          );
-        }
-        scopeRecords = { ...(scopeRecords || {}), particulars };
-      }
-
-      // Facilities must be free on every day the event runs. Date changes are
-      // not applied yet, so validate against the requested dates.
-      const targetKeys = hasDateChange
-        ? requestedKeysForScope
-        : [
-            formatDbDate(reservation.eventDate),
-            ...(reservation.additionalDates || []).map((ad) =>
-              formatDbDate(ad.eventDate)
-            ),
-          ];
-      const facilityCheck = await validateRescheduleFacilityAvailability(
-        reservation,
-        scope,
-        targetKeys
+    if (availability.error) {
+      return NextResponse.json(
+        {
+          error: availability.error,
+          conflictDates: availability.conflictDates,
+          bookedDates: availability.bookedDates,
+          blockedDates: availability.blockedDates,
+        },
+        { status: availability.status || 400 }
       );
-      if (!facilityCheck.ok) {
-        return NextResponse.json(
-          {
-            error: facilityCheck.error,
-            conflictDates: facilityCheck.conflictDates,
-          },
-          { status: facilityCheck.status || 409 }
-        );
-      }
     }
 
-    if (hasDateChange) {
-      const advanceCheck = validateAdvanceBookingDates(requestedKeysForScope);
-      if (!advanceCheck.valid) {
-        return NextResponse.json(
-          { error: advanceCheck.error, minDate: advanceCheck.minDate },
-          { status: 400 }
-        );
-      }
-
-      const availability = await validateRescheduleAvailability(
-        reservation,
-        changes
-      );
-      if (availability.error) {
-        return NextResponse.json(
-          {
-            error: availability.error,
-            conflictDates: availability.conflictDates,
-            bookedDates: availability.bookedDates,
-            blockedDates: availability.blockedDates,
-          },
-          { status: availability.status || 400 }
-        );
-      }
-    }
-
-    // `requestedDate` is required by the table; a scope-only request keeps the
-    // current primary date so no date moves.
     const primaryChange = changes.find((c) => c.isPrimary) || changes[0] || null;
     const requestedDate =
       primaryChange?.requestedDate || formatDbDate(reservation.eventDate);
@@ -377,18 +243,14 @@ export async function POST(request) {
         requestedDate: toDateOnly(requestedDate),
         reason: trimmedReason,
         status: "Pending",
-        scopeChange: scopeChangeToJson(scope),
-        dateChanges:
-          changes.length > 0
-            ? {
-                create: changes.map((c) => ({
-                  originalDate: toDateOnly(c.originalDate),
-                  requestedDate: toDateOnly(c.requestedDate),
-                  reservationDateId: c.reservationDateId,
-                  isPrimary: c.isPrimary,
-                })),
-              }
-            : undefined,
+        dateChanges: {
+          create: changes.map((c) => ({
+            originalDate: toDateOnly(c.originalDate),
+            requestedDate: toDateOnly(c.requestedDate),
+            reservationDateId: c.reservationDateId,
+            isPrimary: c.isPrimary,
+          })),
+        },
       },
       include: { dateChanges: true },
     });
@@ -397,23 +259,15 @@ export async function POST(request) {
       const clientName = reservation.client
         ? `${reservation.client.firstName} ${reservation.client.lastName}`
         : walkInDisplayName(reservation.notes);
-      const changeParts = [];
-      if (changes.length > 0) {
-        changeParts.push(
-          `date(s): ${changes
-            .map((c) => `${c.originalDate} → ${c.requestedDate}`)
-            .join("; ")}`
-        );
-      }
-      if (scope) {
-        changeParts.push(
-          `scope: ${describeScopeChange(scope, scopeRecords || {})}`
-        );
-      }
+      const changeParts = [
+        `date(s): ${changes
+          .map((c) => `${c.originalDate} → ${c.requestedDate}`)
+          .join("; ")}`,
+      ];
       await notifyCulturalCenterCoordinators({
         clientId: reservation.client?.clientId,
         type: "reschedule",
-        message: `New rescheduling request from ${clientName} for "${reservation.eventType}" at ${reservation.venue?.venue || "Cultural Center"}. Change(s): ${changeParts.join(" | ") || "none"}. Reason: ${trimmedReason}`,
+        message: `New rescheduling request from ${clientName} for "${reservation.eventType}" at ${reservation.venue?.venue || "Cultural Center"}. Change(s): ${changeParts.join(" | ")}. Reason: ${trimmedReason}`,
       });
     }
 
@@ -425,9 +279,6 @@ export async function POST(request) {
           rescheduleRequest,
           reservation.eventDate
         ),
-        scopeChange: scope
-          ? formatScopeChange(scope, scopeRecords || {})
-          : null,
         earliestDate: getMinEventDateKey(),
       },
       { status: 201 }

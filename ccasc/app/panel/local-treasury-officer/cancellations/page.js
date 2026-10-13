@@ -251,18 +251,29 @@ export default function LTOOCancellationsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className="table-fixed text-xs">
+            <colgroup>
+              <col className="w-[14%]" />
+              <col className="w-[10%]" />
+              <col className="w-[14%]" />
+              <col className="w-[7%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[12%]" />
+              <col className="w-[10%]" />
+              <col className="w-[11%]" />
+            </colgroup>
             <TableHeader>
               <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Activity</TableHead>
-                <TableHead>Venue</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Time Slot</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="px-2">Client</TableHead>
+                <TableHead className="px-2">Type</TableHead>
+                <TableHead className="px-2">Activity</TableHead>
+                <TableHead className="px-2">Venue</TableHead>
+                <TableHead className="px-2">Date</TableHead>
+                <TableHead className="px-2">Time</TableHead>
+                <TableHead className="px-2">Payment</TableHead>
+                <TableHead className="px-2">Status</TableHead>
+                <TableHead className="px-2 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -287,9 +298,13 @@ export default function LTOOCancellationsPage() {
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => openDetail(b)}
                     >
-                      <TableCell className="font-medium">{b.clientName}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs whitespace-nowrap">
+                      <TableCell className="px-2 font-medium">
+                        <span className="block truncate" title={b.clientName || ""}>
+                          {b.clientName}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-2 whitespace-normal">
+                        <Badge variant="outline" className="text-xs">
                           {b.clientType === "provincial" ? (
                             <><Building2 className="size-3 mr-1 inline" />Provincial</>
                           ) : (
@@ -297,23 +312,27 @@ export default function LTOOCancellationsPage() {
                           )}
                         </Badge>
                       </TableCell>
-                      <TableCell className="max-w-[160px] truncate" title={b.activityName || ""}>
-                        {b.activityName || "—"}
+                      <TableCell className="px-2">
+                        <span className="block truncate" title={b.activityName || ""}>
+                          {b.activityName || "—"}
+                        </span>
                       </TableCell>
-                      <TableCell>{b.venue || "—"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{b.eventDate || "—"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{b.timeSlot || "—"}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 font-medium" title={b.venue || ""}>
+                        {b.venueAcronym || b.venue || "—"}
+                      </TableCell>
+                      <TableCell className="px-2 whitespace-nowrap">{b.eventDate || "—"}</TableCell>
+                      <TableCell className="px-2 whitespace-nowrap">{b.timeSlot || "—"}</TableCell>
+                      <TableCell className="px-2 whitespace-normal">
                         <Badge variant={badge.variant} className={`text-xs ${badge.className}`}>
                           {b.paymentStatus || "No Payment"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusStyle(b.bookingStatus)}`}>
+                      <TableCell className="px-2 whitespace-normal">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusStyle(b.bookingStatus)}`}>
                           {b.bookingStatus || "—"}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="px-2 text-right">
                         {b.bookingStatus === "Confirmed" && canCancel(b) && (
                           <Button
                             variant="ghost"
