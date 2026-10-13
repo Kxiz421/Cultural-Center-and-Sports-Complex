@@ -217,7 +217,7 @@ export default function RegisterPage() {
         className="object-cover"
         sizes="100vw"
       />
-      <div className="absolute inset-0 bg-black/55" aria-hidden />
+      <div className="absolute inset-0 bg-[#292B6F]/70" aria-hidden />
 
       <div className="absolute right-4 top-4 z-20 rounded-full border bg-background/80 px-3 py-1.5 shadow-sm backdrop-blur">
         <ThemeToggle />

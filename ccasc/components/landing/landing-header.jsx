@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CalendarCheck, ChevronDown, LogIn, UserPlus } from "lucide-react";
-import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
+import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TransitionLink } from "@/components/route-transition";
@@ -16,7 +16,7 @@ import { useLandingFacilities } from "@/components/landing/use-facilities";
  */
 function LandingHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-md">
+    <header className="navbar-surface sticky top-0 z-40 border-b border-white/20">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-2.5">
           <Image
@@ -27,10 +27,10 @@ function LandingHeader() {
             className="size-9 shrink-0"
           />
           <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold">
+            <span className="truncate text-sm font-semibold text-white">
               Provincial Government of South Cotabato
             </span>
-            <span className="truncate text-xs text-muted-foreground">
+            <span className="truncate text-xs text-white/70">
               Gymnasium &amp; Cultural Center / Sports Complex
             </span>
           </span>
@@ -41,7 +41,7 @@ function LandingHeader() {
             <a
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-medium text-white/80 transition-colors hover:text-white"
             >
               {link.label}
             </a>
@@ -54,12 +54,21 @@ function LandingHeader() {
         <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle />
           <TransitionLink href="/login">
-            <Button size="sm" variant="ghost">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-white/15 hover:text-white"
+            >
               Sign in
             </Button>
           </TransitionLink>
           <TransitionLink href="/register">
-            <Button size="sm">Register</Button>
+            <Button
+              size="sm"
+              className="bg-white text-[#2575FC] hover:bg-white/90"
+            >
+              Register
+            </Button>
           </TransitionLink>
         </div>
       </div>
@@ -76,20 +85,23 @@ function LandingHero() {
       aria-labelledby="landing-hero-title"
       className="relative isolate overflow-hidden"
     >
-      <Image
-        src={LOGIN_PAGE_BACKGROUND}
-        alt=""
-        fill
-        priority
-        unoptimized
-        className="object-cover"
-        sizes="100vw"
-      />
-      {/* Gradient instead of a flat overlay: keeps the top and bottom edges
-          readable and lets the photo show through in the middle. */}
+      {/* Looping YouTube video background, scaled to cover the section. */}
+      <div aria-hidden className="absolute inset-0 overflow-hidden">
+        <iframe
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[56.25vw] min-h-full w-[177.78vh] min-w-full -translate-x-1/2 -translate-y-1/2"
+          src="https://www.youtube.com/embed/SX_USeFg6fY?autoplay=1&mute=1&controls=0&loop=1&playlist=SX_USeFg6fY&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1"
+          title=""
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          tabIndex={-1}
+        />
+      </div>
+      {/* Blue tint over the video (#292B6F). */}
+      <div aria-hidden className="absolute inset-0 bg-[#292B6F]/70" />
+      {/* Readability gradient: keeps the top and bottom edges legible. */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/65 to-black/85"
+        className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/70"
       />
 
       <div

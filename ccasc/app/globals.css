@@ -396,9 +396,9 @@
  */
 :root,
 .dark {
-  --sidebar: #1e3a8a;
-  --sidebar-foreground: #eef2ff;
-  --sidebar-primary: #1d4ed8;
+  --sidebar: #2575fc;
+  --sidebar-foreground: #f2f7ff;
+  --sidebar-primary: #1e63e0;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(255, 255, 255, 0.14);
   --sidebar-accent-foreground: #ffffff;
@@ -409,15 +409,15 @@
 .navbar-surface,
 [data-slot="sidebar-inner"],
 [data-sidebar="sidebar"][data-mobile="true"] {
-  background-color: #1e3a8a;
+  background-color: #2575fc;
   background-image:
     repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.055) 0 2px,
+      rgba(255, 255, 255, 0.06) 0 2px,
       transparent 2px 9px
     ),
-    linear-gradient(180deg, #24479e 0%, #17307a 100%);
-  color: #eef2ff;
+    linear-gradient(180deg, #3d86ff 0%, #1a5fd8 100%);
+  color: #f2f7ff;
 }
 
 [data-slot="sidebar-inner"],

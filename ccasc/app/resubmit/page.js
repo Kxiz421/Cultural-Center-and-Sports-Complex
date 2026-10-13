@@ -172,7 +172,7 @@ export default function ResubmitPage() {
         className="object-cover"
         sizes="100vw"
       />
-      <div className="absolute inset-0 bg-black/55" aria-hidden />
+      <div className="absolute inset-0 bg-[#292B6F]/70" aria-hidden />
 
       <div className="relative z-10 w-full max-w-lg">
         <Link
