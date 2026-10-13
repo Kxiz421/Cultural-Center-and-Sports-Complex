@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
+import { BOOKING_STATUS } from "@/lib/booking-status";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export async function GET(request) {
     // Return bookings with completed payments that can be notified
     const bookings = await prisma.booking.findMany({
       where: {
-        bookingStatusId: 2, // Booked/Confirmed
+        status: { status: BOOKING_STATUS.CONFIRMED }, // Booked/Confirmed
       },
       include: {
         reservation: {

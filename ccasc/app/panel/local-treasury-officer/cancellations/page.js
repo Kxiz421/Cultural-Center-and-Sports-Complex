@@ -51,6 +51,7 @@ import {
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
   { value: "Confirmed", label: "Confirmed" },
+  { value: "Approved", label: "Approved" },
   { value: "Cancelled", label: "Cancelled" },
   { value: "Pending", label: "Pending" },
 ];
@@ -145,16 +146,9 @@ export default function LTOOCancellationsPage() {
     }
   };
 
-  const canCancel = (booking) => {
-    if (booking.clientType === "provincial") return false;
-    if (booking.paymentStatus === "Fully Paid") return false;
-    if (booking.bookingStatus !== "Confirmed") return false;
-
-    const eventDate = new Date(booking.eventDate);
-    const today = new Date();
-    const diffDays = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
-    return diffDays >= 2;
-  };
+  // Cancellation eligibility is computed by the API: allowed only up to 2 days
+  // before the event, for confirmed private/walk-in bookings that are unpaid.
+  const canCancel = (booking) => Boolean(booking?.canCancel);
 
   const filteredBookings = bookings.filter((b) => {
     if (venueFilter !== "all" && b.venueId !== parseInt(venueFilter) && b.venue !== venueFilter) return false;
@@ -200,7 +194,7 @@ export default function LTOOCancellationsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Booking Cancellation</h2>
         <p className="text-muted-foreground text-sm">
-          Click a row to view full booking details. Cancel private/walk-in bookings when payment is not completed at least 2 days before the event.
+          Click a row to view full booking details. Cancellations are possible until 2 days before the event; within 30 days the 50% down payment and 10% deposit are forfeited.
         </p>
       </div>
 
@@ -521,7 +515,7 @@ export default function LTOOCancellationsPage() {
                     ? "Fully paid bookings cannot be cancelled"
                     : selectedBooking?.clientType === "provincial"
                     ? "Provincial bookings cannot be cancelled"
-                    : "Event too soon to cancel (needs ≥2 days)"}
+                    : "Cannot cancel within 2 days of the event"}
                 </span>
               )}
             </div>

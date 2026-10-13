@@ -5,6 +5,7 @@ import { documentEventDateKey } from "@/lib/document-event-date";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
+import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
@@ -255,11 +256,14 @@ export async function PATCH(request) {
         where: { reservationId: id },
       });
 
-      for (const booking of bookings) {
-        await prisma.booking.update({
-          where: { bookingId: booking.bookingId },
-          data: { bookingStatusId: 2 },
-        });
+      const confirmedStatusId = await getBookingStatusId(BOOKING_STATUS.CONFIRMED);
+      if (confirmedStatusId != null) {
+        for (const booking of bookings) {
+          await prisma.booking.update({
+            where: { bookingId: booking.bookingId },
+            data: { bookingStatusId: confirmedStatusId },
+          });
+        }
       }
 
       const reservation = await prisma.reservation.findUnique({
@@ -316,12 +320,20 @@ export async function PATCH(request) {
 
       const paidAmount = Number(existing.totalAmount) || 0;
 
+      const confirmedStatusId = await getBookingStatusId(BOOKING_STATUS.CONFIRMED);
+      if (confirmedStatusId == null) {
+        return NextResponse.json(
+          { error: "Booking status 'Confirmed' is missing." },
+          { status: 500 }
+        );
+      }
+
       // Create confirmed booking
       const booking = await prisma.booking.create({
         data: {
           reservationId: id,
           confirmationDate: new Date(),
-          bookingStatusId: 2, // Confirmed
+          bookingStatusId: confirmedStatusId,
           staffId: acting.performedBy ? parseInt(acting.performedBy, 10) || null : null,
         },
       });

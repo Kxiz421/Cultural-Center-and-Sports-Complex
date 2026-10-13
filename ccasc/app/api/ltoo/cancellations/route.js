@@ -3,20 +3,37 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { venueAcronym } from "@/lib/venues";
+import { formatDbDate, formatLocalDateKey } from "@/lib/utils";
+import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
+import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
+/** Whole days from today (local) to a DATE column value; negative when past. */
+function daysUntilDate(dateValue) {
+  const key = formatDbDate(dateValue);
+  if (!key) return null;
+  const diff =
+    Date.parse(`${key}T00:00:00.000Z`) -
+    Date.parse(`${formatLocalDateKey(new Date())}T00:00:00.000Z`);
+  return Math.round(diff / 86400000);
+}
 
 export async function GET() {
   const guard = await requireApiAuth(["local treasury operations officer","admin"]);
   if (guard.response) return guard.response;
 
   try {
+    // Unpaid reservations due within 2 days are removed here too, so this list
+    // stays in sync with the facility calendar.
+    try {
+      await processUnpaidReservationRule();
+    } catch (cleanupError) {
+      console.error("Unpaid reservation rule failed:", cleanupError);
+    }
+
     const bookings = await prisma.booking.findMany({
-      where: {
-        bookingStatusId: { in: [1, 2, 3] }, // 1=Confirmed, 2=Cancelled, 3=Pending
-      },
       include: {
         reservation: {
           include: {
@@ -36,7 +53,6 @@ export async function GET() {
         payments: {
           include: { status: { select: { status: true } } },
         },
-        status: { select: { status: true } },
       },
       orderBy: { bookingId: "desc" },
     });
@@ -50,25 +66,25 @@ export async function GET() {
           : "Partially Paid"
         : "No Payment";
 
-      // Calculate cancellation eligibility based on 30-day rule
-      const eventDate = b.reservation?.eventDate ? new Date(b.reservation.eventDate) : null;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Show the same status the facility calendar shows: the reservation status.
+      const reservationStatus = b.reservation?.reservationStatus || "Pending";
+      const daysUntilEvent = daysUntilDate(b.reservation?.eventDate);
+      const isWithin30Days =
+        daysUntilEvent !== null && daysUntilEvent < 30 && daysUntilEvent >= 0;
 
-      let daysUntilEvent = null;
-      let canCancel = false;
-      let isWithin30Days = false;
+      // Cancellation is possible until 2 days before the event - inside that
+      // last-2-days window it is blocked. Cancelling within 30 days forfeits the
+      // 50% down payment and 10% deposit (shown as a warning, not a block).
+      const canCancel =
+        reservationStatus === "Confirmed" &&
+        !isProvincial &&
+        paymentStatus !== "Fully Paid" &&
+        daysUntilEvent !== null &&
+        daysUntilEvent > 2;
+
       let forfeitureWarning = null;
-
-      if (eventDate) {
-        eventDate.setHours(0, 0, 0, 0);
-        daysUntilEvent = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
-        canCancel = daysUntilEvent >= 30;
-        isWithin30Days = daysUntilEvent < 30 && daysUntilEvent >= 0;
-
-        if (isWithin30Days && paymentStatus !== "No Payment") {
-          forfeitureWarning = "Cancellation within 30 days of the event will result in forfeiture of the 50% down payment and 10% deposit.";
-        }
+      if (isWithin30Days && paymentStatus !== "No Payment") {
+        forfeitureWarning = "Cancellation within 30 days of the event will result in forfeiture of the 50% down payment and 10% deposit.";
       }
 
       return {
@@ -81,7 +97,7 @@ export async function GET() {
         clientType: isProvincial ? "provincial" : "client",
         activityName: b.reservation?.eventType,
         eventDate: b.reservation?.eventDate
-          ? b.reservation.eventDate.toISOString().split("T")[0]
+          ? formatDbDate(b.reservation.eventDate)
           : "",
         venue: b.reservation?.venue?.venue,
         venueId: b.reservation?.venue?.venueId,
@@ -90,8 +106,7 @@ export async function GET() {
           ? `${b.reservation.timeSlot.startTime} - ${b.reservation.timeSlot.endTime}`
           : "",
         paymentStatus,
-        bookingStatusId: b.bookingStatusId,
-        bookingStatus: b.status?.status || "Confirmed",
+        bookingStatus: reservationStatus,
         packageName: b.reservation?.package?.packageName,
         reservationId: b.reservationId,
         daysUntilEvent,
@@ -162,11 +177,14 @@ export async function POST(request) {
       }
     }
 
-    // Update booking status to Cancelled (statusId 2)
-    await prisma.booking.update({
-      where: { bookingId: parseInt(bookingId) },
-      data: { bookingStatusId: 2 },
-    });
+    // Update booking status to Cancelled (id resolved by name).
+    const cancelledStatusId = await getBookingStatusId(BOOKING_STATUS.CANCELLED);
+    if (cancelledStatusId != null) {
+      await prisma.booking.update({
+        where: { bookingId: parseInt(bookingId) },
+        data: { bookingStatusId: cancelledStatusId },
+      });
+    }
 
     // Update reservation status to Cancelled
     await prisma.reservation.update({

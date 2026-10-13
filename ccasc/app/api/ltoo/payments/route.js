@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { walkInDisplayName } from "@/lib/walk-in";
+import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
 import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 import {
   computePaymentBreakdown,
@@ -726,10 +727,15 @@ export async function POST(request) {
     });
 
     if (!existingBooking) {
+      const confirmedId = await getBookingStatusId(BOOKING_STATUS.CONFIRMED);
+      const pendingId = await getBookingStatusId(BOOKING_STATUS.PENDING);
       existingBooking = await prisma.booking.create({
         data: {
           reservationId: reservationId,
-          bookingStatusId: statusToUse === "Fully Paid" ? 2 : 1, // Booked or Pending
+          bookingStatusId:
+            statusToUse === "Fully Paid"
+              ? confirmedId ?? pendingId
+              : pendingId ?? confirmedId,
           confirmationDate: new Date(),
           staffId: acting.performedBy ? parseInt(acting.performedBy.replace("STF-", "")) || null : null,
         },
@@ -740,10 +746,13 @@ export async function POST(request) {
 
     // Update booking status if Fully Paid
     if (statusToUse === "Fully Paid") {
-      await prisma.booking.update({
-        where: { bookingId: bookingId },
-        data: { bookingStatusId: 2 },
-      });
+      const confirmedId = await getBookingStatusId(BOOKING_STATUS.CONFIRMED);
+      if (confirmedId != null) {
+        await prisma.booking.update({
+          where: { bookingId: bookingId },
+          data: { bookingStatusId: confirmedId },
+        });
+      }
     }
 
     // Find or create payment status based on the derived cumulative status.
@@ -1014,10 +1023,13 @@ export async function PATCH(request) {
 
     // Update booking status if fully settled
     if (breakdown.balanceSettled) {
-      await prisma.booking.update({
-        where: { bookingId: existingPayment.bookingId },
-        data: { bookingStatusId: 2 },
-      });
+      const confirmedId = await getBookingStatusId(BOOKING_STATUS.CONFIRMED);
+      if (confirmedId != null) {
+        await prisma.booking.update({
+          where: { bookingId: existingPayment.bookingId },
+          data: { bookingStatusId: confirmedId },
+        });
+      }
     }
 
     // Audit log

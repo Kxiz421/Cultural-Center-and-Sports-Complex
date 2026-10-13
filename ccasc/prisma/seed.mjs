@@ -62,12 +62,12 @@ async function main() {
   ]);
   console.log(`✓ Created ${statuses.length} availability statuses`);
 
-  // Booking Statuses
-  const bookingStatuses = await Promise.all([
-    prisma.bookingStatus.create({ data: { status: 'Confirmed' } }),
-    prisma.bookingStatus.create({ data: { status: 'Cancelled' } }),
-    prisma.bookingStatus.create({ data: { status: 'Pending' } }),
-  ]);
+  // Booking Statuses - created in a fixed order so the ids are stable
+  // (1=Confirmed, 2=Cancelled, 3=Pending); the booking inserts below rely on it.
+  const confirmedStatus = await prisma.bookingStatus.create({ data: { status: 'Confirmed' } });
+  const cancelledStatus = await prisma.bookingStatus.create({ data: { status: 'Cancelled' } });
+  const pendingStatus = await prisma.bookingStatus.create({ data: { status: 'Pending' } });
+  const bookingStatuses = [confirmedStatus, cancelledStatus, pendingStatus];
   console.log(`✓ Created ${bookingStatuses.length} booking statuses`);
 
   // Payment Statuses
