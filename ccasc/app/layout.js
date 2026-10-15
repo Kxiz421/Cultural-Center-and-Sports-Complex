@@ -3,6 +3,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { RouteTransitionProvider } from "@/components/route-transition";
 import { Toaster } from "@/components/ui/sonner";
+import { PAGE_LOGO } from "@/lib/constants";
+import { siteUrl } from "@/lib/site-url";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,10 +27,29 @@ const geistSans = Geist({
   ],
 });
 
+const SITE_NAME =
+  "CCASC — South Cotabato Gymnasium & Cultural Center / Sports Complex";
+const SITE_DESCRIPTION =
+  "Book the South Cotabato Gymnasium and Cultural Center or the Sports Complex online: check facility availability, rates and packages, file a reservation, and follow its approval.";
+
 export const metadata = {
-  title: "CCASC — South Cotabato Gymnasium & Cultural Center / Sports Complex",
-  description:
-    "Facility booking and administration for the South Cotabato Gymnasium and Cultural Center and Sports Complex.",
+  // Absolute origin for canonical URLs, Open Graph images and the sitemap.
+  // Set NEXT_PUBLIC_SITE_URL to the production domain.
+  metadataBase: new URL(siteUrl()),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  applicationName: "CCASC",
+  // Opt-in indexing: only pages that set `robots.index` themselves (see
+  // app/page.js) are crawled, because every other route needs a sign-in.
+  robots: { index: false, follow: false },
+  openGraph: {
+    type: "website",
+    siteName: "CCASC",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    images: [{ url: PAGE_LOGO }],
+  },
 };
 
 /*
