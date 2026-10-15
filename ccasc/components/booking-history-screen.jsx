@@ -29,6 +29,7 @@ import {
   MapPin,
   Printer,
 } from "lucide-react";
+import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/pagination";
 import { buildPaymentLines } from "@/lib/reservation-payment-lines";
 import {
   formatPeso,
@@ -53,6 +54,9 @@ import {
  * @param {(item: object) => string|null} [props.orderOfPaymentHref] optional
  *   "View & Print Order of Payment" target for a history record
  */
+
+/** Records shown per page in the history stack. */
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 function statusBadge(status) {
   const s = (status || "").toLowerCase();
@@ -97,6 +101,7 @@ export function BookingHistoryScreen({
   const [loading, setLoading] = React.useState(true);
   const [activeTab, setActiveTab] = React.useState("all");
   const [selected, setSelected] = React.useState(null);
+  const [page, setPage] = React.useState(1);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -191,6 +196,16 @@ export function BookingHistoryScreen({
     return allHistory.filter((item) => item.type === activeTab);
   }, [allHistory, activeTab]);
 
+  // Paginate the stack; the active tab decides the total.
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedHistory = React.useMemo(
+    () => filteredHistory.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredHistory, safePage]
+  );
+  // The newest change is the first record of the current filter.
+  const latestKey = filteredHistory[0]?.key ?? null;
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -222,7 +237,10 @@ export function BookingHistoryScreen({
           <Tabs
             defaultValue="all"
             value={activeTab}
-            onValueChange={setActiveTab}
+            onValueChange={(value) => {
+              setActiveTab(value);
+              setPage(1);
+            }}
             className="mb-4"
           >
             <TabsList>
@@ -243,20 +261,20 @@ export function BookingHistoryScreen({
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredHistory.map((item, index) => (
+              {pagedHistory.map((item) => (
                 <button
                   key={item.key}
                   type="button"
                   onClick={() => setSelected(item)}
                   className={`group w-full rounded-lg border p-4 text-left transition hover:bg-muted/40 hover:border-foreground/20 focus:outline-none focus:ring-2 focus:ring-ring ${
-                    index === 0 ? "border-foreground/30 shadow-sm" : ""
+                    item.key === latestKey ? "border-foreground/30 shadow-sm" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium">{item.eventType}</p>
-                        {index === 0 && (
+                        {item.key === latestKey && (
                           <Badge variant="default" className="text-[10px]">
                             Latest change
                           </Badge>
@@ -300,6 +318,14 @@ export function BookingHistoryScreen({
               ))}
             </div>
           )}
+
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filteredHistory.length}
+            onPageChange={setPage}
+            itemLabel="records"
+          />
         </CardContent>
       </Card>
 
