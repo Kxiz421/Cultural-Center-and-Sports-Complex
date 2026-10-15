@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Eye, EyeOff, Upload, ArrowLeft, Loader2 } from "lucide-react";
-import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
+import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { uploadIdProof } from "@/lib/upload-id-proof";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -281,14 +281,24 @@ export default function RegisterPage() {
         </TransitionLink>
 
         <div className="mb-6 flex flex-col items-center px-2 text-center">
-          <Image
-            src={PAGE_LOGO}
-            alt="South Cotabato Official Seal"
-            width={120}
-            height={120}
-            priority
-            className="mb-4 size-24 drop-shadow-lg md:size-28"
-          />
+          <div className="mb-4 flex items-center justify-center gap-4">
+            <Image
+              src={PAGE_LOGO}
+              alt="South Cotabato Official Seal"
+              width={120}
+              height={120}
+              priority
+              className="size-24 drop-shadow-lg md:size-28"
+            />
+            <Image
+              src={PAGE_LOGO_2}
+              alt=""
+              width={120}
+              height={120}
+              priority
+              className="size-24 drop-shadow-lg md:size-28"
+            />
+          </div>
           <p className="text-xl font-extrabold uppercase tracking-wider text-white drop-shadow-sm md:text-2xl">
             Provincial Government of South Cotabato
           </p>
