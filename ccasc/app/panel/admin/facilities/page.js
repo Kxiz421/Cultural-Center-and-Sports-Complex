@@ -611,22 +611,22 @@ export default function FacilitiesPage() {
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {addForm.venueId !== "2" && (
                 <div className="space-y-2">
-                  <Label htmlFor="add-capacity">Capacity (pax)</Label>
+                  <Label htmlFor="add-capacity">
+                    {addForm.venueId === "2" ? "Quantity" : "Capacity (pax)"}
+                  </Label>
                   <Input
                     id="add-capacity"
                     type="number"
                     min="0"
                     max="99999"
-                    placeholder="e.g. 500"
+                    placeholder={addForm.venueId === "2" ? "e.g. 2" : "e.g. 500"}
                     value={addForm.capacity}
                     onChange={(e) =>
                       setAddForm((f) => ({ ...f, capacity: e.target.value.slice(0, 5) }))
                     }
                   />
                 </div>
-                )}
                 <div className="space-y-2">
                   <Label htmlFor="add-venue">Venue *</Label>
                   <Select
@@ -919,21 +919,21 @@ export default function FacilitiesPage() {
                   }
                 />
               </div>
-              {editForm.venueId !== "2" && (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-capacity">Capacity (pax)</Label>
-                  <Input
-                    id="edit-capacity"
-                    type="number"
-                    min="0"
-                    max="99999"
-                    value={editForm.capacity}
-                    onChange={(e) =>
-                      setEditForm((f) => ({ ...f, capacity: e.target.value.slice(0, 5) }))
-                    }
-                  />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="edit-capacity">
+                  {editForm.venueId === "2" ? "Quantity" : "Capacity (pax)"}
+                </Label>
+                <Input
+                  id="edit-capacity"
+                  type="number"
+                  min="0"
+                  max="99999"
+                  value={editForm.capacity}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, capacity: e.target.value.slice(0, 5) }))
+                  }
+                />
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="edit-rate-hr">Day Rate (₱)</Label>
@@ -1116,9 +1116,12 @@ export default function FacilitiesPage() {
               </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Capacity:</span>
+                <span className="text-muted-foreground">
+                  {editFacility?.venueId === 2 ? "Quantity:" : "Capacity:"}
+                </span>
                 <span className="font-medium text-right">
-                  {editForm.capacity || "0"} pax
+                  {editForm.capacity || "0"}
+                  {editFacility?.venueId === 2 ? "" : " pax"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -1143,9 +1146,12 @@ export default function FacilitiesPage() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Capacity:</span>
+                <span className="text-muted-foreground">
+                  {addForm.venueId === "2" ? "Quantity:" : "Capacity:"}
+                </span>
                 <span className="font-medium text-right">
-                  {addForm.capacity || "0"} pax
+                  {addForm.capacity || "0"}
+                  {addForm.venueId === "2" ? "" : " pax"}
                 </span>
               </div>
             </div>
