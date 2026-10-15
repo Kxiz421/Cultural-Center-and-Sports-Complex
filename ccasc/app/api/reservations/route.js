@@ -183,7 +183,7 @@ export async function GET(request) {
     ];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
-      select: { clientId: true, firstName: true, lastName: true },
+      select: { clientId: true, firstName: true, lastName: true, contactNumber: true },
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
@@ -249,6 +249,8 @@ export async function GET(request) {
           clientName: client
             ? `${client.firstName} ${client.lastName}`
             : walkInDisplayName(r.notes),
+          // Printed on the Order of Payment's "Telephone No. /Cellphone #" line.
+          contactNumber: client?.contactNumber || "",
           venueId: r.venueId,
           venue: r.venue.venue,
           eventType: r.eventType,

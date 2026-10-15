@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
+import { PAGE_LOGO } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 /**
@@ -352,6 +352,19 @@ function qtyFromLabel(label) {
 }
 
 /**
+ * Units billed by one charge line: the explicit `quantity` when the line
+ * carries one, otherwise the "× N" in its label, otherwise a single unit.
+ *
+ * Summed per rate-card row so the printed QUANTITY column reconciles with the
+ * booking — courts × days, pieces × days, pax and so on.
+ */
+function lineQuantity(line) {
+  const explicit = Number(line?.quantity);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return qtyFromLabel(line?.label) || 1;
+}
+
+/**
  * Removes a leading session prefix ("Morning — " / "Night — ") from per-date
  * lines so the description reads cleanly — the package name already carries
  * Day/Night and the date band already carries the date.
@@ -500,7 +513,7 @@ function findRateCardRow(label) {
  * Charges the booking's lines against the printed rate card.
  *
  * @param {Array<{date?: string|null, label: string, amount: number}>} lines
- * @returns {{charges: Map<string, {amount: number, dates: string[]}>, extras: Array}}
+ * @returns {{charges: Map<string, {amount: number, quantity: number}>, extras: Array}}
  *   `charges` is keyed `${sectionIndex}::${rowIndex}` so duplicated labels
  *   ("With Lights" exists for both grandstands) stay in their own row.
  *   `extras` holds lines that match no row — they are printed under
@@ -518,11 +531,9 @@ export function mapChargeLinesToRateCard(lines = []) {
     }
 
     const key = `${found.sectionIndex}::${found.rowIndex}`;
-    const entry = charges.get(key) || { amount: 0, dates: [] };
+    const entry = charges.get(key) || { amount: 0, quantity: 0 };
     entry.amount += Number(line?.amount) || 0;
-    if (line?.date && !entry.dates.includes(line.date)) {
-      entry.dates.push(line.date);
-    }
+    entry.quantity += lineQuantity(line);
     charges.set(key, entry);
   }
 
@@ -530,32 +541,12 @@ export function mapChargeLinesToRateCard(lines = []) {
 }
 
 /**
- * "2026-02-03" → "Feb 3" — the booking dates printed beside a rate-card row
- * (the paper form carries the same note in the right margin).
- */
-function formatRemarkDates(dates = []) {
-  return [...dates]
-    .sort()
-    .map((value) => {
-      const date = new Date(
-        String(value).length === 10 ? `${value}T00:00:00` : value
-      );
-      if (Number.isNaN(date.getTime())) return String(value);
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-    })
-    .join(", ");
-}
-
-/**
  * The Sports Complex ORDER OF PAYMENT — a transcription of the printed SCSC
- * form: SCEEMO letterhead with both seals, the red control number, the
+ * form: SCEEMO letterhead with the provincial seal, the red control number, the
  * client/activity field block with the ruled right-hand column, the single
- * SERVICES AND FACILITIES OFFERED table (A–F rate card + AMOUNT filled from
- * the booking), the ten terms and the Recommended / Approved / Conformed
- * signatories.
+ * SERVICES AND FACILITIES OFFERED table (A–F rate card with QUANTITY and AMOUNT
+ * filled from the booking), the ten terms and the Recommended / Approved /
+ * Conformed signatories.
  */
 function SportsComplexOrderOfPayment({
   controlNumber = "",
@@ -600,10 +591,10 @@ function SportsComplexOrderOfPayment({
           {row.fee || ""}
         </td>
         <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
-          {entry ? formatPeso(entry.amount) : ""}
+          {entry ? entry.quantity : ""}
         </td>
-        <td className="border border-black px-1.5 py-0.5 text-[9px] text-neutral-700">
-          {entry ? formatRemarkDates(entry.dates) : ""}
+        <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
+          {entry ? formatPeso(entry.amount) : ""}
         </td>
       </tr>
     );
@@ -618,12 +609,6 @@ function SportsComplexOrderOfPayment({
           src={PAGE_LOGO}
           alt="South Cotabato Official Seal"
           className="absolute left-0 top-0 h-16 w-16 object-contain sm:h-[70px] sm:w-[70px]"
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={PAGE_LOGO_2}
-          alt="Bagong Pilipinas"
-          className="absolute right-0 top-0 h-16 w-16 object-contain sm:h-[70px] sm:w-[70px]"
         />
         <div className="px-24">
           {SCSC_LETTERHEAD_LINES.map((line) => (
@@ -709,9 +694,11 @@ function SportsComplexOrderOfPayment({
               Services and Facilities Offered
             </td>
             <td className="border border-black px-1.5 py-0.5 text-center font-bold uppercase">
+              Quantity
+            </td>
+            <td className="border border-black px-1.5 py-0.5 text-center font-bold uppercase">
               Amount
             </td>
-            <td className="border border-black px-1.5 py-0.5" />
           </tr>
           <tr>
             <td className="border border-black px-1.5 py-0.5 text-center font-bold uppercase">
@@ -760,10 +747,10 @@ function SportsComplexOrderOfPayment({
                   </td>
                   <td className="border border-black px-1.5 py-0.5 text-right tabular-nums" />
                   <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
-                    {formatPeso(line?.amount)}
+                    {lineQuantity(line)}
                   </td>
-                  <td className="border border-black px-1.5 py-0.5 text-[9px] text-neutral-700">
-                    {line?.date ? formatRemarkDates([line.date]) : ""}
+                  <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
+                    {formatPeso(line?.amount)}
                   </td>
                 </tr>
               ))}
@@ -773,15 +760,12 @@ function SportsComplexOrderOfPayment({
         <tfoot>
           <tr>
             <td
-              colSpan={2}
+              colSpan={3}
               className="border border-black px-1.5 py-1 text-right font-bold uppercase"
             >
               Total
             </td>
-            <td
-              colSpan={2}
-              className="border border-black px-1.5 py-1 text-right font-bold tabular-nums text-red-700"
-            >
+            <td className="border border-black px-1.5 py-1 text-right font-bold tabular-nums text-red-700">
               {formatPeso(grandTotal)}
             </td>
           </tr>
