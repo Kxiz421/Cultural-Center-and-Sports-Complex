@@ -42,12 +42,12 @@ import {
   Search,
   User,
   Building2,
-  DollarSign,
+  PhilippinePeso,
   CalendarDays,
   CheckCircle2,
   XCircle,
   History,
-  Receipt,
+  ReceiptText,
   Percent,
 } from "lucide-react";
 import { cn, formatPhp, formatMoneyInput, roundMoney, sanitizeMoneyInput } from "@/lib/utils";
@@ -117,7 +117,7 @@ function isFullyPaidReservation(reservation) {
 }
 
 function canConsumeDeposit(deposit) {
-  return Boolean(deposit && ["Held", "Deducted"].includes(deposit.status));
+  return Boolean(deposit && ["Held", "Deducted", "Fully Deducted"].includes(deposit.status));
 }
 
 function canPulloutDeposit(deposit, reservation) {
@@ -1046,7 +1046,7 @@ export default function LTOOPaymentsPage() {
                             onClick={(e) => { e.stopPropagation(); openRecordPayment(r); }}
                             className="text-blue-600"
                           >
-                            <DollarSign className="size-4 mr-1" />Pay
+                            <PhilippinePeso className="size-4 mr-1" />Pay
                           </Button>
                         )}
                         {r.computedStatus === "Fully Paid" && (
@@ -1056,7 +1056,7 @@ export default function LTOOPaymentsPage() {
                             onClick={(e) => { e.stopPropagation(); openPaymentHistory(r, true); }}
                             className="text-green-700"
                           >
-                            <Receipt className="size-4 mr-1" />View
+                            <ReceiptText className="size-4 mr-1" />View
                           </Button>
                         )}
                         {hasPaymentHistory(r.computedStatus) && r.computedStatus !== "Fully Paid" && (
@@ -1660,7 +1660,7 @@ export default function LTOOPaymentsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {historyViewOnly ? (
-                <Receipt className="size-5" />
+                <ReceiptText className="size-5" />
               ) : (
                 <History className="size-5" />
               )}
@@ -1783,7 +1783,11 @@ export default function LTOOPaymentsPage() {
                     <div className="space-y-1">
                       {historyReservation.deposit.deductions.map((row) => (
                         <p key={row.deductionId} className="text-xs text-muted-foreground">
-                          {formatPhp(row.amount)} — {row.reason}
+                          <span className="tabular-nums font-medium text-foreground">{formatPhp(row.amount)}</span>
+                          {" — "}{row.reason}
+                          <span className="block text-[11px] text-muted-foreground/80 tabular-nums">
+                            {formatDateTime(row.recordedAt)}
+                          </span>
                         </p>
                       ))}
                     </div>
@@ -1795,7 +1799,7 @@ export default function LTOOPaymentsPage() {
                         inputMode="decimal"
                         placeholder="Deduction amount"
                         value={consumeAmount}
-                        onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value, historyReservation.deposit.amountAfterDeductions))}
+                        onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value))}
                         className="tabular-nums"
                       />
                       <Textarea
@@ -1869,7 +1873,7 @@ export default function LTOOPaymentsPage() {
           {historyTransactions.length > 0 && (
             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span className="text-foreground/70 flex items-center gap-1">
-                <Receipt className="size-4" />
+                <ReceiptText className="size-4" />
                 {historyTransactions.length} payment(s) — click a row for details
               </span>
               <span className="font-medium tabular-nums">
@@ -1893,7 +1897,7 @@ export default function LTOOPaymentsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Receipt className="size-5" />
+              <ReceiptText className="size-5" />
               Payment Entry
             </DialogTitle>
             <DialogDescription>
@@ -1992,7 +1996,11 @@ export default function LTOOPaymentsPage() {
                       <span className="text-muted-foreground">Deductions</span>
                       {selectedTransaction.depositDeductions.map((row) => (
                         <p key={row.deductionId} className="text-sm bg-background rounded-md border p-2">
-                          {formatPhp(row.amount)} — {row.reason}
+                          <span className="tabular-nums font-medium">{formatPhp(row.amount)}</span>
+                          {" — "}{row.reason}
+                          <span className="block text-xs text-muted-foreground tabular-nums">
+                            {formatDateTime(row.recordedAt)}
+                          </span>
                         </p>
                       ))}
                     </div>

@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
-import { CalendarDays, ClipboardList, DollarSign, TrendingUp } from "lucide-react";
+import { CalendarDays, ClipboardList, TrendingUp } from "lucide-react";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {

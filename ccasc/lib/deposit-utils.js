@@ -1,4 +1,4 @@
-import { formatPhp, roundMoney } from "@/lib/utils";
+import { roundMoney } from "@/lib/utils";
 
 /** Status names that mean the deposit obligation is satisfied (no longer unpaid). */
 export const DEPOSIT_SATISFIED_STATUSES = [
@@ -201,9 +201,6 @@ export function validateDepositConsume(deposit, amount) {
   if (statusName === "Pulled Out") {
     return { ok: false, error: "This deposit has already been pulled out." };
   }
-  if (statusName === "Fully Deducted") {
-    return { ok: false, error: "The 10% deposit has already been fully deducted." };
-  }
   if (!DEPOSIT_CONSUMABLE_STATUSES.includes(statusName) && !isDepositRecordMet(deposit)) {
     return { ok: false, error: "Record the 10% deposit before consuming it." };
   }
@@ -212,12 +209,8 @@ export function validateDepositConsume(deposit, amount) {
   if (!Number.isFinite(deduction) || deduction <= 0) {
     return { ok: false, error: "Enter a deduction amount greater than zero." };
   }
-  if (deduction > remaining) {
-    return {
-      ok: false,
-      error: `Deduction cannot exceed the remaining deposit of ${formatPhp(remaining)}.`,
-    };
-  }
+  // Deductions are allowed to exceed the remaining deposit (e.g. damages that
+  // go beyond the amount held); the excess simply floors the deposit at zero.
   return { ok: true, remaining, deduction };
 }
 
@@ -240,7 +233,7 @@ export async function consumeDeposit(prisma, {
     return { ok: false, error: reasonCheck.error };
   }
 
-  const nextRemaining = roundMoney(check.remaining - check.deduction);
+  const nextRemaining = roundMoney(Math.max(0, check.remaining - check.deduction));
   const nextStatusName = nextRemaining <= 0 ? "Fully Deducted" : "Deducted";
   const nextStatus = await getOrCreateDepositStatus(prisma, nextStatusName);
 
