@@ -38,7 +38,6 @@ import {
   isFacilityPackageId,
   parseFacilityId,
   VIRTUAL_PACKAGE_IDS,
-  filterCustomParticulars,
   getVirtualPackageParticulars,
   getVirtualPackageDisplayInfo,
   syncVirtualPackageStateForTimeSlot,
@@ -49,14 +48,13 @@ import {
   sumReservationSummaryLines,
   resolveVenueRentalSlot,
 } from "@/lib/reservation-package-select";
-import { readParticularQuantity } from "@/lib/particular-options";
 import { excludeArchivedFacilities } from "@/lib/facility-status";
 import { TIME_SLOT, TIME_SLOT_OPTIONS, timeSlotAfterPackageChange, isWholeDaySlot } from "@/lib/time-slots";
 import {
   ReservationVirtualPackagePanel,
   ReservationPackageSelectItems,
 } from "@/components/reservation-virtual-package-panel";
-import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
+import { VenueRentalParticularsList } from "@/components/venue-rental-particulars-list";
 import OrderOfPaymentDocument from "@/components/order-of-payment-document";
 import {
   getMinEventDate,
@@ -978,6 +976,14 @@ export default function WalkInReservationPage() {
                   (aggregatedParticulars[entry.particularId] || 0) + entry.quantity;
               }
             }
+          } else if (isFacilityPackageId(session.packageId)) {
+            // Facility rentals carry their own additional particulars per date.
+            for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
+              const count = Number(qty) || 0;
+              if (count > 0) {
+                aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + count;
+              }
+            }
           } else if (
             session.packageId === "0" ||
             session.packageId === "custom" ||
@@ -1039,6 +1045,17 @@ export default function WalkInReservationPage() {
           }
           return p;
         });
+        selectedPackageId = null;
+      } else if (isFacilityPackageId(packageId)) {
+        // A Cultural Center facility rental can carry additional particulars.
+        const numDays = sortedDates.length > 0 ? sortedDates.length : 1;
+        selectedParticulars = getVirtualPackageParticulars(
+          packageId,
+          particulars,
+          particularQuantities,
+          timeSlotId,
+          venueRentalSlot
+        ).map((p) => ({ ...p, quantity: p.quantity * numDays }));
         selectedPackageId = null;
       } else {
         // Only include particulars if custom or no package
@@ -1900,68 +1917,12 @@ const renderPerDateFacilities = (date, cust) => {
                     onVenueRentalSlotChange={handleVenueRentalSlotChange}
                   />
                   <Separator className="my-3" />
-                  <div className="space-y-2">
-                    <Label>Additional Services / Particulars</Label>
-                    <div className="space-y-2 border rounded-lg p-4">
-                      {particularsLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading particulars...</p>
-                      ) : filterCustomParticulars(particulars).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No particulars available.</p>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {filterCustomParticulars(particulars).map((p) => {
-                            const qty = readParticularQuantity(
-                              particularQuantities,
-                              p.particularId
-                            );
-                            const cost = p.unitCost ? Number(p.unitCost) : 0;
-                            const maxQty = p.totalQuantity >= 0 ? p.totalQuantity : 999;
-                            const hasInventory = p.itemId !== null && p.itemId !== undefined;
-                            const isAircon = p.particularName === "Aircon Compressor";
-                            const airconTiers = [
-                              { qty: 4, label: "100-1K pax", price: 3200 },
-                              { qty: 6, label: "1K-3K pax", price: 4800 },
-                              { qty: 8, label: "4K-6K pax", price: 6400 },
-                              { qty: 10, label: "7K-10K pax", price: 8000 },
-                            ];
-                            return (
-                              <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                  {cost > 0 && !isAircon && (
-                                    <p className="text-xs text-muted-foreground">P{cost.toLocaleString()} / unit</p>
-                                  )}
-                                  {isAircon && (
-                                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                      {airconTiers.map((t) => (
-                                        <div key={t.qty}>{t.qty} units = P{t.price.toLocaleString()} ({t.label})</div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {!isAircon && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {hasInventory ? `Available: ${maxQty}` : "No inventory record — contact admin"}
-                                    </p>
-                                  )}
-                                </div>
-                                <ParticularQuantityStepper
-                                  value={qty}
-                                  max={maxQty}
-                                  buttonClassName="size-7"
-                                  onChange={(val) =>
-                                    setParticularQuantities((prev) => ({
-                                      ...prev,
-                                      [String(p.particularId)]: val,
-                                    }))
-                                  }
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <VenueRentalParticularsList
+                    particulars={particulars}
+                    particularsLoading={particularsLoading}
+                    particularQuantities={particularQuantities}
+                    onChange={setParticularQuantities}
+                  />
                 </>
               ) : isVirtualPackageId(packageId) ? (
                 <ReservationVirtualPackagePanel
@@ -1973,6 +1934,19 @@ const renderPerDateFacilities = (date, cust) => {
                   venueRentalSlot={venueRentalSlot}
                   onVenueRentalSlotChange={handleVenueRentalSlotChange}
                 />
+              ) : isFacilityPackageId(packageId) ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    This venue rental is priced from the facility&apos;s own rate.
+                    Add any particular the client needs for the event below.
+                  </p>
+                  <VenueRentalParticularsList
+                    particulars={particulars}
+                    particularsLoading={particularsLoading}
+                    particularQuantities={particularQuantities}
+                    onChange={setParticularQuantities}
+                  />
+                </>
               ) : isRegularPackageId(packageId) ? (
                 <>
                   <Label>Package Inclusions</Label>
@@ -2238,62 +2212,28 @@ const renderPerDateFacilities = (date, cust) => {
                             </SelectContent>
                           </Select>
                         </div>
-                        {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
+                        {(s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ||
+                          isFacilityPackageId(s.packageId)) && (
                           <>
-                            <ReservationVirtualPackagePanel
-                              packageId={s.packageId}
-                              particulars={particulars}
-                              particularQuantities={s.particularQuantities || {}}
-                              onParticularQuantitiesChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
-                              timeSlotId={timeSlotForSession}
-                              venueRentalSlot={s.venueRentalSlot || ""}
-                              onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
-                            />
+                            {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
+                              <ReservationVirtualPackagePanel
+                                packageId={s.packageId}
+                                particulars={particulars}
+                                particularQuantities={s.particularQuantities || {}}
+                                onParticularQuantitiesChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
+                                timeSlotId={timeSlotForSession}
+                                venueRentalSlot={s.venueRentalSlot || ""}
+                                onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
+                              />
+                            )}
                             <Separator className="my-2" />
-                            <div className="space-y-2">
-                              <Label className="text-xs">Additional Services / Particulars</Label>
-                              <div className="space-y-2 border rounded-lg p-3">
-                                {particularsLoading ? (
-                                  <p className="text-xs text-muted-foreground">Loading particulars...</p>
-                                ) : filterCustomParticulars(particulars).length === 0 ? (
-                                  <p className="text-xs text-muted-foreground">No particulars available.</p>
-                                ) : (
-                                  <div className="grid gap-2 md:grid-cols-2">
-                                    {filterCustomParticulars(particulars).map((p) => {
-                                      const qty = readParticularQuantity(s.particularQuantities || {}, p.particularId);
-                                      const cost = p.unitCost ? Number(p.unitCost) : 0;
-                                      const maxQty = p.totalQuantity >= 0 ? p.totalQuantity : 999;
-                                      const hasInventory = p.itemId !== null && p.itemId !== undefined;
-                                      const isAircon = p.particularName === "Aircon Compressor";
-                                      return (
-                                        <div key={p.particularId} className="flex items-center justify-between rounded-md border p-2">
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium truncate">{p.particularName}</p>
-                                            {cost > 0 && !isAircon && (
-                                              <p className="text-xs text-muted-foreground">₱{cost.toLocaleString()} / unit</p>
-                                            )}
-                                            {!isAircon && (
-                                              <p className="text-xs text-muted-foreground">
-                                                {hasInventory ? `Available: ${maxQty}` : "No inventory record"}
-                                              </p>
-                                            )}
-                                          </div>
-                                          <ParticularQuantityStepper
-                                            value={qty}
-                                            max={maxQty}
-                                            buttonClassName="size-7"
-                                            onChange={(val) => {
-                                              const newPq = { ...(s.particularQuantities || {}), [p.particularId]: val };
-                                              handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, newPq);
-                                            }}
-                                          />
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                            <VenueRentalParticularsList
+                              compact
+                              particulars={particulars}
+                              particularsLoading={particularsLoading}
+                              particularQuantities={s.particularQuantities || {}}
+                              onChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
+                            />
                           </>
                         )}
                       </div>
@@ -2326,6 +2266,27 @@ const renderPerDateFacilities = (date, cust) => {
                           <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={cust.timeSlotId || timeSlotId} facilities={facilities} venueId={venueId} />
                         </SelectContent>
                       </Select>
+                      {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
+                        <ReservationVirtualPackagePanel
+                          packageId={cust.packageId}
+                          particulars={particulars}
+                          particularQuantities={cust.particularQuantities || {}}
+                          onParticularQuantitiesChange={(pq) => handleDateVirtualParticularQuantitiesChange(date, pq)}
+                          timeSlotId={cust.timeSlotId || timeSlotId}
+                          venueRentalSlot={cust.venueRentalSlot || ""}
+                          onVenueRentalSlotChange={(val) => handleDateVenueRentalSlotChange(date, val)}
+                        />
+                      )}
+                      {(cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ||
+                        isFacilityPackageId(cust.packageId)) && (
+                        <VenueRentalParticularsList
+                          compact
+                          particulars={particulars}
+                          particularsLoading={particularsLoading}
+                          particularQuantities={cust.particularQuantities || {}}
+                          onChange={(pq) => handleDateVirtualParticularQuantitiesChange(date, pq)}
+                        />
+                      )}
                     </div>
                   )}
                 </div>

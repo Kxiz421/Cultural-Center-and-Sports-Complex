@@ -395,6 +395,53 @@ export function isConsolidatedBasketballEntry(particulars, entry) {
   );
 }
 
+/**
+ * Charge lines for the additional particulars attached to a rental.
+ *
+ * Both the Venue Rental option and an individual Cultural Center facility
+ * rental let the client add particulars, and both must price the same way, so
+ * they share this helper.
+ *
+ * @param {object[]} particulars the particular catalogue
+ * @param {Record<string, number>} particularQuantities particularId -> units
+ * @param {object} [options]
+ * @param {string|null} [options.date] date band to file the lines under
+ * @param {string} [options.prefix] session label prefix ("Morning — ")
+ * @param {number} [options.days] repeats the line for a multi-day booking
+ */
+function particularChargeLines(
+  particulars,
+  particularQuantities,
+  { date = null, prefix = "", days = 1 } = {}
+) {
+  const multiplier = Math.max(1, Number(days) || 1);
+  const lines = [];
+
+  for (const [partId, qty] of Object.entries(particularQuantities || {})) {
+    const count = Number(qty) || 0;
+    if (count <= 0) continue;
+    const part = (particulars || []).find(
+      (p) => String(p.particularId) === String(partId)
+    );
+    if (!part) continue;
+    const { label, amount } = formatFormParticularLine(
+      part.particularName,
+      count,
+      part.unitCost
+    );
+    lines.push({
+      date,
+      label:
+        multiplier > 1
+          ? `${prefix}${label} × ${multiplier} day(s)`
+          : `${prefix}${label}`,
+      amount: amount * multiplier,
+    });
+  }
+
+  return lines;
+}
+
 /** Build charge lines for reservation form summary (matches submit pricing). */
 export function buildReservationSummaryLines({
   particulars,
@@ -429,14 +476,12 @@ export function buildReservationSummaryLines({
             );
             if (info) lines.push({ date, label: `${sessionLabel} — ${info.label}`, amount: info.amount });
             if (pkgId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-              for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
-                if (qty > 0) {
-                  const part = particulars.find((p) => String(p.particularId) === String(partId));
-                  if (!part) continue;
-                  const { label, amount } = formatFormParticularLine(part.particularName, qty, part.unitCost);
-                  lines.push({ date, label: `${sessionLabel} — ${label}`, amount });
-                }
-              }
+              lines.push(
+                ...particularChargeLines(particulars, session.particularQuantities, {
+                  date,
+                  prefix: `${sessionLabel} — `,
+                })
+              );
             }
           } else if (isRegularPackageId(pkgId)) {
             const pkg = packages.find((p) => String(p.packageId) === pkgId);
@@ -463,6 +508,13 @@ export function buildReservationSummaryLines({
                 facilityId: line.facilityId,
               });
             }
+            // A facility rental can be combined with additional particulars.
+            lines.push(
+              ...particularChargeLines(particulars, session.particularQuantities, {
+                date,
+                prefix: `${sessionLabel} — `,
+              })
+            );
           } else if (pkgId === "0" || pkgId === "custom" || !pkgId) {
             for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
               if (qty > 0) {
@@ -489,20 +541,9 @@ export function buildReservationSummaryLines({
           if (info) lines.push({ date, label: info.label, amount: info.amount });
           // For Venue Rental, also include custom particular lines
           if (cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-            for (const [partId, qty] of Object.entries(cust.particularQuantities || {})) {
-              if (qty > 0) {
-                const part = particulars.find(
-                  (p) => String(p.particularId) === String(partId)
-                );
-                if (!part) continue;
-                const { label, amount } = formatFormParticularLine(
-                  part.particularName,
-                  qty,
-                  part.unitCost
-                );
-                lines.push({ date, label, amount });
-              }
-            }
+            lines.push(
+              ...particularChargeLines(particulars, cust.particularQuantities, { date })
+            );
           }
         } else if (isRegularPackageId(cust.packageId)) {
           const pkg = packages.find((p) => String(p.packageId) === cust.packageId);
@@ -529,6 +570,10 @@ export function buildReservationSummaryLines({
               facilityId: line.facilityId,
             });
           }
+          // A facility rental can be combined with additional particulars.
+          lines.push(
+            ...particularChargeLines(particulars, cust.particularQuantities, { date })
+          );
         } else if (
           cust.packageId === "0" ||
           cust.packageId === "custom" ||
@@ -565,20 +610,11 @@ export function buildReservationSummaryLines({
         amount: info.amount * numDays,
       });
     }
-    // For Venue Rental, also include custom particular lines
+    // A Venue Rental booking is its own rate plus anything the client attached.
     if (packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL) {
-      for (const [partId, qty] of Object.entries(particularQuantities || {})) {
-        if (qty > 0) {
-          const part = particulars.find((p) => String(p.particularId) === partId);
-          if (!part) continue;
-          const { label, amount } = formatFormParticularLine(
-            part.particularName,
-            qty,
-            part.unitCost
-          );
-          lines.push({ label: numDays > 1 ? `${label} × ${numDays} day(s)` : label, amount: amount * numDays });
-        }
-      }
+      lines.push(
+        ...particularChargeLines(particulars, particularQuantities, { days: numDays })
+      );
     }
   } else if (isRegularPackageId(packageId)) {
     const pkg = packages.find((p) => String(p.packageId) === packageId);
@@ -605,6 +641,10 @@ export function buildReservationSummaryLines({
         quantity: line.quantity,
       });
     }
+    // A facility rental can be combined with additional particulars.
+    lines.push(
+      ...particularChargeLines(particulars, particularQuantities, { days: numDays })
+    );
   } else if (packageId === "custom" || packageId === "0" || !packageId) {
     for (const [partId, qty] of Object.entries(particularQuantities || {})) {
       if (qty > 0) {
