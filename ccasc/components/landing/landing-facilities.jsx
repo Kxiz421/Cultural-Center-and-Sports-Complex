@@ -4,8 +4,9 @@ import * as React from "react";
 import { Building2, ChevronDown, Info, PackageOpen, Trophy } from "lucide-react";
 import { Reveal } from "@/components/landing/reveal";
 import { useLandingFacilities } from "@/components/landing/use-facilities";
+import { useLandingCatalog } from "@/components/landing/use-catalog";
 import { FacilityDetailsDialog, isDisplayableImage } from "@/components/facility-details-dialog";
-import { ADD_ONS, formatPeso } from "@/lib/landing-content";
+import { formatPeso } from "@/lib/landing-content";
 
 /** Same icons the admin Facility Management screen uses for each venue. */
 const VENUE_ICONS = { 1: Building2, 2: Trophy };
@@ -16,7 +17,7 @@ function FacilityRates({ facility }) {
     return (
       <dl className="mt-4 border-t pt-4 text-sm">
         <dt className="text-xs text-muted-foreground">
-          Whole Day (8:00 AM – 10:00 PM)
+          Whole Day (8:00 AM – 5:00 PM)
         </dt>
         <dd className="font-semibold tabular-nums">
           {formatPeso(facility.rateDay)}
@@ -132,8 +133,148 @@ function FacilitiesSkeleton() {
   );
 }
 
-export function LandingFacilities({ facilities }) {
+/** Particulars a visitor can attach to a reservation, with the units on hand. */
+function ParticularsCard({ particulars, loading }) {
+  return (
+    <Reveal
+      direction="zoom"
+      blur
+      className="mt-10 rounded-3xl bg-card p-6 shadow-sm ring-1 ring-foreground/10"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/15 to-indigo-500/15 text-blue-600">
+          <PackageOpen className="size-5" aria-hidden />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold">Particulars</h3>
+          <p className="text-sm text-muted-foreground">
+            Optional items you can attach to a reservation, subject to
+            availability.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="mt-5 space-y-2" aria-busy="true">
+          <span className="sr-only">Loading particulars</span>
+          {[0, 1, 2].map((key) => (
+            <div
+              key={key}
+              aria-hidden
+              className="h-10 animate-pulse rounded-lg bg-muted/50"
+            />
+          ))}
+        </div>
+      ) : particulars.length === 0 ? (
+        <p className="mt-5 flex items-start gap-2 text-sm text-muted-foreground">
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          The particulars list is maintained by the venue coordinators and could
+          not be loaded right now. Please refresh the page, or contact the
+          office for the latest items.
+        </p>
+      ) : (
+        <div className="mt-5 overflow-hidden rounded-2xl ring-1 ring-foreground/10">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th scope="col" className="px-4 py-2.5 font-semibold">
+                  Particular
+                </th>
+                <th scope="col" className="px-4 py-2.5 text-right font-semibold">
+                  Quantity available
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {particulars.map((item) => (
+                <tr
+                  key={item.particularId}
+                  className="border-t border-foreground/10"
+                >
+                  <td className="px-4 py-2.5 font-medium">
+                    {item.particularName}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                    {item.quantity}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Reveal>
+  );
+}
+
+/** One priced package: its name, time slot, rates and what it includes. */
+function PackageCard({ pkg }) {
+  const rates = [
+    pkg.dayRate > 0 ? { label: "Day", value: pkg.dayRate } : null,
+    pkg.nightRate > 0 ? { label: "Night", value: pkg.nightRate } : null,
+    pkg.ledWallDayRate > 0
+      ? { label: "LED Wall Day", value: pkg.ledWallDayRate }
+      : null,
+    pkg.ledWallNightRate > 0
+      ? { label: "LED Wall Night", value: pkg.ledWallNightRate }
+      : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex h-full flex-col rounded-3xl bg-card p-5 shadow-sm ring-1 ring-foreground/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="text-base font-semibold leading-snug">{pkg.name}</h4>
+        {pkg.timeSlot ? (
+          <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+            {pkg.timeSlot}
+          </span>
+        ) : null}
+      </div>
+      {pkg.description ? (
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {pkg.description}
+        </p>
+      ) : null}
+      {rates.length > 0 ? (
+        <dl className="mt-4 grid grid-cols-2 gap-2 border-t pt-4 text-sm">
+          {rates.map((rate) => (
+            <div key={rate.label}>
+              <dt className="text-xs text-muted-foreground">{rate.label}</dt>
+              <dd className="font-semibold tabular-nums">
+                {formatPeso(rate.value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {pkg.inclusions.length > 0 ? (
+        <div className="mt-4 flex-1 border-t pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Includes
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {pkg.inclusions.map((inclusion, index) => (
+              <li
+                key={`${inclusion.name}-${index}`}
+                className="rounded-full border bg-muted/50 px-2.5 py-1 text-xs"
+              >
+                {inclusion.name}
+                <span className="text-muted-foreground">
+                  {" "}
+                  ×{inclusion.quantity}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function LandingFacilities({ facilities, packages = [], particulars = [] }) {
   const { byVenue, loading } = useLandingFacilities(facilities);
+  const catalog = useLandingCatalog({ packages, particulars });
   // The first venue starts expanded; the rest stay collapsed until asked for.
   const [openVenues, setOpenVenues] = React.useState(() => [1]);
   const [detailsFacility, setDetailsFacility] = React.useState(null);
@@ -211,31 +352,61 @@ export function LandingFacilities({ facilities }) {
           issued for your reservation is the final basis for payment.
         </Reveal>
 
-        <Reveal direction="zoom" blur className="mt-10 rounded-3xl bg-card p-6 shadow-sm ring-1 ring-foreground/10">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/15 to-indigo-500/15 text-blue-600">
-              <PackageOpen className="size-5" aria-hidden />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold">Equipment and add-ons</h3>
-              <p className="text-sm text-muted-foreground">
-                Optional items you can attach to a reservation, subject to
-                availability.
-              </p>
-            </div>
-          </div>
-          <ul className="mt-5 flex flex-wrap gap-2">
-            {ADD_ONS.map((addOn) => (
-              <li
-                key={addOn.name}
-                className="rounded-full border bg-muted/50 px-3.5 py-1.5 text-sm transition-colors hover:bg-muted"
-              >
-                <span className="font-medium">{addOn.name}</span>
-                <span className="text-muted-foreground"> · {addOn.note}</span>
-              </li>
-            ))}
-          </ul>
+        <ParticularsCard
+          particulars={catalog.particulars}
+          loading={catalog.loading}
+        />
+
+        <Reveal direction="left" className="mt-14 max-w-2xl">
+          <p className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-600">
+            Packages
+          </p>
+          <h3 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            Cultural Center packages
+          </h3>
+          <p className="mt-3 text-base text-muted-foreground">
+            Ready-made bundles that pair the venue with the items events usually
+            need. Each package is priced for the slot it is booked in.
+          </p>
         </Reveal>
+
+        {catalog.loading ? (
+          <div
+            className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            aria-busy="true"
+          >
+            <span className="sr-only">Loading packages</span>
+            {[0, 1, 2].map((key) => (
+              <div
+                key={key}
+                aria-hidden
+                className="h-56 animate-pulse rounded-3xl bg-card shadow-sm ring-1 ring-foreground/10"
+              />
+            ))}
+          </div>
+        ) : catalog.packages.length === 0 ? (
+          <Reveal
+            as="p"
+            className="mt-8 flex items-start gap-2 rounded-3xl bg-card p-5 text-sm text-muted-foreground shadow-sm ring-1 ring-foreground/10"
+          >
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+            The package list is maintained by the venue coordinators and could
+            not be loaded right now. Please refresh the page, or contact the
+            office for the latest packages.
+          </Reveal>
+        ) : (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {catalog.packages.map((pkg, index) => (
+              <Reveal
+                key={pkg.packageId}
+                delay={Math.min(index * 80, 240)}
+                direction={index % 2 === 0 ? "left" : "right"}
+              >
+                <PackageCard pkg={pkg} />
+              </Reveal>
+            ))}
+          </div>
+        )}
       </div>
 
       <FacilityDetailsDialog

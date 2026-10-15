@@ -109,8 +109,9 @@ export const API_RULES = [
   { prefix: "/api/upload/id-proof", types: PUBLIC_API },
   // The organization list is needed by the public registration form.
   { prefix: "/api/client-organizations", types: PUBLIC_API },
-  // The public landing page lists the facilities maintained in the admin panel.
-  { prefix: "/api/public/facilities", types: PUBLIC_API },
+  // The public landing page lists the facilities, packages and particulars
+  // maintained in the admin panel.
+  { prefix: "/api/public/", types: PUBLIC_API },
 
   // ---- Admin only ------------------------------------------------------
   { prefix: "/api/admin/", types: [USER_TYPE.ADMIN] },
@@ -184,8 +185,8 @@ export function isPublicApiRequest(pathname, method) {
   if (pathname.startsWith("/api/client-organizations")) {
     return method === "GET" || method === "HEAD";
   }
-  // The landing page only ever reads the facility list.
-  if (pathname.startsWith("/api/public/facilities")) {
+  // The landing page only ever reads the public lists.
+  if (pathname.startsWith("/api/public/")) {
     return method === "GET" || method === "HEAD";
   }
   if (pathname.startsWith("/api/auth/password-reset")) {

@@ -81,15 +81,6 @@ export const FACILITY_VENUES = [
   { venueId: 2, label: "Sports Complex" },
 ];
 
-export const ADD_ONS = [
-  { name: "Chairs", note: "Up to 700 units" },
-  { name: "Tables", note: "Standard rectangular" },
-  { name: "Wireless microphone", note: "4 units" },
-  { name: "Wired microphone", note: "10 units" },
-  { name: "LED wall", note: "117 panels" },
-  { name: "Aircon compressor", note: "Up to 10 units" },
-];
-
 /**
  * The steps a booking goes through, mirroring the client panel:
  * reservation -> Order of Payment -> document submission (Documents module)
@@ -137,9 +128,9 @@ export const FAQS = [
       "Yes. The Order of Payment issued for your reservation includes a 10% deposit that secures your slot.",
   },
   {
-    question: "Can I rent equipment and add-ons?",
+    question: "Can I rent additional particulars?",
     answer:
-      "Yes. Chairs, tables, wired and wireless microphones, the LED wall and aircon compressors can be added to a reservation, subject to availability.",
+      "Yes. Particulars such as chairs, tables, wired and wireless microphones, the LED wall and aircon compressors can be added to a reservation, subject to availability.",
   },
   {
     question: "Can I change my schedule after booking?",

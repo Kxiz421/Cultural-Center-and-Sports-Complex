@@ -6,6 +6,8 @@ import { LandingFaq } from "@/components/landing/landing-faq";
 import { LandingContact } from "@/components/landing/landing-contact";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { getPublicFacilities } from "@/lib/public-facilities";
+import { getPublicPackages } from "@/lib/public-packages";
+import { getPublicParticulars } from "@/lib/public-particulars";
 
 /**
  * The facility list is rendered from the database, so re-render at most every
@@ -27,9 +29,10 @@ export const metadata = {
 };
 
 export default async function LandingPage() {
-  // Render the facility list on the server so its names, descriptions and rates
-  // are in the HTML crawlers receive. If the database is unreachable the
-  // sections fall back to fetching the list in the browser.
+  // Render the facility, package and particular lists on the server so their
+  // names, descriptions, rates and quantities are in the HTML crawlers receive.
+  // If the database is unreachable the sections fall back to fetching the lists
+  // in the browser.
   let facilities = [];
   try {
     facilities = await getPublicFacilities();
@@ -37,12 +40,30 @@ export default async function LandingPage() {
     console.error("Failed to load the landing facility list:", error);
   }
 
+  let packages = [];
+  try {
+    packages = await getPublicPackages();
+  } catch (error) {
+    console.error("Failed to load the landing package list:", error);
+  }
+
+  let particulars = [];
+  try {
+    particulars = await getPublicParticulars();
+  } catch (error) {
+    console.error("Failed to load the landing particular list:", error);
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <LandingHeaderHero facilities={facilities} />
       <main className="relative z-10 -mt-10 flex-1 rounded-t-[3rem] bg-gradient-to-b from-background via-muted/25 to-background">
         <LandingVenues facilities={facilities} />
-        <LandingFacilities facilities={facilities} />
+        <LandingFacilities
+          facilities={facilities}
+          packages={packages}
+          particulars={particulars}
+        />
         <LandingHowItWorks />
         <LandingFaq />
         <LandingContact />
