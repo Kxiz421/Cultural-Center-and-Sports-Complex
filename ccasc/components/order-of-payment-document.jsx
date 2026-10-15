@@ -491,7 +491,7 @@ export default function OrderOfPaymentDocument({
             top: 0;
             width: 100%;
             max-width: none;
-            padding: 0;
+            padding: 12mm;
             box-shadow: none !important;
             --tw-ring-shadow: 0 0 #0000 !important;
           }
@@ -500,7 +500,11 @@ export default function OrderOfPaymentDocument({
           }
           @page {
             size: A4 portrait;
-            margin: 12mm;
+            /* No page margin: the browser prints its URL/date/page-number
+               header and footer inside the page margin, so leaving it out
+               keeps them off the printout. The 12mm inset is applied to the
+               document padding above instead. */
+            margin: 0;
           }
         }
       `}</style>
