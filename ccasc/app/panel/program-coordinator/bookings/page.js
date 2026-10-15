@@ -68,6 +68,8 @@ function CoordinatorBookingsContent() {
   const [previewDoc, setPreviewDoc] = useState(null);
   const [resubmitDoc, setResubmitDoc] = useState(null);
   const [resubmitMessage, setResubmitMessage] = useState("");
+  // Document awaiting a verify confirmation, or null.
+  const [verifyDoc, setVerifyDoc] = useState(null);
   const [activeTab, setActiveTab] = useState("pending");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [orNumber, setOrNumber] = useState("");
@@ -266,6 +268,7 @@ function CoordinatorBookingsContent() {
   }
 
   async function handleVerifyDocument(docId) {
+    setVerifyDoc(null);
     // Optimistically update UI
     updateDocumentInState(docId, { status: "Verified" });
     try {
@@ -721,7 +724,7 @@ function CoordinatorBookingsContent() {
                                 variant="outline"
                                 size="sm"
                                 className="text-green-600 border-green-300 hover:bg-green-50 text-xs"
-                                onClick={() => handleVerifyDocument(doc.id)}
+                                onClick={() => setVerifyDoc(doc)}
                               >
                                 <ThumbsUp className="size-3 mr-1" />
                                 Verify
@@ -965,6 +968,60 @@ function CoordinatorBookingsContent() {
                 alt={previewDoc.type}
                 className="max-w-full max-h-[65vh] object-contain"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verify Confirmation Modal */}
+      {verifyDoc && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-card shadow-lg">
+            <div className="space-y-4 p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
+                  <CheckCircle2 className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-semibold">Verify this document?</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Once verified the document counts as approved for this
+                    booking. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Document</span>
+                  <span className="font-medium text-right">{verifyDoc.type}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Current status</span>
+                  <span className="font-medium text-right">{verifyDoc.status}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Booking</span>
+                  <span className="font-medium text-right">{selectedRes?.id}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setVerifyDoc(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => handleVerifyDocument(verifyDoc.id)}
+                >
+                  <CheckCircle2 className="mr-2 size-4" />
+                  Yes, verify
+                </Button>
+              </div>
             </div>
           </div>
         </div>
