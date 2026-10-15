@@ -73,6 +73,8 @@ function CoordinatorBookingsContent() {
   const [orNumber, setOrNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [selectedDateIndex, setSelectedDateIndex] = useState(null);
+  // Pending confirmation for a booking: { action, reservationId } or null.
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   function getVenueParam() {
     if (typeof window === "undefined") return "";
@@ -166,6 +168,7 @@ function CoordinatorBookingsContent() {
   }
 
   async function handleConfirm(reservationId) {
+    setSaving(true);
     try {
       const res = await fetch("/api/coordinator/bookings", {
         method: "PATCH",
@@ -179,9 +182,12 @@ function CoordinatorBookingsContent() {
       toast.success("Booking confirmed successfully");
       refreshBookings();
       notifyPanelNotificationsUpdated();
+      setConfirmDialog(null);
       setDetailOpen(false);
     } catch (err) {
       toast.error(err.message || "Failed to confirm booking");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -209,6 +215,7 @@ function CoordinatorBookingsContent() {
       toast.success("Payment recorded and booking confirmed successfully");
       refreshBookings();
       notifyPanelNotificationsUpdated();
+      setConfirmDialog(null);
       setDetailOpen(false);
     } catch (err) {
       toast.error(err.message || "Failed to record payment and confirm booking");
@@ -802,7 +809,12 @@ function CoordinatorBookingsContent() {
                       <Button
                         className="flex-1"
                         disabled={saving || !requiredDocsVerified(selectedRes)}
-                        onClick={() => handlePayAndConfirm(selectedRes.id.replace("RES-", ""))}
+                        onClick={() =>
+                          setConfirmDialog({
+                            action: "pay_and_confirm",
+                            reservationId: selectedRes.id.replace("RES-", ""),
+                          })
+                        }
                       >
                         {saving ? "Processing..." : "Record Payment & Confirm"}
                       </Button>
@@ -827,7 +839,12 @@ function CoordinatorBookingsContent() {
                       <Button
                         className="flex-1"
                         disabled={saving || !requiredDocsVerified(selectedRes)}
-                        onClick={() => handleConfirm(selectedRes.id.replace("RES-", ""))}
+                        onClick={() =>
+                          setConfirmDialog({
+                            action: "confirm",
+                            reservationId: selectedRes.id.replace("RES-", ""),
+                          })
+                        }
                       >
                         <CheckCircle2 className="mr-2 size-4" />
                         Confirm Booking
@@ -835,6 +852,88 @@ function CoordinatorBookingsContent() {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation before a booking is finalised */}
+      {confirmDialog && selectedRes && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-card shadow-lg">
+            <div className="space-y-4 p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                  <AlertTriangle className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-semibold">
+                    {confirmDialog.action === "pay_and_confirm"
+                      ? "Record payment & confirm booking?"
+                      : "Confirm this booking?"}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {confirmDialog.action === "pay_and_confirm"
+                      ? "The payment will be recorded as fully paid and the reservation will be confirmed. This cannot be undone."
+                      : "The reservation will be confirmed and the client will be notified. This cannot be undone."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Reservation</span>
+                  <span className="font-medium">{selectedRes.id}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Client</span>
+                  <span className="font-medium text-right">
+                    {selectedRes.clientName}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Event</span>
+                  <span className="font-medium text-right">
+                    {selectedRes.eventType}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium text-right">
+                    {selectedRes.eventDates && selectedRes.eventDates.length > 1
+                      ? `${selectedRes.eventDates[0]} — ${selectedRes.eventDates[selectedRes.eventDates.length - 1]} (${selectedRes.eventDates.length} days)`
+                      : selectedRes.eventDate}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Venue</span>
+                  <span className="font-medium text-right">
+                    {selectedRes.venue}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={saving}
+                  onClick={() => setConfirmDialog(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={saving}
+                  onClick={() =>
+                    confirmDialog.action === "pay_and_confirm"
+                      ? handlePayAndConfirm(confirmDialog.reservationId)
+                      : handleConfirm(confirmDialog.reservationId)
+                  }
+                >
+                  {saving ? "Processing..." : "Yes, confirm"}
+                </Button>
               </div>
             </div>
           </div>
