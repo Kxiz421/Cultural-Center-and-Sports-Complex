@@ -56,17 +56,34 @@ export async function GET(request) {
       return noCacheJson(transactions);
     }
 
-    // This month's restock / damage totals (Philippine Time), for the amenities
-    // overview cards.
-    if (searchParams.get("movementSummary") === "month") {
+    // Restock / damage totals (Philippine Time) for the amenities overview
+    // cards: `movementSummary=day` is today, `=month` is the current month.
+    const summary = searchParams.get("movementSummary");
+    if (summary === "day" || summary === "month") {
       const PHT_MS = 8 * 60 * 60 * 1000;
       const shifted = new Date(Date.now() + PHT_MS);
-      const start = new Date(
-        Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - PHT_MS
-      );
-      const end = new Date(
-        Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 1) - PHT_MS
-      );
+      const start =
+        summary === "day"
+          ? new Date(
+              Date.UTC(
+                shifted.getUTCFullYear(),
+                shifted.getUTCMonth(),
+                shifted.getUTCDate()
+              ) - PHT_MS
+            )
+          : new Date(
+              Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - PHT_MS
+            );
+      const end =
+        summary === "day"
+          ? new Date(start.getTime() + 24 * 60 * 60 * 1000)
+          : new Date(
+              Date.UTC(
+                shifted.getUTCFullYear(),
+                shifted.getUTCMonth() + 1,
+                1
+              ) - PHT_MS
+            );
       const rows = await prisma.particularTransaction.findMany({
         where: { createdAt: { gte: start, lt: end } },
         select: { transactionType: true, quantity: true },
