@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CalendarCheck, ChevronDown, LogIn, UserPlus } from "lucide-react";
-import { PAGE_LOGO } from "@/lib/constants";
+import { PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TransitionLink } from "@/components/route-transition";
@@ -19,13 +19,22 @@ function LandingHeader() {
     <header className="navbar-surface sticky top-0 z-40 border-b border-white/20">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-2.5">
-          <Image
-            src={PAGE_LOGO}
-            alt=""
-            width={36}
-            height={36}
-            className="size-9 shrink-0"
-          />
+          <span className="flex shrink-0 items-center gap-1.5">
+            <Image
+              src={PAGE_LOGO}
+              alt=""
+              width={36}
+              height={36}
+              className="size-9 shrink-0"
+            />
+            <Image
+              src={PAGE_LOGO_2}
+              alt=""
+              width={36}
+              height={36}
+              className="size-9 shrink-0"
+            />
+          </span>
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-sm font-semibold text-white">
               Provincial Government of South Cotabato
@@ -76,9 +85,9 @@ function LandingHeader() {
   );
 }
 
-function LandingHero() {
+function LandingHero({ facilities: initialFacilities }) {
   // The "Facilities" stat is counted from the facility records, not hard-coded.
-  const { facilities, loading } = useLandingFacilities();
+  const { facilities, loading } = useLandingFacilities(initialFacilities);
 
   return (
     <section
@@ -190,11 +199,11 @@ function LandingHero() {
   );
 }
 
-export function LandingHeaderHero() {
+export function LandingHeaderHero({ facilities }) {
   return (
     <>
       <LandingHeader />
-      <LandingHero />
+      <LandingHero facilities={facilities} />
     </>
   );
 }

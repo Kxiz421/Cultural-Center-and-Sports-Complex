@@ -6,10 +6,10 @@ import { Reveal } from "@/components/landing/reveal";
 import { useLandingFacilities } from "@/components/landing/use-facilities";
 import { VENUES } from "@/lib/landing-content";
 
-export function LandingVenues() {
+export function LandingVenues({ facilities }) {
   // Facility names come from the same records the admin Facility Management
   // screen lists, so a venue card can never advertise a facility that is gone.
-  const { byVenue } = useLandingFacilities();
+  const { byVenue } = useLandingFacilities(facilities);
 
   return (
     <section

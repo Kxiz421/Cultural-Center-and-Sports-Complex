@@ -59,11 +59,23 @@ export function groupFacilitiesByVenue(facilities) {
   return [...groups.values()].sort((a, b) => a.venueId - b.venueId);
 }
 
-/** @returns {{facilities: object[], byVenue: object[], loading: boolean}} */
-export function useLandingFacilities() {
-  const [state, setState] = React.useState({ facilities: [], loading: true });
+/**
+ * @param {object[]} [initialFacilities] the list the landing page already
+ *   rendered on the server, so the first paint carries it and no request is
+ *   made; without it the list is fetched in the browser as before.
+ * @returns {{facilities: object[], byVenue: object[], loading: boolean}}
+ */
+export function useLandingFacilities(initialFacilities) {
+  const seeded =
+    Array.isArray(initialFacilities) && initialFacilities.length > 0;
+  const [state, setState] = React.useState(() => ({
+    facilities: seeded ? initialFacilities : [],
+    loading: !seeded,
+  }));
 
   React.useEffect(() => {
+    if (seeded) return undefined;
+
     let active = true;
 
     requestFacilities().then((facilities) => {
@@ -73,7 +85,7 @@ export function useLandingFacilities() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [seeded]);
 
   const byVenue = React.useMemo(
     () => groupFacilitiesByVenue(state.facilities),

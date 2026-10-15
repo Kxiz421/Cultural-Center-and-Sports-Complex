@@ -132,8 +132,8 @@ function FacilitiesSkeleton() {
   );
 }
 
-export function LandingFacilities() {
-  const { byVenue, loading } = useLandingFacilities();
+export function LandingFacilities({ facilities }) {
+  const { byVenue, loading } = useLandingFacilities(facilities);
   // The first venue starts expanded; the rest stay collapsed until asked for.
   const [openVenues, setOpenVenues] = React.useState(() => [1]);
   const [detailsFacility, setDetailsFacility] = React.useState(null);
