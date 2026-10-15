@@ -4,7 +4,7 @@ import * as React from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Eye, EyeOff, Mail } from "lucide-react";
-import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO } from "@/lib/constants";
+import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useRouteTransition } from "@/components/route-transition";
@@ -377,14 +377,24 @@ export default function LoginPage() {
       </div>
       <div className="relative z-10 flex w-full max-w-md flex-col items-center">
         <div className="mb-8 flex max-w-2xl flex-col items-center px-2 text-center">
-          <Image
-            src={PAGE_LOGO}
-            alt="South Cotabato Official Seal"
-            width={120}
-            height={120}
-            priority
-            className="mb-4 size-24 drop-shadow-lg md:size-28"
-          />
+          <div className="mb-4 flex items-center justify-center gap-4">
+            <Image
+              src={PAGE_LOGO}
+              alt="South Cotabato Official Seal"
+              width={120}
+              height={120}
+              priority
+              className="size-24 drop-shadow-lg md:size-28"
+            />
+            <Image
+              src={PAGE_LOGO_2}
+              alt=""
+              width={120}
+              height={120}
+              priority
+              className="size-24 drop-shadow-lg md:size-28"
+            />
+          </div>
           <p className="text-2xl font-extrabold uppercase tracking-wider text-white drop-shadow-sm md:text-3xl">
             Provincial Government of South Cotabato
           </p>
