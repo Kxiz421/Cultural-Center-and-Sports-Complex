@@ -47,7 +47,9 @@ export function useReports({ venueIds } = {}) {
   const [specificOptions, setSpecificOptions] = React.useState([]);
   const [optionsLoading, setOptionsLoading] = React.useState(false);
   const [report, setReport] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  // Guards against out-of-order responses when the selection changes quickly.
+  const requestIdRef = React.useRef(0);
 
   /**
    * Venue scope the revenue report will actually run against: the panel scope
@@ -167,38 +169,57 @@ export function useReports({ venueIds } = {}) {
     };
   }, [reportType, revenueGroup, effectiveVenueIds]);
 
-  const generate = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const isRevenue = reportType === "revenue";
-      const params = new URLSearchParams({ period, month, week, year });
+  const generate = React.useCallback(
+    async ({ silent = false } = {}) => {
+      // Every call supersedes the previous one, so a slow response for an older
+      // selection can never overwrite the report for the current one.
+      const requestId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const isRevenue = reportType === "revenue";
+        const params = new URLSearchParams({ period, month, week, year });
 
-      if (venue && venue !== "all") params.set("venue", venue);
-      if (venueIds) params.set("venueIds", venueIds);
+        if (venue && venue !== "all") params.set("venue", venue);
+        if (venueIds) params.set("venueIds", venueIds);
 
-      if (isRevenue) {
-        params.set("groupBy", revenueGroup);
-        // "Per Venue" uses the Venue dropdown itself as its entity picker.
-        const specificParam = SPECIFIC_PARAM[revenueGroup];
-        if (specificParam && specific !== "all") {
-          params.set(specificParam, specific);
+        if (isRevenue) {
+          params.set("groupBy", revenueGroup);
+          // "Per Venue" uses the Venue dropdown itself as its entity picker.
+          const specificParam = SPECIFIC_PARAM[revenueGroup];
+          if (specificParam && specific !== "all") {
+            params.set(specificParam, specific);
+          }
         }
+
+        const endpoint = isRevenue
+          ? "/api/reports/revenue"
+          : "/api/reports/activities";
+        const res = await fetch(`${endpoint}?${params.toString()}`);
+        if (requestId !== requestIdRef.current) return;
+        if (!res.ok) throw new Error("Failed to generate report");
+
+        setReport(await res.json());
+        if (!silent) toast.success("Report generated successfully");
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        toast.error(err.message || "Failed to generate report");
+      } finally {
+        if (requestId === requestIdRef.current) setLoading(false);
       }
+    },
+    [period, month, week, year, venue, venueIds, reportType, revenueGroup, specific]
+  );
 
-      const endpoint = isRevenue
-        ? "/api/reports/revenue"
-        : "/api/reports/activities";
-      const res = await fetch(`${endpoint}?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to generate report");
-
-      setReport(await res.json());
-      toast.success("Report generated successfully");
-    } catch (err) {
-      toast.error(err.message || "Failed to generate report");
-    } finally {
-      setLoading(false);
-    }
-  }, [period, month, week, year, venue, venueIds, reportType, revenueGroup, specific]);
+  // The report generates itself: once on mount, and again whenever any
+  // selection changes (report type, period/month/week/year, venue, grouping,
+  // or the specific entity). Deferred a tick so the fetch never cascades a
+  // render inside the effect, and so quick successive changes coalesce into a
+  // single request. `silent` keeps the success toast from firing on every
+  // tweak; failures still surface.
+  React.useEffect(() => {
+    const id = setTimeout(() => generate({ silent: true }), 0);
+    return () => clearTimeout(id);
+  }, [generate]);
 
   const printReport = React.useCallback(() => {
     if (typeof window !== "undefined") window.print();

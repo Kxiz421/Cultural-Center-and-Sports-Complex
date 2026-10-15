@@ -118,6 +118,13 @@ export function ReportGenerationScreen({
             <ReportActivitiesDocument report={reports.report} />
           )}
         </>
+      ) : reports.loading ? (
+        <div className="no-print">
+          <ReportEmptyState
+            title="Generating report…"
+            description="Fetching the latest data for the selected report."
+          />
+        </div>
       ) : (
         <div className="no-print">
           <ReportEmptyState />

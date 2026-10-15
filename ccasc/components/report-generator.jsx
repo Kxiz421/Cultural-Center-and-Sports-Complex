@@ -116,7 +116,8 @@ export function ReportControls({
       <CardHeader>
         <CardTitle>Report Configuration</CardTitle>
         <CardDescription>
-          Pick a report type and period, then generate.{" "}
+          Pick a report type, period, venue or grouping - the report updates
+          automatically.{" "}
           <span className="text-foreground font-medium">
             {preview.rangeLabel}
           </span>
@@ -293,7 +294,7 @@ export function ReportControls({
 
 export function ReportEmptyState({
   title = "No report generated yet",
-  description = "Choose a report period above, then click Generate Report.",
+  description = "Choose a report type and period above — the report appears automatically.",
   icon: Icon = FileBarChart,
 }) {
   return (
