@@ -9,3 +9,7 @@ export const LOGIN_PAGE_BACKGROUND =
 /** Landing page logo (file under `public/`). */
 export const PAGE_LOGO =
   process.env.NEXT_PUBLIC_PAGE_LOGO ?? "/PageLogo.webp";
+
+/** Secondary logo, shown beside {@link PAGE_LOGO} (file under `public/`). */
+export const PAGE_LOGO_2 =
+  process.env.NEXT_PUBLIC_PAGE_LOGO_2 ?? "/PageLogo2.webp";
