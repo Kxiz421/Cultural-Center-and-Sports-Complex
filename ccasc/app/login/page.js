@@ -210,9 +210,13 @@ export default function LoginPage() {
       // SessionProvider, which a client-side push would not provide. The
       // curtain still covers the hand-off, instead of leaving the sign-in form
       // on screen while the dashboard downloads.
-      startRouteTransition(homeForUserType(user.type), "Signing you in…", {
-        hard: true,
-      });
+      const home = homeForUserType(user.type);
+      // `start` declines when another transition is mid-flight; without the
+      // fallback a successful sign-in would leave the form on screen while the
+      // visitor is already authenticated.
+      if (!startRouteTransition(home, "Signing you in…", { hard: true })) {
+        window.location.assign(home);
+      }
     } catch (err) {
       toast.error("An error occurred during login. Please try again.");
     } finally {

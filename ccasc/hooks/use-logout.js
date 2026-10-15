@@ -49,7 +49,21 @@ export function useLogout() {
 
     // Clear the cookie *before* navigating: unloading the page while this
     // request is in flight would cancel it and leave the user signed in.
-    await signOut({ redirect: false });
+    try {
+      await signOut({ redirect: false });
+    } catch {
+      /* fall through - the definitive clear below still runs */
+    }
+
+    // Auth.js re-issues the session cookie on every GET /api/auth/session, so a
+    // session fetch already in flight can revive it right after signOut().
+    // Clear every session cookie on a response of our own (last write wins) so
+    // `/login` can no longer bounce the visitor back into the panel.
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* the hard navigation below still loads a fresh document */
+    }
 
     toast.success("You have been logged out.");
 

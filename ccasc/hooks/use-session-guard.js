@@ -27,6 +27,15 @@ export function useSessionGuard() {
       } catch {
         /* ignore - the redirect below still removes access */
       }
+      // A session fetch already in flight can revive the cookie after signOut()
+      // (Auth.js re-issues it on every /api/auth/session). Clear it for good
+      // before landing on /login, which would otherwise bounce a still-signed-in
+      // visitor straight back into the panel.
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch {
+        /* ignore - the redirect below still removes access */
+      }
       window.location.replace(`/login?reason=${SESSION_REPLACED_REASON}`);
     }
 
