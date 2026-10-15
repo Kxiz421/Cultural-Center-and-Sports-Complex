@@ -22,6 +22,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, CalendarDays, CheckCircle2 } from "lucide-react";
+import { SportsComplexDayDialog } from "@/components/sports-complex-day-dialog";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -46,7 +47,7 @@ function getEventColor(status) {
   return { bg: "bg-slate-500", text: "text-white" };
 }
 
-function MonthGrid({ events, onEventClick, venueLabel }) {
+function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -163,11 +164,32 @@ function MonthGrid({ events, onEventClick, venueLabel }) {
                 return (
                   <div
                     key={di}
+                    role={cell.currentMonth && onDayClick ? "button" : undefined}
+                    tabIndex={cell.currentMonth && onDayClick ? 0 : undefined}
+                    onClick={
+                      cell.currentMonth && onDayClick
+                        ? () => onDayClick(cell.dateStr)
+                        : undefined
+                    }
+                    onKeyDown={
+                      cell.currentMonth && onDayClick
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onDayClick(cell.dateStr);
+                            }
+                          }
+                        : undefined
+                    }
                     className={`relative min-h-[75px] rounded-md border p-1 text-xs transition-colors ${
                       cell.currentMonth
                         ? "bg-background hover:border-foreground/20"
                         : "bg-muted/20 text-muted-foreground/60"
-                    } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}`}
+                    } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}${
+                      cell.currentMonth && onDayClick
+                        ? " cursor-pointer hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        : ""
+                    }`}
                   >
                     <div
                       className={`mb-1 flex size-5 items-center justify-center rounded-full text-xs font-medium ${
@@ -187,7 +209,14 @@ function MonthGrid({ events, onEventClick, venueLabel }) {
                           <div
                             key={ev.id}
                             className={`truncate rounded-sm px-1 py-0.5 text-xs font-medium leading-tight cursor-pointer ${colors.bg} ${colors.text}`}
-                            onClick={() => onEventClick?.(ev)}
+                            onClick={
+                              onDayClick
+                                ? undefined
+                                : (event) => {
+                                    event.stopPropagation();
+                                    onEventClick?.(ev);
+                                  }
+                            }
                             title={`${ev.title}${ev.clientName ? ` - ${ev.clientName}` : ""}`}
                           >
                             {ev.title}
@@ -223,6 +252,7 @@ export default function CoordinatorCalendarPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [sportsDay, setSportsDay] = useState(null);
   const [venueLabel, setVenueLabel] = useState("Cultural Center");
 
   useEffect(() => {
@@ -309,7 +339,12 @@ export default function CoordinatorCalendarPage() {
         </p>
       </div>
 
-      <MonthGrid events={events} onEventClick={setSelectedEvent} venueLabel={venueLabel} />
+      <MonthGrid
+        events={events}
+        onEventClick={setSelectedEvent}
+        venueLabel={venueLabel}
+        onDayClick={venueLabel === "Sports Complex" ? setSportsDay : undefined}
+      />
 
       {/* Event Detail Dialog */}
       <Dialog open={selectedEvent !== null} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
@@ -417,6 +452,14 @@ export default function CoordinatorCalendarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SportsComplexDayDialog
+        date={sportsDay}
+        open={!!sportsDay}
+        onOpenChange={(open) => {
+          if (!open) setSportsDay(null);
+        }}
+      />
     </div>
   );
 }

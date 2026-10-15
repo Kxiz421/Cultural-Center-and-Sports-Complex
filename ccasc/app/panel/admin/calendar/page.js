@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Pagination } from "@/components/pagination";
+import { SportsComplexDayDialog } from "@/components/sports-complex-day-dialog";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -63,7 +64,7 @@ function getEventColor(status) {
   return { bg: "bg-slate-500", text: "text-white" };
 }
 
-function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEventClick }) {
+function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEventClick, onDayClick }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -185,11 +186,32 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEve
                 return (
                   <div
                     key={di}
+                    role={cell.currentMonth && onDayClick ? "button" : undefined}
+                    tabIndex={cell.currentMonth && onDayClick ? 0 : undefined}
+                    onClick={
+                      cell.currentMonth && onDayClick
+                        ? () => onDayClick(cell.dateStr)
+                        : undefined
+                    }
+                    onKeyDown={
+                      cell.currentMonth && onDayClick
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onDayClick(cell.dateStr);
+                            }
+                          }
+                        : undefined
+                    }
                     className={`relative min-h-[75px] rounded-md border p-1 text-xs transition-colors ${
                       cell.currentMonth
                         ? "bg-background hover:border-foreground/20"
                         : "bg-muted/20 text-muted-foreground/60"
-                    } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}`}
+                    } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}${
+                      cell.currentMonth && onDayClick
+                        ? " cursor-pointer hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        : ""
+                    }`}
                   >
                     <div
                       className={`mb-1 flex size-5 items-center justify-center rounded-full text-xs font-medium ${
@@ -209,7 +231,14 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEve
                           <div
                             key={ev.id}
                             className={`truncate rounded-sm px-1 py-0.5 text-xs font-medium leading-tight cursor-pointer ${colors.bg} ${colors.text}`}
-                            onClick={() => onEventClick?.(ev)}
+                            onClick={
+                              onDayClick
+                                ? undefined
+                                : (event) => {
+                                    event.stopPropagation();
+                                    onEventClick?.(ev);
+                                  }
+                            }
                             title={`${ev.title}${ev.clientName ? ` - ${ev.clientName}` : ""}${ev.blockType ? ` (${ev.blockType})` : ""}`}
                           >
                             {ev.title}
@@ -261,6 +290,7 @@ export default function CalendarPage() {
     notes: "",
   });
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [sportsDay, setSportsDay] = useState(null);
   const [blocksPage, setBlocksPage] = useState(1);
   const [blockTypeFilter, setBlockTypeFilter] = useState("all");
   const [addingBlock, setAddingBlock] = useState(false);
@@ -539,6 +569,7 @@ export default function CalendarPage() {
             venueId={2}
             onRefresh={fetchData}
             onEventClick={setSelectedEvent}
+            onDayClick={setSportsDay}
           />
         </div>
       )}
@@ -810,6 +841,14 @@ export default function CalendarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SportsComplexDayDialog
+        date={sportsDay}
+        open={!!sportsDay}
+        onOpenChange={(open) => {
+          if (!open) setSportsDay(null);
+        }}
+      />
     </div>
   );
 }
