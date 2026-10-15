@@ -84,12 +84,17 @@ export function NotificationBell({ audience = "staff", scope = "" }) {
   React.useEffect(() => {
     if (!open) return;
     const onPointerDown = (event) => {
+      // The details dialog renders in a portal outside this container, so while
+      // it is open every click lands "outside" and would otherwise close the
+      // whole popup. Keep the list open until the dialog itself is dismissed.
+      if (selected) return;
       if (containerRef.current && !containerRef.current.contains(event.target)) {
         setOpen(false);
       }
     };
     const onKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
+      // Escape closes the details dialog first (Radix handles it), not the list.
+      if (event.key === "Escape" && !selected) setOpen(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -97,7 +102,7 @@ export function NotificationBell({ audience = "staff", scope = "" }) {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, selected]);
 
   const filterPresets =
     audience === "client"

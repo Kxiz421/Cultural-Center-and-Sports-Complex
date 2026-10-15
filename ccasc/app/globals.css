@@ -390,9 +390,9 @@
  * Blue navbar surfaces: the panel sidebars and the top header bar.
  *
  * `--sidebar*` drives the shadcn sidebar (and its hover/active states), while
- * `.navbar-surface` is applied to the custom client / provincial rails and the
- * shared header. The repeating gradient adds a light diagonal texture, and the
- * outline plus inset line give the bar a defined edge instead of a flat fill.
+ * `.navbar-surface` is applied to the custom client / provincial rails, the
+ * shared staff header and the landing header. A flat #2575FC fill - no gradient
+ * or stripe texture.
  */
 :root,
 .dark {
@@ -410,13 +410,6 @@
 [data-slot="sidebar-inner"],
 [data-sidebar="sidebar"][data-mobile="true"] {
   background-color: #2575fc;
-  background-image:
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.06) 0 2px,
-      transparent 2px 9px
-    ),
-    linear-gradient(180deg, #3d86ff 0%, #1a5fd8 100%);
   color: #f2f7ff;
 }
 

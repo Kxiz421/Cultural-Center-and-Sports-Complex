@@ -243,15 +243,15 @@ export default function LTOOCancellationsPage() {
         <CardContent>
           <Table className="table-fixed text-xs">
             <colgroup>
-              <col className="w-[14%]" />
-              <col className="w-[10%]" />
-              <col className="w-[14%]" />
-              <col className="w-[7%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[12%]" />
+              <col className="w-[6%]" />
               <col className="w-[11%]" />
-              <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[14%]" />
               <col className="w-[12%]" />
               <col className="w-[10%]" />
-              <col className="w-[11%]" />
             </colgroup>
             <TableHeader>
               <TableRow>
@@ -294,7 +294,7 @@ export default function LTOOCancellationsPage() {
                         </span>
                       </TableCell>
                       <TableCell className="px-2 whitespace-normal">
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="h-auto max-w-full whitespace-normal text-center text-xs leading-tight">
                           {b.clientType === "provincial" ? (
                             <><Building2 className="size-3 mr-1 inline" />Provincial</>
                           ) : (
@@ -311,14 +311,14 @@ export default function LTOOCancellationsPage() {
                         {b.venueAcronym || b.venue || "—"}
                       </TableCell>
                       <TableCell className="px-2 whitespace-nowrap">{b.eventDate || "—"}</TableCell>
-                      <TableCell className="px-2 whitespace-nowrap">{b.timeSlot || "—"}</TableCell>
+                      <TableCell className="px-2 whitespace-normal leading-tight">{b.timeSlot || "—"}</TableCell>
                       <TableCell className="px-2 whitespace-normal">
-                        <Badge variant={badge.variant} className={`text-xs ${badge.className}`}>
+                        <Badge variant={badge.variant} className={`h-auto max-w-full whitespace-normal text-center text-xs leading-tight ${badge.className}`}>
                           {b.paymentStatus || "No Payment"}
                         </Badge>
                       </TableCell>
                       <TableCell className="px-2 whitespace-normal">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusStyle(b.bookingStatus)}`}>
+                        <span className={`inline-block max-w-full rounded-full px-2 py-0.5 text-center text-xs font-medium leading-tight whitespace-normal ${getStatusStyle(b.bookingStatus)}`}>
                           {b.bookingStatus || "—"}
                         </span>
                       </TableCell>
