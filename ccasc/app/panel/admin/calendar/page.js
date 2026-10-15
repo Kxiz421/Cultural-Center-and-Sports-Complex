@@ -240,6 +240,13 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onRefresh, onEve
   );
 }
 
+/** Filter options for the "Holidays & Maintenance" list. */
+const BLOCK_TYPE_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "Holiday", label: "Holiday" },
+  { value: "Maintenance", label: "Maintenance" },
+];
+
 export default function CalendarPage() {
   const [cultural, setCultural] = useState([]);
   const [sports, setSports] = useState([]);
@@ -255,6 +262,7 @@ export default function CalendarPage() {
   });
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [blocksPage, setBlocksPage] = useState(1);
+  const [blockTypeFilter, setBlockTypeFilter] = useState("all");
   const [addingBlock, setAddingBlock] = useState(false);
 
   useEffect(() => {
@@ -367,7 +375,16 @@ export default function CalendarPage() {
     }
   };
 
-  const sortedBlocks = [...blocks].sort((a, b) =>
+  const blockTypeCounts = {
+    all: blocks.length,
+    Holiday: blocks.filter((b) => b.blockType === "Holiday").length,
+    Maintenance: blocks.filter((b) => b.blockType === "Maintenance").length,
+  };
+  const filteredBlocks =
+    blockTypeFilter === "all"
+      ? blocks
+      : blocks.filter((b) => b.blockType === blockTypeFilter);
+  const sortedBlocks = [...filteredBlocks].sort((a, b) =>
     String(a.date).localeCompare(String(b.date))
   );
   const blocksPerPage = 10;
@@ -529,18 +546,45 @@ export default function CalendarPage() {
       {blocks.length > 0 && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-            <div>
-              <CardTitle className="text-lg">Holidays & Maintenance</CardTitle>
-              <CardDescription>
-                Holiday and maintenance days currently set.
-              </CardDescription>
+            <div className="space-y-3">
+              <div>
+                <CardTitle className="text-lg">Holidays & Maintenance</CardTitle>
+                <CardDescription>
+                  Holiday and maintenance days currently set.
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {BLOCK_TYPE_FILTERS.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    size="sm"
+                    variant={
+                      blockTypeFilter === option.value ? "default" : "outline"
+                    }
+                    onClick={() => {
+                      setBlockTypeFilter(option.value);
+                      setBlocksPage(1);
+                    }}
+                  >
+                    {option.label} ({blockTypeCounts[option.value]})
+                  </Button>
+                ))}
+              </div>
             </div>
             <Badge variant="secondary" className="shrink-0">
-              {blocks.length} total
+              {filteredBlocks.length} total
             </Badge>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {pagedBlocks.length === 0 && (
+                <p className="text-muted-foreground py-6 text-center text-sm">
+                  {blockTypeFilter === "all"
+                    ? "No blocks set."
+                    : `No ${blockTypeFilter.toLowerCase()} blocks set.`}
+                </p>
+              )}
               {pagedBlocks.map((block, index) => {
                 const key = String(block.date).split("T")[0];
                 const prevKey =
