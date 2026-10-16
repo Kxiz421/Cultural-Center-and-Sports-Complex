@@ -22,6 +22,10 @@ import {
 } from "@/lib/reservation-advance-booking";
 import { RescheduleEventDatesPanel } from "@/components/reschedule-event-dates-panel";
 import { Pagination } from "@/components/pagination";
+import {
+  FORFEITURE_NOTICE,
+  getCancellationEligibility,
+} from "@/lib/cancellation-policy";
 
 const PAGE_SIZE = 10;
 
@@ -52,16 +56,17 @@ export default function ProvincialReschedulingPage() {
     [reservations, selectedReservation]
   );
 
-  /** Check if the selected reservation is eligible for cancellation (≥30 days away, not already cancelled). */
-  const canCancelSelected = React.useMemo(() => {
-    if (!selected || !selected.eventDate) return false;
-    if (selected.status === "Cancelled") return false;
-    const eventDate = new Date(selected.eventDate + "T00:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const daysUntil = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
-    return daysUntil >= 30;
+  /**
+   * Cancellation is accepted until 2 days before the event; inside the 30-day
+   * window the payments are forfeited (see lib/cancellation-policy).
+   */
+  const cancellation = React.useMemo(() => {
+    if (!selected || !selected.eventDate || selected.status === "Cancelled") {
+      return { canCancel: false, isForfeiture: false, daysUntil: null };
+    }
+    return getCancellationEligibility(`${selected.eventDate}T00:00:00`);
   }, [selected]);
+  const canCancelSelected = cancellation.canCancel;
 
   /** Check if the selected reservation is eligible for rescheduling (≥7 days away, not already cancelled). */
   const canRescheduleSelected = React.useMemo(() => {
@@ -376,8 +381,10 @@ export default function ProvincialReschedulingPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {canCancelSelected
-                          ? "Only available for events at least 30 days away. This action cannot be undone."
-                          : "Cancellation requires the event to be at least 30 days away."}
+                          ? cancellation.isForfeiture
+                            ? `${FORFEITURE_NOTICE} This action cannot be undone.`
+                            : "Cancelling now keeps your payments eligible for refund. This action cannot be undone."
+                          : "Cancellation is no longer available — it must be made at least 2 days before the event."}
                       </p>
                     </div>
                     <Button
@@ -409,8 +416,10 @@ export default function ProvincialReschedulingPage() {
             <DialogDescription>
               Are you sure you want to cancel the booking for{" "}
               <strong>{selected?.eventType || "this event"}</strong>? This action{" "}
-              <strong>cannot be undone</strong>. Any payments made will be eligible for refund
-              since the cancellation is at least 30 days before the event.
+              <strong>cannot be undone</strong>.{" "}
+              {cancellation.isForfeiture
+                ? "Because the event is less than 30 days away, the 50% down payment, 10% deposit and remaining balance will be forfeited in favor of the Provincial Government."
+                : "The cancellation is at least 30 days before the event, so any payments made will be eligible for refund."}
             </DialogDescription>
           </DialogHeader>
 

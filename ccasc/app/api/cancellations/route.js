@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createClientNotification } from "@/lib/coordinator-notifications";
 import { walkInDisplayName } from "@/lib/walk-in";
+import {
+  CANCELLATION_LATE_CUTOFF_DAYS,
+  getCancellationEligibility,
+} from "@/lib/cancellation-policy";
+import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
 
 import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -10,7 +15,11 @@ export const dynamic = "force-dynamic";
  * POST /api/cancellations
  *
  * Cancel a reservation by a client or provincial agency.
- * Only allowed if the event date is at least 30 days away.
+ *
+ * Accepted until 2 days before the event (see lib/cancellation-policy). Inside
+ * the 30-day window the payments are forfeited in favour of the Provincial
+ * Government instead of being refunded; the same rule the LTOO cancellation
+ * screen applies.
  *
  * Body: { reservationId, reason? }
  */
@@ -76,26 +85,26 @@ export async function POST(request) {
       );
     }
 
-    // Check the 30-day cancellation rule
+    // Cancellation rule (lib/cancellation-policy): accepted until 2 days before
+    // the event; inside the 30-day window the payments are forfeited.
     const eventDate = reservation.eventDate
       ? new Date(reservation.eventDate)
       : null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { daysUntil: daysUntilEvent, canCancel, isForfeiture } =
+      getCancellationEligibility(reservation.eventDate);
 
-    let daysUntilEvent = null;
-    let canCancel = false;
+    const alreadyClosed =
+      reservation.reservationStatus === "Cancelled" ||
+      reservation.reservationStatus === "Declined";
 
-    if (eventDate) {
-      eventDate.setHours(0, 0, 0, 0);
-      daysUntilEvent = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
-      canCancel = daysUntilEvent >= 30;
-    }
-
-    if (!canCancel) {
+    if (alreadyClosed || !canCancel) {
       const message =
-        daysUntilEvent !== null && daysUntilEvent < 30
-          ? "Cancellation is only allowed at least 30 days before the event. Only " + daysUntilEvent + " day(s) remaining before the event."
+        !alreadyClosed &&
+        daysUntilEvent !== null &&
+        daysUntilEvent <= CANCELLATION_LATE_CUTOFF_DAYS
+          ? "Cancellation is no longer available. Cancellations must be made at least " +
+            CANCELLATION_LATE_CUTOFF_DAYS +
+            " days before the event."
           : "Cancellation is not available for this reservation.";
       return NextResponse.json({ error: message }, { status: 400 });
     }
@@ -109,36 +118,59 @@ export async function POST(request) {
     const performerName =
       acting.performedByName || clientName || "Client";
 
-    // Cancel only the reservation (bookings are left untouched)
+    // Mirror the LTOO cancellation: the reservation and its booking row both go
+    // to Cancelled, so every panel and the facility calendar read one status.
+    const cancelledBookingStatusId = await getBookingStatusId(
+      BOOKING_STATUS.CANCELLED
+    );
+
+    const outcomeDetail = isForfeiture
+      ? "Cancellation was made less than 30 days before the event — the 50% down payment, 10% deposit and remaining balance are forfeited in favour of the Provincial Government."
+      : "Cancellation was made at least 30 days before the event — payments are eligible for refund.";
+
     await prisma.$transaction(async (tx) => {
       await tx.reservation.update({
         where: { reservationId: parsedReservationId },
         data: { reservationStatus: "Cancelled" },
       });
 
+      if (cancelledBookingStatusId != null) {
+        await tx.booking.updateMany({
+          where: { reservationId: parsedReservationId },
+          data: { bookingStatusId: cancelledBookingStatusId },
+        });
+      }
+
       // Create audit log
       await tx.auditLog.create({
         data: {
-          action: "RESERVATION_CANCELLED",
+          action: isForfeiture
+            ? "RESERVATION_CANCELLED_FORFEITED"
+            : "RESERVATION_CANCELLED",
           targetUserId: "RES-" + parsedReservationId,
           targetName: clientName,
           performedById: performerId,
           performedByName: performerName,
-          details: "Reservation #" + parsedReservationId + " for " + clientName + " at " + reservation.venue.venue + " has been cancelled. Reason: " + (reason || "No reason provided") + ". Cancellation was made at least 30 days before the event — payments are eligible for refund.",
+          details: "Reservation #" + parsedReservationId + " for " + clientName + " at " + reservation.venue.venue + " has been cancelled. Reason: " + (reason || "No reason provided") + ". " + outcomeDetail,
         },
       });
     });
+
+    const clientOutcome = isForfeiture
+      ? "As the cancellation was made less than 30 days before the event, the 50% down payment, 10% deposit and remaining balance are forfeited in favor of the Provincial Government."
+      : "Since the cancellation was made at least 30 days before the event, any payments made are eligible for refund.";
 
     // Send notification to the client
     await createClientNotification({
       clientId: reservation.client?.clientId,
       type: "cancellation",
-      message: "Your reservation for \"" + (reservation.eventType || "Scheduled event") + "\" at " + reservation.venue.venue + " on " + (eventDate ? eventDate.toISOString().split("T")[0] : "N/A") + " has been CANCELLED. Reason: " + (reason || "No reason provided") + ". Since the cancellation was made at least 30 days before the event, any payments made are eligible for refund.",
+      message: "Your reservation for \"" + (reservation.eventType || "Scheduled event") + "\" at " + reservation.venue.venue + " on " + (eventDate ? eventDate.toISOString().split("T")[0] : "N/A") + " has been CANCELLED. Reason: " + (reason || "No reason provided") + ". " + clientOutcome,
     });
 
     return NextResponse.json({
       success: true,
-      message: "Reservation cancelled successfully. Any payments made are eligible for refund.",
+      message: "Reservation cancelled successfully. " + clientOutcome,
+      isForfeiture,
       reservationId: parsedReservationId,
     });
   } catch (error) {
