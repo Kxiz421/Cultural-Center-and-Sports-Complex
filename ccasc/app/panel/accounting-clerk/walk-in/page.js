@@ -976,14 +976,6 @@ export default function WalkInReservationPage() {
                   (aggregatedParticulars[entry.particularId] || 0) + entry.quantity;
               }
             }
-          } else if (isFacilityPackageId(session.packageId)) {
-            // Facility rentals carry their own additional particulars per date.
-            for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
-              const count = Number(qty) || 0;
-              if (count > 0) {
-                aggregatedParticulars[partId] = (aggregatedParticulars[partId] || 0) + count;
-              }
-            }
           } else if (
             session.packageId === "0" ||
             session.packageId === "custom" ||
@@ -1045,17 +1037,6 @@ export default function WalkInReservationPage() {
           }
           return p;
         });
-        selectedPackageId = null;
-      } else if (isFacilityPackageId(packageId)) {
-        // A Cultural Center facility rental can carry additional particulars.
-        const numDays = sortedDates.length > 0 ? sortedDates.length : 1;
-        selectedParticulars = getVirtualPackageParticulars(
-          packageId,
-          particulars,
-          particularQuantities,
-          timeSlotId,
-          venueRentalSlot
-        ).map((p) => ({ ...p, quantity: p.quantity * numDays }));
         selectedPackageId = null;
       } else {
         // Only include particulars if custom or no package
@@ -1934,19 +1915,6 @@ const renderPerDateFacilities = (date, cust) => {
                   venueRentalSlot={venueRentalSlot}
                   onVenueRentalSlotChange={handleVenueRentalSlotChange}
                 />
-              ) : isFacilityPackageId(packageId) ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    This venue rental is priced from the facility&apos;s own rate.
-                    Add any particular the client needs for the event below.
-                  </p>
-                  <VenueRentalParticularsList
-                    particulars={particulars}
-                    particularsLoading={particularsLoading}
-                    particularQuantities={particularQuantities}
-                    onChange={setParticularQuantities}
-                  />
-                </>
               ) : isRegularPackageId(packageId) ? (
                 <>
                   <Label>Package Inclusions</Label>
@@ -2212,20 +2180,17 @@ const renderPerDateFacilities = (date, cust) => {
                             </SelectContent>
                           </Select>
                         </div>
-                        {(s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ||
-                          isFacilityPackageId(s.packageId)) && (
+                        {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
                           <>
-                            {s.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
-                              <ReservationVirtualPackagePanel
-                                packageId={s.packageId}
-                                particulars={particulars}
-                                particularQuantities={s.particularQuantities || {}}
-                                onParticularQuantitiesChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
-                                timeSlotId={timeSlotForSession}
-                                venueRentalSlot={s.venueRentalSlot || ""}
-                                onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
-                              />
-                            )}
+                            <ReservationVirtualPackagePanel
+                              packageId={s.packageId}
+                              particulars={particulars}
+                              particularQuantities={s.particularQuantities || {}}
+                              onParticularQuantitiesChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
+                              timeSlotId={timeSlotForSession}
+                              venueRentalSlot={s.venueRentalSlot || ""}
+                              onVenueRentalSlotChange={(val) => handleDateSessionVenueRentalSlotChange(date, sessionKey, val)}
+                            />
                             <Separator className="my-2" />
                             <VenueRentalParticularsList
                               compact
@@ -2277,8 +2242,7 @@ const renderPerDateFacilities = (date, cust) => {
                           onVenueRentalSlotChange={(val) => handleDateVenueRentalSlotChange(date, val)}
                         />
                       )}
-                      {(cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL ||
-                        isFacilityPackageId(cust.packageId)) && (
+                      {cust.packageId === VIRTUAL_PACKAGE_IDS.VENUE_RENTAL && (
                         <VenueRentalParticularsList
                           compact
                           particulars={particulars}
