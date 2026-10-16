@@ -52,7 +52,8 @@ export const PANEL_HOME = {
   [USER_TYPE.LTOO]: "/panel/local-treasury-officer/dashboard",
   [USER_TYPE.COORDINATOR_CULTURAL]: "/panel/program-coordinator/dashboard",
   [USER_TYPE.COORDINATOR_SPORTS]: "/panel/program-coordinator/dashboard",
-  [USER_TYPE.CLIENT]: "/panel/client/dashboard",
+  // Clients land on the facility calendar; their dashboard is hidden.
+  [USER_TYPE.CLIENT]: "/panel/client/calendar",
   [USER_TYPE.PROVINCIAL_AGENCY]: "/panel/provincial-agency/dashboard",
   [USER_TYPE.RESUBMIT_ONLY]: "/resubmit",
 };

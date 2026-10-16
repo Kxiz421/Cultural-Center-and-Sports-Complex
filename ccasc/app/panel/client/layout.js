@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, CalendarRange, FileText, History, LayoutDashboard, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
+import { Calendar, CalendarRange, FileText, History, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/panel/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/panel/client/calendar", label: "Facility Calendar", icon: Calendar },
   { href: "/panel/client/reservations", label: "Reservations", icon: ClipboardEdit },
   { href: "/panel/client/rescheduling", label: "Rescheduling", icon: CalendarRange },
