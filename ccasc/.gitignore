@@ -47,3 +47,7 @@ backups/
 
 # uploaded client ID documents (PII) - never commit
 public/uploads/id-proofs/
+
+# MySQL copy of the Prisma schema (local reference only - schema.prisma is the
+# source of truth). Never commit; regenerate it by hand when the schema changes.
+prisma/schema.sql
