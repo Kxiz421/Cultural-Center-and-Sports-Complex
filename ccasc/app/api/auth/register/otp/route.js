@@ -93,7 +93,10 @@ async function handleSend(channel, rawTarget) {
   let sent;
   if (channel === REGISTER_CHANNEL.SMS) {
     if (isSmsEnabled()) {
-      sent = await sendOtpSms(target, otp);
+      sent = await sendOtpSms(target, otp, {
+        purpose: "verify",
+        expiresInMinutes: OTP_TTL_MS / 60000,
+      });
     } else if (process.env.NODE_ENV !== "production") {
       // SMSGate is not configured locally. Still enforce the step, but surface
       // the code in the server log so the flow can be tested end to end.
@@ -112,7 +115,10 @@ async function handleSend(channel, rawTarget) {
       );
     }
   } else {
-    sent = await sendOtpEmail(target, otp);
+    sent = await sendOtpEmail(target, otp, {
+      purpose: "verify",
+      expiresInMinutes: OTP_TTL_MS / 60000,
+    });
   }
 
   if (!sent) {

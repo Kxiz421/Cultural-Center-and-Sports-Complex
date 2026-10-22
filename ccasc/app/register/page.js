@@ -42,16 +42,76 @@ const SELECT_CLASS =
   "h-12 w-full text-base text-foreground data-placeholder:text-foreground/30";
 const LABEL_CLASS = "text-base";
 
+const OTP_LENGTH = 6;
+
 /**
  * Send + verify a one-time code for ONE registration contact (email or SMS).
- * Renders a "Send code" button, and once a code is on its way, the code input
+ * Renders a "Send code" button, and once a code is on its way, six code boxes
  * and a "Verify" button. Reports success upward through `onVerified`.
  */
 function ContactVerifier({ channel, target, verified, onVerified }) {
-  const [code, setCode] = useState("");
+  const [cells, setCells] = useState(() =>
+    Array.from({ length: OTP_LENGTH }, () => ""),
+  );
+  const cellRefs = useRef([]);
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+
+  const code = cells.join("");
+
+  const focusCell = (index) => {
+    const el = cellRefs.current[index];
+    if (el) el.focus();
+  };
+
+  const resetCells = () =>
+    setCells(Array.from({ length: OTP_LENGTH }, () => ""));
+
+  const handleCellChange = (index, event) => {
+    const digit = event.target.value.replace(/\D/g, "").slice(-1);
+    setCells((prev) => {
+      const next = [...prev];
+      next[index] = digit;
+      return next;
+    });
+    if (digit && index < OTP_LENGTH - 1) focusCell(index + 1);
+  };
+
+  const handleCellKeyDown = (index, event) => {
+    if (event.key !== "Backspace") return;
+    if (cells[index]) {
+      setCells((prev) => {
+        const next = [...prev];
+        next[index] = "";
+        return next;
+      });
+      return;
+    }
+    if (index > 0) {
+      event.preventDefault();
+      focusCell(index - 1);
+    }
+  };
+
+  const handleCellPaste = (event) => {
+    event.preventDefault();
+    const pasted = event.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LENGTH);
+    if (!pasted) return;
+
+    const chars = pasted.split("");
+    setCells((prev) => {
+      const next = [...prev];
+      chars.forEach((c, i) => {
+        if (i < OTP_LENGTH) next[i] = c;
+      });
+      return next;
+    });
+    focusCell(Math.min(chars.length, OTP_LENGTH) - 1);
+  };
 
   const sendCode = async () => {
     if (!target) {
@@ -75,6 +135,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
         return;
       }
       setSent(true);
+      resetCells();
       toast.success(`A verification code was sent to ${data.target || target}.`);
     } catch {
       toast.error("Failed to send the code.");
@@ -84,7 +145,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
   };
 
   const verify = async () => {
-    if (code.trim().length < 6) {
+    if (code.length < OTP_LENGTH) {
       toast.error("Enter the 6-digit verification code.");
       return;
     }
@@ -97,7 +158,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
           action: "verify",
           channel,
           target,
-          otp: code.trim(),
+          otp: code,
         }),
       });
       const data = await res.json();
@@ -128,37 +189,26 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={sendCode}
-        disabled={sending}
-      >
-        {sending ? (
-          <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Sending…
-          </>
-        ) : sent ? (
-          "Resend code"
-        ) : (
-          "Send code"
-        )}
-      </Button>
-      {sent && (
-        <>
-          <Input
-            value={code}
-            onChange={(e) =>
-              setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-            }
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            placeholder="6-digit code"
-            className={`${FIELD_CLASS} w-40 text-center tracking-widest`}
-          />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={sendCode}
+          disabled={sending}
+        >
+          {sending ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Sending…
+            </>
+          ) : sent ? (
+            "Resend code"
+          ) : (
+            "Send code"
+          )}
+        </Button>
+        {sent && (
           <Button type="button" onClick={verify} disabled={verifying}>
             {verifying ? (
               <>
@@ -169,7 +219,34 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
               "Verify"
             )}
           </Button>
-        </>
+        )}
+      </div>
+
+      {sent && (
+        <div
+          className="flex gap-2"
+          onPaste={handleCellPaste}
+          role="group"
+          aria-label={`${OTP_LENGTH}-digit verification code`}
+        >
+          {cells.map((digit, index) => (
+            <Input
+              key={index}
+              ref={(el) => {
+                cellRefs.current[index] = el;
+              }}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              autoComplete={index === 0 ? "one-time-code" : "off"}
+              aria-label={`Digit ${index + 1} of ${OTP_LENGTH}`}
+              value={digit}
+              onChange={(e) => handleCellChange(index, e)}
+              onKeyDown={(e) => handleCellKeyDown(index, e)}
+              className="border-input focus-visible:ring-ring h-12 w-10 rounded-md border-2 text-center text-lg font-semibold tracking-widest text-foreground tabular-nums shadow-sm sm:h-14 sm:w-11 sm:text-xl"
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -657,7 +734,7 @@ export default function RegisterPage() {
                           }
                         />
                       </SelectTrigger>
-                      <SelectContent className="max-h-72">
+                      <SelectContent position="popper" className="max-h-60">
                         {provinces.map((province) => (
                           <SelectItem key={province.code} value={province.code}>
                             {province.name}
@@ -687,7 +764,7 @@ export default function RegisterPage() {
                           }
                         />
                       </SelectTrigger>
-                      <SelectContent className="max-h-72">
+                      <SelectContent position="popper" className="max-h-60">
                         {cities.map((city) => (
                           <SelectItem key={city.code} value={city.code}>
                             {city.name}
@@ -716,7 +793,7 @@ export default function RegisterPage() {
                           }
                         />
                       </SelectTrigger>
-                      <SelectContent className="max-h-72">
+                      <SelectContent position="popper" className="max-h-60">
                         {barangays.map((barangay) => (
                           <SelectItem key={barangay.code} value={barangay.name}>
                             {barangay.name}
@@ -840,7 +917,7 @@ export default function RegisterPage() {
                         <SelectTrigger id="organization" className={SELECT_CLASS}>
                           <SelectValue placeholder="Select your organization" />
                         </SelectTrigger>
-                        <SelectContent className="max-h-72">
+                        <SelectContent position="popper" className="max-h-60">
                           {organizations.map((org) => (
                             <SelectItem
                               key={org.clientOrgId}

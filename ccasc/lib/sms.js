@@ -17,8 +17,15 @@ export function isSmsEnabled() {
   return Boolean(username() && password());
 }
 
-export async function sendOtpSms(toE164, otp) {
+export async function sendOtpSms(
+  toE164,
+  otp,
+  { purpose = "reset", expiresInMinutes = 5 } = {},
+) {
   if (!toE164 || !isSmsEnabled()) return false;
+
+  const label =
+    purpose === "verify" ? "verification code" : "password reset code";
 
   try {
     const res = await fetch(`${apiBase()}/messages`, {
@@ -31,7 +38,7 @@ export async function sendOtpSms(toE164, otp) {
       },
       body: JSON.stringify({
         textMessage: {
-          text: `CCASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
+          text: `CCASC: Your ${label} is ${otp}. Valid for ${expiresInMinutes} minutes. Do not share it.`,
         },
         phoneNumbers: [toE164],
       }),

@@ -17,12 +17,32 @@ const transporter = nodemailer.createTransport({
  * @param {string} otp - The 6-digit OTP code
  * @returns {Promise<boolean>} - Whether the email was sent successfully
  */
-export async function sendOtpEmail(to, otp) {
+export async function sendOtpEmail(
+  to,
+  otp,
+  { purpose = "reset", expiresInMinutes = 5 } = {}
+) {
+  const isVerification = purpose === "verify";
+  const heading = isVerification ? "✅ Verify Your Email" : "🔐 Password Recovery";
+  const intro = isVerification
+    ? "Use the code below to verify your email address for your CSASC account."
+    : "We received a request to reset the password for your CSASC account. Use the recovery code below to proceed.";
+  const note = isVerification
+    ? `<strong>⚠️ Didn't create this account?</strong><br>
+                If you did not try to register a CSASC account, you can safely ignore this email.`
+    : `<strong>⚠️ Didn't request this?</strong><br>
+                If you did not request a password reset, please ignore this email. Your account remains secure.`;
+  const closing = isVerification
+    ? "For security, never share this code with anyone. Our team will never ask you for a verification code."
+    : "For security, never share this code with anyone. Our team will never ask for your password or recovery code.";
+
   try {
     const info = await transporter.sendMail({
       from: `"CSASC - Provincial Government of South Cotabato" <${process.env.SMTP_USER}>`,
       to,
-      subject: "Your Password Recovery Code - CSASC",
+      subject: isVerification
+        ? "Your CSASC Verification Code"
+        : "Your Password Recovery Code - CSASC",
       html: `
         <!DOCTYPE html>
         <html>
@@ -102,27 +122,26 @@ export async function sendOtpEmail(to, otp) {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🔐 Password Recovery</h1>
+              <h1>${heading}</h1>
               <p>Provincial Government of South Cotabato</p>
               <p>Gymnasium & Cultural Center / Sports Complex</p>
             </div>
             <div class="body">
               <p>Hello,</p>
-              <p>We received a request to reset the password for your CSASC account. Use the recovery code below to proceed.</p>
+              <p>${intro}</p>
               
               <div class="otp-code">${otp}</div>
               
               <p style="text-align: center; font-size: 14px; color: #4b5563;">
-                This code will expire in <strong>5 minutes</strong>.
+                This code will expire in <strong>${expiresInMinutes} minutes</strong>.
               </p>
 
               <div class="note">
-                <strong>⚠️ Didn't request this?</strong><br>
-                If you did not request a password reset, please ignore this email. Your account remains secure.
+                ${note}
               </div>
               
               <p style="font-size: 13px; color: #6b7280; margin-top: 20px;">
-                For security, never share this code with anyone. Our team will never ask for your password or recovery code.
+                ${closing}
               </p>
             </div>
             <div class="footer">
