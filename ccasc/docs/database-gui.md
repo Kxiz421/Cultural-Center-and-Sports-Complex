@@ -46,6 +46,38 @@ Aiven database — no extra configuration.
 
 ---
 
+## Why it can be slow, and the pool-timeout error
+
+Prisma Studio asks for **a lot at once**: every table in the sidebar, plus each row's related
+records. Prisma's default connection pool is **13 connections with a 10-second timeout**, and on a
+remote database (Aiven) that queue expires while Studio is still loading, giving:
+
+> Timed out fetching a new connection from the connection pool
+> (Current connection pool timeout: 10, connection limit: 13)
+
+The database is not the problem. Run `npm run db:status` and you'll see it allows **76 connections**
+and is using only one or two.
+
+The launcher therefore starts Studio with a larger, more patient pool —
+`connection_limit=15&pool_timeout=60&connect_timeout=30` — which stops that error.
+
+If it is still slow to load:
+
+- **Use the table filter/search** instead of scrolling a whole table; Studio always fetches the first
+  100 rows *with* their relations.
+- **Browse with DBeaver or MySQL Workbench instead** — they read one simple page of rows and are much
+  faster over a remote connection. Keep Prisma Studio for editing.
+- Check the database's health with `npm run db:status` (below).
+
+## Checking the database's health
+
+```
+npm run db:status
+```
+
+Prints the host, `max_connections`, current and peak connection counts, aborted connects, the table
+count and the row counts of the main tables — useful whenever the app or Studio feels slow.
+
 ## Read this before you edit
 
 **This writes straight to the live production database.** There is no undo, no audit trail, and the

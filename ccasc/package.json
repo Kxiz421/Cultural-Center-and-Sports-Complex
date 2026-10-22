@@ -10,6 +10,7 @@
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.mjs",
     "db:studio": "prisma studio",
+    "db:status": "node scripts/db-status.mjs",
     "verify:password-reset": "node scripts/verify-password-reset-scope.mjs",
     "vercel-build": "prisma generate && next build",
     "postinstall": "prisma generate"

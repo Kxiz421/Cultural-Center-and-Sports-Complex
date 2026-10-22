@@ -23,6 +23,26 @@ if not exist ".env" (
   exit /b 1
 )
 
+set "DBURL="
+for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+  if /i "%%A"=="DATABASE_URL" set "DBURL=%%~B"
+)
+
+if not defined DBURL (
+  echo.
+  echo  DATABASE_URL was not found in .env.
+  echo.
+  pause
+  exit /b 1
+)
+
+echo "%DBURL%" | find "?" >nul
+if errorlevel 1 (
+  set "DATABASE_URL=%DBURL%?connection_limit=15&pool_timeout=60&connect_timeout=30"
+) else (
+  set "DATABASE_URL=%DBURL%&connection_limit=15&pool_timeout=60&connect_timeout=30"
+)
+
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5555); $c.Close(); exit 0 } catch { exit 1 }"
 if not errorlevel 1 (
   echo.
