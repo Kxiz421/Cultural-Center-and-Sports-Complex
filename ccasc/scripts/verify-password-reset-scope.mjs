@@ -87,11 +87,13 @@ const MODULE_STUBS = {
   ].join("\n"),
   "@/lib/firebase-admin": [
     "globalThis.__firebaseConfigured = true;",
+    "globalThis.__firebaseUnavailable = false;",
     "globalThis.__firebaseTokens = new Map();",
     "export const isFirebaseConfigured = () => globalThis.__firebaseConfigured === true;",
     "export const verifyFirebaseIdToken = async (idToken) => {",
+    "  if (globalThis.__firebaseUnavailable) return { ok: false, reason: 'unavailable' };",
     "  const phoneNumber = globalThis.__firebaseTokens.get(idToken);",
-    "  return phoneNumber ? { phoneNumber } : null;",
+    "  return phoneNumber ? { ok: true, phoneNumber } : { ok: false, reason: 'invalid' };",
     "};",
   ].join("\n"),
   "@/lib/rate-limit": [
@@ -162,6 +164,7 @@ function seed({ staff = [], client = [] } = {}) {
   prismaStore.client = client;
   (globalThis.__otpSends ||= []).length = 0;
   globalThis.__firebaseConfigured = true;
+  globalThis.__firebaseUnavailable = false;
   (globalThis.__firebaseTokens ||= new Map()).clear();
   return { staff: prismaStore.staff, client: prismaStore.client };
 }
@@ -908,6 +911,38 @@ async function scenarioFirebaseDisabled() {
   }
 }
 
+async function scenarioFirebaseSdkUnavailable() {
+  console.log("\n13b. A Firebase SDK that fails to load answers 503, not 500");
+
+  seed({
+    staff: [],
+    client: [
+      {
+        clientId: 27,
+        email: CLIENT_EMAIL,
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  globalThis.__firebaseUnavailable = true;
+  try {
+    const res = await firebaseVerify(CLIENT_EMAIL, "any-token");
+    check("answers 503", status(res) === 503, `got ${status(res)}`);
+    check(
+      "and the body is JSON the UI can show",
+      res.body?.error ===
+        "Phone recovery is not available right now. Please recover using your email address.",
+      JSON.stringify(res.body),
+    );
+  } finally {
+    globalThis.__firebaseUnavailable = false;
+  }
+}
+
 async function scenarioTicketGuards() {
   console.log("\n14. Tickets are signed, account-bound and short-lived");
 
@@ -1099,6 +1134,7 @@ await scenarioFirebaseReset();
 await scenarioFirebaseRejections();
 await scenarioAmbiguousPhone();
 await scenarioFirebaseDisabled();
+await scenarioFirebaseSdkUnavailable();
 await scenarioTicketGuards();
 await scenarioAllUserTypesPhone();
 

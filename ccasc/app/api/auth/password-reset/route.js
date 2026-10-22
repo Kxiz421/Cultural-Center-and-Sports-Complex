@@ -125,7 +125,12 @@ async function handleFirebaseVerify(body, identifier) {
   }
 
   const verified = await verifyFirebaseIdToken(idToken);
-  const verifiedPhone = verified ? toE164Ph(verified.phoneNumber) : null;
+
+  if (!verified.ok && verified.reason === "unavailable") {
+    return NextResponse.json({ error: FIREBASE_UNAVAILABLE_ERROR }, { status: 503 });
+  }
+
+  const verifiedPhone = verified.ok ? toE164Ph(verified.phoneNumber) : null;
 
   if (!verifiedPhone) {
     return NextResponse.json(
