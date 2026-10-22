@@ -142,8 +142,17 @@ export default function ProvincialDocumentsPage() {
   const displayedDocuments = documents;
 
   const showInitialForm = isSportsComplex && phase.needsReceipt;
+  // Cultural Center: Certification & Contract of Lease unlock only after the
+  // Provincial Treasurer's Office records the full payment.
+  const selectedPaidInFull =
+    selectedBooking?.paymentStatus === "BalanceSettled" ||
+    selectedBooking?.balanceSettled === true;
+  const finalUploadLocked =
+    Boolean(selectedBooking) && !isSportsComplex && !selectedPaidInFull;
   const showFinalForm =
-    !isSportsComplex && (phase.needsCertification || phase.needsLease);
+    !isSportsComplex &&
+    (phase.needsCertification || phase.needsLease) &&
+    selectedPaidInFull;
   const requireBothFinal = phase.needsCertification && phase.needsLease;
 
   const declinedResubmitOptions = React.useMemo(() => {
@@ -329,6 +338,12 @@ export default function ProvincialDocumentsPage() {
     if (isSportsComplex) return;
     if (!selectedReservationId) {
       toast.error("Please select a reservation first.");
+      return;
+    }
+    if (!selectedPaidInFull) {
+      toast.error(
+        "Certification and Contract of Lease can only be uploaded once the reservation is fully paid."
+      );
       return;
     }
     if (!showFinalForm) {
@@ -620,12 +635,21 @@ export default function ProvincialDocumentsPage() {
               <CardHeader>
                 <CardTitle>Certification &amp; Contract of Lease</CardTitle>
                 <CardDescription>
-                  Upload your Certification and Contract of Lease.
-                  {requireBothFinal ? " Upload both together." : ""}
+                  {finalUploadLocked
+                    ? "Locked until the reservation is fully paid at the Provincial Treasurer's Office."
+                    : `Upload your Certification and Contract of Lease.${
+                        requireBothFinal ? " Upload both together." : ""
+                      }`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!showFinalForm ? (
+                {finalUploadLocked ? (
+                  <div className="rounded-md border border-dashed bg-muted/30 p-6 text-sm text-muted-foreground">
+                    Locked. Certification and Contract of Lease can be uploaded
+                    once the Provincial Treasurer&apos;s Office records the full
+                    payment.
+                  </div>
+                ) : !showFinalForm ? (
                   <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
                     Certification and Contract of Lease are already pending review
                     or verified for this booking.

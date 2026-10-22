@@ -1548,31 +1548,6 @@ export default function CoordinatorReservationsPage() {
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
 
-              {/* Customize Per Date Button - available even for a single date */}
-              {selectedDates.size > 0 && (
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant={customizePerDate ? "default" : "outline"}
-                    size="sm"
-                    onClick={toggleCustomizeMode}
-                    className="flex items-center gap-2"
-                  >
-                    <Layers className="size-4" />
-                    {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
-                  </Button>
-                  {customizePerDate && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowCustomizeDialog(true)}
-                    >
-                      Edit Per-Date Details
-                    </Button>
-                  )}
-                </div>
-              )}
             </div>
             <div className="space-y-2">
               <Label>Time Slot</Label>
@@ -1597,7 +1572,7 @@ export default function CoordinatorReservationsPage() {
               ) : facilities.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
               ) : (
-                <div className={`rounded-md border divide-y max-h-64 overflow-y-auto ${customizePerDate ? "opacity-60 pointer-events-none" : ""}`}>
+                <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
                   {/* Select All */}
                   {(() => {
                     const availableFacilities = facilities.filter(
@@ -1610,7 +1585,7 @@ export default function CoordinatorReservationsPage() {
                     const someSelected =
                       selectedAvailable.length > 0 && selectedAvailable.length < availableIds.length;
                     const selectAllDisabled =
-                      customizePerDate || selectedDates.size === 0 || availableIds.length === 0;
+                      selectedDates.size === 0 || availableIds.length === 0;
                     return (
                       <label
                         className={`flex items-center gap-3 px-3 py-2.5 text-sm border-b ${
@@ -1660,7 +1635,7 @@ export default function CoordinatorReservationsPage() {
                     const qty = facilityQuantities[id] || 0;
                     const rate = getFacilityRateBySlot(f, timeSlotId);
                     const maxQty = getFacilityMaxQuantity(f);
-                    const disabled = customizePerDate || reserved || selectedDates.size === 0;
+                    const disabled = reserved || selectedDates.size === 0;
                     return (
                       <div
                         key={id}
@@ -1711,14 +1686,9 @@ export default function CoordinatorReservationsPage() {
                   })}
                 </div>
               )}
-              {!customizePerDate && hasAnyFacilityQuantity(facilityQuantities) && (
+              {hasAnyFacilityQuantity(facilityQuantities) && (
                 <p className="text-xs text-muted-foreground">
                   {Object.values(facilityQuantities).reduce((s, q) => s + (Number(q) || 0), 0)} unit(s) selected
-                </p>
-              )}
-              {customizePerDate && (
-                <p className="text-xs text-muted-foreground">
-                  Locked while using per-date settings. Edit each date in Per-Date Details.
                 </p>
               )}
             </div>

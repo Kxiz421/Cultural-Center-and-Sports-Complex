@@ -106,6 +106,7 @@ export default function ClientDocumentsPage() {
   const [uploading, setUploading] = React.useState(false);
   const [bookings, setBookings] = React.useState([]);
   const [selectedKey, setSelectedKey] = React.useState("");
+  const [paymentStatusByRes, setPaymentStatusByRes] = React.useState({});
   const [searchQuery, setSearchQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [viewDoc, setViewDoc] = React.useState(null);
@@ -160,8 +161,16 @@ export default function ClientDocumentsPage() {
   }, [bookings, searchQuery, typeFilter]);
 
   const showInitialForm = phase.isSportsComplex && phase.needsReceipt;
+  const selectedPaidInFull =
+    paymentStatusByRes[Number(selectedItem?.reservationId)] === "BalanceSettled";
+  // Cultural Center: Certification & Contract of Lease stay locked until the
+  // Provincial Treasurer's Office records the full payment.
+  const finalUploadLocked =
+    Boolean(selectedItem) && !phase.isSportsComplex && !selectedPaidInFull;
   const showFinalForm =
-    !phase.isSportsComplex && (phase.needsCertification || phase.needsLease);
+    !phase.isSportsComplex &&
+    (phase.needsCertification || phase.needsLease) &&
+    selectedPaidInFull;
   const requireBothFinal = phase.needsCertification && phase.needsLease;
 
   const declinedResubmitOptions = React.useMemo(() => {
@@ -191,9 +200,21 @@ export default function ClientDocumentsPage() {
           eligibleBookings: "true",
           clientId: cleanId,
         });
-        const res = await fetch(`/api/documents?${params.toString()}`);
+        const [res, resRes] = await Promise.all([
+          fetch(`/api/documents?${params.toString()}`),
+          fetch(`/api/reservations?clientId=${cleanId}`),
+        ]);
         const data = await res.json();
+        const resData = await resRes.json();
         setBookings(Array.isArray(data) ? data : []);
+        if (Array.isArray(resData)) {
+          const map = {};
+          for (const r of resData) {
+            const num = Number(String(r.id).replace(/^RES-/i, ""));
+            if (Number.isFinite(num)) map[num] = r.paymentStatus || "Pending";
+          }
+          setPaymentStatusByRes(map);
+        }
       } catch (err) {
         console.error("Failed to load bookings:", err);
         toast.error("Failed to load your bookings.");
@@ -343,6 +364,12 @@ export default function ClientDocumentsPage() {
     e.preventDefault();
     if (!selectedItem) {
       toast.error("Please select a booking or reservation first.");
+      return;
+    }
+    if (!selectedPaidInFull) {
+      toast.error(
+        "Certification and Contract of Lease can only be uploaded once your reservation is fully paid."
+      );
       return;
     }
     if (!showFinalForm) {
@@ -712,12 +739,21 @@ export default function ClientDocumentsPage() {
               <CardHeader>
                 <CardTitle>Certification &amp; Contract of Lease</CardTitle>
                 <CardDescription>
-                  Upload your Certification and Contract of Lease.
-                  {requireBothFinal ? " Upload both together." : ""}
+                  {finalUploadLocked
+                    ? "Locked until your reservation is fully paid at the Provincial Treasurer's Office."
+                    : `Upload your Certification and Contract of Lease.${
+                        requireBothFinal ? " Upload both together." : ""
+                      }`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!showFinalForm ? (
+                {finalUploadLocked ? (
+                  <div className="rounded-md border border-dashed bg-muted/30 p-6 text-sm text-muted-foreground">
+                    Locked. Certification and Contract of Lease can be uploaded
+                    once the Provincial Treasurer&apos;s Office records your full
+                    payment.
+                  </div>
+                ) : !showFinalForm ? (
                 <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
                   Certification and Contract of Lease are already pending review
                   or verified for this booking.

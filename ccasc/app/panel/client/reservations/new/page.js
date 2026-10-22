@@ -344,6 +344,11 @@ export default function ClientNewReservationPage() {
     // For Sports Complex, default timeSlotId to Day (1)
     if (field === "venueId" && value === "2") {
       setForm((prev) => ({ ...prev, timeSlotId: prev.timeSlotId || "1" }));
+      // Sports Complex books per facility, so per-date customization is not
+      // used — make sure it can never leave the facility list locked.
+      setCustomizePerDate(false);
+      setDateCustomizations({});
+      setShowCustomizeDialog(false);
     }
   };
 
@@ -1018,7 +1023,8 @@ export default function ClientNewReservationPage() {
         } else if (
           session.packageId === "0" ||
           session.packageId === "custom" ||
-          !session.packageId
+          !session.packageId ||
+          isFacilityPackageId(session.packageId)
         ) {
           for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
             if (qty > 0) {
@@ -1077,6 +1083,17 @@ export default function ClientNewReservationPage() {
         return p;
       });
       selectedPackageId = null;
+    } else if (isFacilityPackageId(form.packageId)) {
+      // A Cultural Center facility rental (incl. the "Venue Rental" facility)
+      // carries the additional particulars the client selected.
+      selectedPackageId = null;
+      selectedParticulars = getVirtualPackageParticulars(
+        form.packageId,
+        particulars,
+        particularQuantities,
+        form.timeSlotId,
+        form.venueRentalSlot
+      );
     } else {
       // Only include particulars if custom or no package
       if (form.packageId === "custom" || form.packageId === "0" || !form.packageId) {
@@ -1525,37 +1542,6 @@ const renderPerDateFacilities = (date, cust) => {
             {/* Conditional: Package Inclusions, Particulars Selector, or Facilities */}
             {step === STEP_PACKAGE && (
             <>
-            {/* Customize Per Date - below the package dropdown, unlocked by dates */}
-            {!isSportsComplex && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
-                <Button
-                  type="button"
-                  variant={customizePerDate ? "default" : "outline"}
-                  size="sm"
-                  onClick={toggleCustomizeMode}
-                  disabled={selectedDates.size === 0}
-                  className="flex items-center gap-2"
-                >
-                  <Layers className="size-4" />
-                  {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
-                </Button>
-                {customizePerDate && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCustomizeDialog(true)}
-                  >
-                    Edit Per-Date Details
-                  </Button>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {selectedDates.size === 0
-                    ? "Select dates in the next step to unlock per-date settings."
-                    : "Set a different package and services for each selected date."}
-                </span>
-              </div>
-            )}
             {isSportsComplex ? (
               <div className="space-y-2">
                 <Label>Facilities</Label>
@@ -1565,13 +1551,6 @@ const renderPerDateFacilities = (date, cust) => {
                     ? " Facilities already reserved on a selected date cannot be chosen."
                     : " Select dates first to see which facilities are available."}
                 </p>
-                {customizePerDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Facilities are set per date. Use{" "}
-                    <span className="font-medium text-foreground">Edit Per-Date Details</span> to
-                    choose the facilities for each date.
-                  </p>
-                )}
                 {facilitiesLoading || (selectedDates.size > 0 && facilityAvailLoading) ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                     <Loader2 className="size-4 animate-spin" />
@@ -1580,11 +1559,7 @@ const renderPerDateFacilities = (date, cust) => {
                 ) : facilities.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">No Sports Complex facilities found.</p>
                 ) : (
-                  <div
-                    className={`rounded-md border divide-y max-h-64 overflow-y-auto ${
-                      customizePerDate ? "opacity-60 pointer-events-none" : ""
-                    }`}
-                  >
+                  <div className="rounded-md border divide-y max-h-64 overflow-y-auto">
                     {/* Select All */}
                     {(() => {
                       const availableFacilities = facilities.filter(
@@ -1785,6 +1760,13 @@ const renderPerDateFacilities = (date, cust) => {
                     })()}
                   </div>
                 </>
+              ) : isFacilityPackageId(form.packageId) ? (
+                <VenueRentalParticularsList
+                  particulars={particulars}
+                  particularsLoading={particularsLoading}
+                  particularQuantities={particularQuantities}
+                  onChange={setParticularQuantities}
+                />
               ) : null}
             </div>
             )}
@@ -1960,6 +1942,15 @@ const renderPerDateFacilities = (date, cust) => {
                               onChange={(pq) => handleDateSessionParticularQuantitiesChange(date, sessionKey, pq)}
                             />
                           </>
+                        )}
+                        {isFacilityPackageId(s.packageId) && (
+                          <VenueRentalParticularsList
+                            compact
+                            particulars={particulars}
+                            particularsLoading={particularsLoading}
+                            particularQuantities={s.particularQuantities || {}}
+                            onChange={(pq) => handleDateSessionParticularQuantitiesChange(date, sessionKey, pq)}
+                          />
                         )}
                       </div>
                     )}

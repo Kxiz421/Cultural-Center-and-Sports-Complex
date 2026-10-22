@@ -130,20 +130,33 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
     DOWN_PAYMENT_STATUSES.includes(paymentStatus) ||
     (requiredDownPayment > 0 && amountPaid >= requiredDownPayment);
   const documentsDone = documentsComplete(documentsPhase);
-  const bookingConfirmedDone =
-    reservationStatus === "Confirmed" || bookingStatus === "Confirmed";
+  // Only the Program Coordinator's confirmation marks this step done: recording
+  // a full payment also flips the booking row to "Confirmed", which must not
+  // turn this step green.
+  const bookingConfirmedDone = reservationStatus === "Confirmed";
   const finalBalanceDone =
     nothingToPay ||
     paymentStatus === "BalanceSettled" ||
     (totalPayable > 0 && amountPaid >= totalPayable);
 
-  const steps = [
-    { key: "submitted", title: "Reservation Submitted", done: true },
-    { key: "order-of-payment", title: "Order of Payment", done: orderOfPaymentDone },
-    { key: "documents", title: "Submit Documents", done: documentsDone },
-    { key: "booking-confirmed", title: "Booking Confirmed", done: bookingConfirmedDone },
-    { key: "final-balance", title: "Final Balance Settled", done: finalBalanceDone },
-  ];
+  // Venue-specific process order. Cultural Center settles the full balance
+  // before uploading the Certification & Contract of Lease; Sports Complex
+  // submits the Official Receipt first, then settles the balance last.
+  const steps = isSportsComplex
+    ? [
+        { key: "submitted", title: "Reservation Submitted", done: true },
+        { key: "order-of-payment", title: "Order of Payment", done: orderOfPaymentDone },
+        { key: "documents", title: "Submit Documents", done: documentsDone },
+        { key: "booking-confirmed", title: "Booking Confirmed", done: bookingConfirmedDone },
+        { key: "final-balance", title: "Final Balance Settled", done: finalBalanceDone },
+      ]
+    : [
+        { key: "submitted", title: "Reservation Submitted", done: true },
+        { key: "order-of-payment", title: "Order of Payment", done: orderOfPaymentDone },
+        { key: "final-balance", title: "Financial Balance Settled", done: finalBalanceDone },
+        { key: "documents", title: "Submit Documents", done: documentsDone },
+        { key: "booking-confirmed", title: "Booking Confirmed", done: bookingConfirmedDone },
+      ];
 
   const allDone = steps.every((s) => s.done);
   const isComplete = allDone && !cancelled;
@@ -182,7 +195,8 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
     instruction = `Your reservation is all set! All payments and requirements are complete. Present this booking summary and your Order of Payment on the event date.`;
   } else {
     headline = steps[currentIndex]?.title || "In Progress";
-    if (currentIndex === 1) {
+    const currentKey = steps[currentIndex]?.key;
+    if (currentKey === "order-of-payment") {
       instruction = `Pay your Order of Payment at the cashier, Provincial Treasurer's Office. Bring a copy of your Order of Payment (Control No. ${
         r.id || ""
       }). Required: 50% down payment (${formatPhp(
@@ -190,21 +204,23 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
       )}) and 10% deposit (${formatPhp(requiredDeposit)}). Due by ${
         r.downPaymentDeadline || "the down payment deadline"
       }.`;
-    } else if (currentIndex === 2) {
-      if (documentsPending(documentsPhase)) {
-        instruction = `Your ${documentsRequired} is awaiting review. You'll be notified once it is verified.`;
-      } else {
-        instruction = `Submit your ${documentsRequired} for review from the Documents page. Your booking is confirmed only after these documents are approved.`;
-      }
-    } else if (currentIndex === 3) {
-      instruction =
-        "Your documents are complete. The Program Coordinator will confirm your booking shortly — you'll be notified once it's confirmed.";
-    } else if (currentIndex === 4) {
+    } else if (currentKey === "final-balance") {
       instruction = `Settle the remaining balance of ${formatPhp(
         remainingPayable
-      )} at the Provincial Treasurer's Office cashier. Due by ${
+      )} at the Provincial Treasurer's Office cashier. Recording your full payment unlocks the next steps. Due by ${
         r.balanceDeadline || "the balance deadline"
       }.`;
+    } else if (currentKey === "documents") {
+      if (documentsPending(documentsPhase)) {
+        instruction = `Your ${documentsRequired} is awaiting review by the Program Coordinator. You'll be notified once it is verified.`;
+      } else if (isSportsComplex) {
+        instruction = `Submit your ${documentsRequired} for review from the Documents page.`;
+      } else {
+        instruction = `Your payment is complete. Submit your ${documentsRequired} for review from the Documents page — the Program Coordinator verifies them before confirming your booking.`;
+      }
+    } else if (currentKey === "booking-confirmed") {
+      instruction =
+        "Your documents are verified. The Program Coordinator will confirm your booking shortly — you'll be notified once it's confirmed.";
     } else {
       instruction = "";
     }

@@ -508,6 +508,14 @@ export function buildReservationSummaryLines({
                 facilityId: line.facilityId,
               });
             }
+            // A facility rental (incl. the Cultural Center "Venue Rental"
+            // facility) can also carry additional particulars.
+            lines.push(
+              ...particularChargeLines(particulars, session.particularQuantities, {
+                date,
+                prefix: `${sessionLabel} — `,
+              })
+            );
           } else if (pkgId === "0" || pkgId === "custom" || !pkgId) {
             for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
               if (qty > 0) {
@@ -563,6 +571,9 @@ export function buildReservationSummaryLines({
               facilityId: line.facilityId,
             });
           }
+          lines.push(
+            ...particularChargeLines(particulars, cust.particularQuantities, { date })
+          );
         } else if (
           cust.packageId === "0" ||
           cust.packageId === "custom" ||
@@ -630,6 +641,10 @@ export function buildReservationSummaryLines({
         quantity: line.quantity,
       });
     }
+    // A facility rental can also carry additional particulars.
+    lines.push(
+      ...particularChargeLines(particulars, particularQuantities, { days: numDays })
+    );
   } else if (packageId === "custom" || packageId === "0" || !packageId) {
     for (const [partId, qty] of Object.entries(particularQuantities || {})) {
       if (qty > 0) {

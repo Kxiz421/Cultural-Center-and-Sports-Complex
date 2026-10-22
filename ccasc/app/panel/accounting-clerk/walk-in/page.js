@@ -1030,7 +1030,8 @@ export default function WalkInReservationPage() {
           } else if (
             session.packageId === "0" ||
             session.packageId === "custom" ||
-            !session.packageId
+            !session.packageId ||
+            isFacilityPackageId(session.packageId)
           ) {
             for (const [partId, qty] of Object.entries(session.particularQuantities || {})) {
               if (qty > 0) {
@@ -1089,6 +1090,17 @@ export default function WalkInReservationPage() {
           return p;
         });
         selectedPackageId = null;
+      } else if (isFacilityPackageId(packageId)) {
+        // A Cultural Center facility rental (incl. the "Venue Rental" facility)
+        // carries the additional particulars the client selected.
+        selectedPackageId = null;
+        selectedParticulars = getVirtualPackageParticulars(
+          packageId,
+          particulars,
+          particularQuantities,
+          timeSlotId,
+          venueRentalSlot
+        );
       } else {
         // Only include particulars if custom or no package
         if (packageId === "custom" || packageId === "0" || !packageId) {
@@ -1669,7 +1681,19 @@ const renderPerDateFacilities = (date, cust) => {
             <>
             <div className="space-y-2">
               <Label>Venue *</Label>
-              <Select value={venueId} onValueChange={setVenueId}>
+              <Select
+                value={venueId}
+                onValueChange={(v) => {
+                  setVenueId(v);
+                  if (v === "2") {
+                    // Sports Complex books per facility; per-date settings would
+                    // otherwise leave the facility list locked.
+                    setCustomizePerDate(false);
+                    setDateCustomizations({});
+                    setShowCustomizeDialog(false);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select venue" />
                 </SelectTrigger>
@@ -1789,37 +1813,6 @@ const renderPerDateFacilities = (date, cust) => {
                 )}
               </div>
               )}
-            {/* Customize Per Date — below the package dropdown, unlocked by dates */}
-            {!isSportsComplex && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
-                <Button
-                  type="button"
-                  variant={customizePerDate ? "default" : "outline"}
-                  size="sm"
-                  onClick={toggleCustomizeMode}
-                  disabled={selectedDates.size === 0}
-                  className="flex items-center gap-2"
-                >
-                  <Layers className="size-4" />
-                  {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
-                </Button>
-                {customizePerDate && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCustomizeDialog(true)}
-                  >
-                    Edit Per-Date Details
-                  </Button>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {selectedDates.size === 0
-                    ? "Select dates in the next step to unlock per-date settings."
-                    : "Set a different package and services for each selected date."}
-                </span>
-              </div>
-            )}
 {/* Conditional: Package Inclusions, virtual packages, particulars, or Facilities */}
             {isSportsComplex ? (
               <div className="space-y-2">
@@ -2039,6 +2032,13 @@ const renderPerDateFacilities = (date, cust) => {
                     })()}
                   </div>
                 </>
+              ) : isFacilityPackageId(packageId) ? (
+                <VenueRentalParticularsList
+                  particulars={particulars}
+                  particularsLoading={particularsLoading}
+                  particularQuantities={particularQuantities}
+                  onChange={setParticularQuantities}
+                />
               ) : (packageId === "custom" || packageId === "0" || !packageId) ? null : null}
             </div>
             )}
@@ -2315,6 +2315,15 @@ const renderPerDateFacilities = (date, cust) => {
                               onChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
                             />
                           </>
+                        )}
+                        {isFacilityPackageId(s.packageId) && (
+                          <VenueRentalParticularsList
+                            compact
+                            particulars={particulars}
+                            particularsLoading={particularsLoading}
+                            particularQuantities={s.particularQuantities || {}}
+                            onChange={(pq) => handleDateSessionVirtualParticularQuantitiesChange(date, sessionKey, pq)}
+                          />
                         )}
                       </div>
                     )}

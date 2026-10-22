@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isCoordinatorInboxNotification } from "@/lib/panel-notifications";
+import { getProgramCoordinatorStaffIds } from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
@@ -54,7 +55,15 @@ export async function GET(request) {
     const scope = searchParams.get("scope");
 
     let whereClause = {};
-    if (clientId) whereClause.clientId = clientId;
+    if (clientId) {
+      whereClause.clientId = clientId;
+      // Staff-targeted rows (addressed to a Program Coordinator) can sit on the
+      // same client; keep them out of the client's own inbox.
+      const coordinatorIds = await getProgramCoordinatorStaffIds();
+      if (coordinatorIds.length > 0) {
+        whereClause.staffId = { notIn: coordinatorIds };
+      }
+    }
     if (staffId) whereClause.staffId = parseInt(staffId, 10);
 
     const keyOf = (n) => `${n.type || ""}\u0000${n.message || ""}`;
@@ -65,8 +74,15 @@ export async function GET(request) {
         if (isNaN(parsedClientId)) {
           return noCacheJson({ unreadCount: 0 });
         }
+        const coordinatorIds = await getProgramCoordinatorStaffIds();
         const unread = await prisma.notification.findMany({
-          where: { clientId: parsedClientId, isRead: false },
+          where: {
+            clientId: parsedClientId,
+            isRead: false,
+            ...(coordinatorIds.length > 0
+              ? { staffId: { notIn: coordinatorIds } }
+              : {}),
+          },
           select: { type: true, message: true },
         });
         return noCacheJson({ unreadCount: new Set(unread.map(keyOf)).size });

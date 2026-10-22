@@ -73,17 +73,25 @@ export async function createClientNotification({ clientId, message, type }) {
   });
 }
 
+/** All Program Coordinator staff ids — used to hide their inbox rows from clients. */
+export async function getProgramCoordinatorStaffIds() {
+  const rows = await prisma.staff.findMany({
+    where: { staffRole: { roleName: "Program Coordinator" } },
+    select: { staffId: true },
+  });
+  return rows.map((r) => r.staffId);
+}
+
 /**
  * Create inbox notifications for Cultural Center program coordinator(s).
- * Notification.staffId is the recipient; clientId is the related client.
+ *
+ * `staffId` is the RECIPIENT (the coordinator). `clientId` must stay NULL on
+ * staff-targeted rows (see the Notification model) — otherwise the row also
+ * matches the related client's inbox and the client sees a "new document
+ * submitted"/"new reschedule request" notice about their own action.
  */
-export async function notifyCulturalCenterCoordinators({
-  message,
-  type,
-  clientId,
-  link,
-}) {
-  if (!clientId || !message) return;
+export async function notifyCulturalCenterCoordinators({ message, type, link }) {
+  if (!message) return;
 
   try {
     const staffIds = await getCulturalCenterCoordinatorStaffIds();
@@ -92,7 +100,7 @@ export async function notifyCulturalCenterCoordinators({
         message,
         type: type || "General",
         staffId,
-        clientId: Number(clientId),
+        clientId: null,
         link: link || null,
         sentAt: new Date(),
       })),
@@ -104,15 +112,10 @@ export async function notifyCulturalCenterCoordinators({
 
 /**
  * Create inbox notifications for Sports Complex program coordinator(s).
- * Notification.staffId is the recipient; clientId is the related client.
+ * `staffId` is the recipient; `clientId` stays NULL (see above).
  */
-export async function notifySportsComplexCoordinators({
-  message,
-  type,
-  clientId,
-  link,
-}) {
-  if (!clientId || !message) return;
+export async function notifySportsComplexCoordinators({ message, type, link }) {
+  if (!message) return;
 
   try {
     const staffIds = await getSportsComplexCoordinatorStaffIds();
@@ -121,7 +124,7 @@ export async function notifySportsComplexCoordinators({
         message,
         type: type || "General",
         staffId,
-        clientId: Number(clientId),
+        clientId: null,
         link: link || null,
         sentAt: new Date(),
       })),
