@@ -32,13 +32,6 @@ class AccountDeactivatedError extends CredentialsSignin {
   }
 }
 
-class VerificationPendingError extends CredentialsSignin {
-  constructor() {
-    super();
-    this.code = "verification_pending";
-  }
-}
-
 class RateLimitedError extends CredentialsSignin {
   constructor() {
     super();
@@ -103,8 +96,6 @@ const CLIENT_AUTH_SELECT = {
   clientId: true,
   password: true,
   accountStatus: true,
-  verificationStatus: true,
-  remarks: true,
   firstName: true,
   lastName: true,
   email: true,
@@ -204,31 +195,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new AccountDeactivatedError();
           }
 
-          const isDeclined = client.verificationStatus === "Declined";
-          const isPending =
-            client.accountStatus === "Pending" ||
-            client.verificationStatus === "Pending";
-
-          // A declined Certificate of Employment gets a deliberately
-          // restricted session: resubmission flow only, never a panel.
-          if (isDeclined) {
-            clearLoginAttempts(ip);
-            return {
-              id: `CLT-${client.clientId}`,
-              type: USER_TYPE.RESUBMIT_ONLY,
-              role: client.clientRole?.roleName ?? null,
-              firstName: client.firstName,
-              lastName: client.lastName,
-              email: client.email,
-              clientId: client.clientId,
-              orgName: null,
-              remarks: client.remarks ?? null,
-              sessionToken: await rotateSessionToken("client", client.clientId),
-            };
-          }
-
-          if (isPending) throw new VerificationPendingError();
-
+          // Registration no longer requires admin verification: a newly created
+          // client can sign in immediately. Only deactivated (archived) accounts
+          // are blocked, so archiving/restoring remains the access control.
           clearLoginAttempts(ip);
           return {
             id: `CLT-${client.clientId}`,

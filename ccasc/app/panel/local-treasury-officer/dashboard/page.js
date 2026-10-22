@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
+import { RevenueCharts } from "@/components/revenue-charts";
 import { Wallet, BellRing } from "lucide-react";
 
 export default function LTOODashboardPage() {
@@ -71,6 +72,8 @@ export default function LTOODashboardPage() {
         revenue={stats?.revenue}
         note="Payments recorded in this window."
       />
+
+      <RevenueCharts description="Payments recorded across both venues." />
     </div>
   );
 }

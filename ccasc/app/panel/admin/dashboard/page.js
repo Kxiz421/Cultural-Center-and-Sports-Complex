@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
+import { RevenueCharts } from "@/components/revenue-charts";
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState(null);
@@ -67,6 +68,8 @@ export default function AdminDashboardPage() {
         revenue={revenue}
         note="Both venues combined."
       />
+
+      <RevenueCharts description="Both venues combined." />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

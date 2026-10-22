@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
 import {
   Avatar,
   AvatarImage,
@@ -56,18 +56,6 @@ const ROLE_LABELS = {
 };
 
 const PAGE_SIZE = 5;
-
-const VERIFICATION_FILTERS = [
-  { value: "all", label: "All Verification" },
-  { value: "Pending", label: "Pending" },
-  { value: "Verified", label: "Verified" },
-  { value: "Declined", label: "Declined" },
-];
-
-function verificationStatusOf(user) {
-  if (!user || user.type !== "client") return null;
-  return user.verificationStatus || "Pending";
-}
 
 function nextAccountId(existing, roleValue) {
   const prefix =
@@ -211,7 +199,6 @@ export default function UserManagementPage() {
   const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(1);
   const [roleFilter, setRoleFilter] = React.useState("all");
-  const [verificationFilter, setVerificationFilter] = React.useState("all");
   const [documents, setDocuments] = React.useState([]);
   const [docUser, setDocUser] = React.useState(null);
   const [docLoading, setDocLoading] = React.useState(false);
@@ -240,8 +227,6 @@ export default function UserManagementPage() {
   const [saveConfirmOpen, setSaveConfirmOpen] = React.useState(false);
   const [confirmUser, setConfirmUser] = React.useState(null);
   const [confirmSaveOpen, setConfirmSaveOpen] = React.useState(false);
-  const [verifyConfirmOpen, setVerifyConfirmOpen] = React.useState(false);
-  const [verifyConfirmUser, setVerifyConfirmUser] = React.useState(null);
   const [currentUserId] = React.useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("user_id") || "";
@@ -586,89 +571,6 @@ export default function UserManagementPage() {
     setConfirmOpen(true);
   };
 
-  const handleConfirmToggleVerification = (user) => {
-    setVerifyConfirmUser(user);
-    setVerifyConfirmOpen(true);
-  };
-
-  const handleToggleVerification = async (user) => {
-    const newStatus = user.verificationStatus === "Verified" ? "Pending" : "Verified";
-    try {
-      const res = await fetch('/api/users/verification', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, verificationStatus: newStatus }),
-      });
-      if (!res.ok) throw new Error('Failed to update verification status');
-      toast.success(`Verification status set to ${newStatus}`);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, verificationStatus: newStatus } : u))
-      );
-      if (selectedUser?.id === user.id) {
-        setSelectedUser((prev) => ({ ...prev, verificationStatus: newStatus }));
-      }
-    } catch (err) {
-      toast.error("Failed to update verification status");
-    }
-  };
-
-  const [declineConfirmOpen, setDeclineConfirmOpen] = React.useState(false);
-  const [declineConfirmUser, setDeclineConfirmUser] = React.useState(null);
-  const [declineRemarks, setDeclineRemarks] = React.useState("");
-  const [resubmitConfirmOpen, setResubmitConfirmOpen] = React.useState(false);
-  const [resubmitConfirmUser, setResubmitConfirmUser] = React.useState(null);
-  const [resubmitRemarks, setResubmitRemarks] = React.useState("");
-
-  const handleDeclineDocument = (user) => {
-    setDeclineConfirmUser(user);
-    setDeclineConfirmOpen(true);
-  };
-
-  const handleRequestResubmission = (user) => {
-    setResubmitConfirmUser(user);
-    setResubmitConfirmOpen(true);
-  };
-
-  const handleConfirmDecline = async () => {
-    if (!declineConfirmUser) return;
-    await handleToggleVerificationStatus(declineConfirmUser, "Declined", declineRemarks.trim());
-    setDeclineRemarks("");
-    setDeclineConfirmOpen(false);
-    setDeclineConfirmUser(null);
-    setDocOpen(false);
-  };
-
-  const handleConfirmResubmission = async () => {
-    if (!resubmitConfirmUser) return;
-    await handleToggleVerificationStatus(resubmitConfirmUser, "Declined", resubmitRemarks.trim());
-    setResubmitRemarks("");
-    setResubmitConfirmOpen(false);
-    setResubmitConfirmUser(null);
-    setDocOpen(false);
-  };
-
-  const handleToggleVerificationStatus = async (user, newStatus, remarks) => {
-    try {
-      const body = { userId: user.id, verificationStatus: newStatus };
-      if (remarks) body.remarks = remarks;
-      const res = await fetch('/api/users/verification', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('Failed to update verification status');
-      toast.success(`Verification status set to ${newStatus}`);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, verificationStatus: newStatus } : u))
-      );
-      if (selectedUser?.id === user.id) {
-        setSelectedUser((prev) => ({ ...prev, verificationStatus: newStatus }));
-      }
-    } catch (err) {
-      toast.error("Failed to update verification status");
-    }
-  };
-
   const handleOpenHistory = async () => {
     setHistoryOpen(true);
     setHistoryLoading(true);
@@ -705,13 +607,6 @@ export default function UserManagementPage() {
   const filtered = users.filter((u) => {
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
 
-    if (
-      verificationFilter !== "all" &&
-      verificationStatusOf(u) !== verificationFilter
-    ) {
-      return false;
-    }
-
     const hay = [
       u.id,
       u.firstName,
@@ -737,11 +632,6 @@ export default function UserManagementPage() {
     setPage(1);
   };
 
-  const handleVerificationFilterChange = (value) => {
-    setVerificationFilter(value);
-    setPage(1);
-  };
-
   const ordered = [...filtered].sort(
     (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
   );
@@ -752,8 +642,7 @@ export default function UserManagementPage() {
     page * PAGE_SIZE
   );
 
-  const showQueue = verificationFilter === "Pending";
-  const columnCount = showQueue ? 8 : 7;
+  const columnCount = 6;
 
   return (
     <div className="flex flex-col gap-6">
@@ -1110,27 +999,6 @@ export default function UserManagementPage() {
                       className="w-full h-full object-contain"
                     />
                   </div>
-                  {/* Action buttons for idProof documents */}
-                  {doc.id === 0 && docUser && (
-                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 border-red-300 hover:bg-red-50"
-                        onClick={() => handleDeclineDocument(docUser)}
-                      >
-                        Decline
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                        onClick={() => handleRequestResubmission(docUser)}
-                      >
-                        Request Resubmission
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -1165,109 +1033,6 @@ export default function UserManagementPage() {
               }}
             >
               {confirmUser?.status === "Active" ? "Deactivate" : "Activate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Verification Dialog */}
-      <Dialog open={verifyConfirmOpen} onOpenChange={setVerifyConfirmOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="size-5" />
-              {verifyConfirmUser?.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
-            </DialogTitle>
-            <DialogDescription>
-              {verifyConfirmUser?.verificationStatus === "Verified"
-                ? `Are you sure you want to set ${verifyConfirmUser?.firstName} ${verifyConfirmUser?.lastName}'s verification back to Pending? They will not be able to log in until verified again.`
-                : `Are you sure you want to verify ${verifyConfirmUser?.firstName} ${verifyConfirmUser?.lastName}? They will be able to log in once verified.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setVerifyConfirmOpen(false); setVerifyConfirmUser(null); }}>
-              Cancel
-            </Button>
-            <Button
-              variant={verifyConfirmUser?.verificationStatus === "Verified" ? "destructive" : "default"}
-              onClick={() => {
-                if (verifyConfirmUser) handleToggleVerification(verifyConfirmUser);
-                setVerifyConfirmOpen(false);
-                setVerifyConfirmUser(null);
-              }}
-            >
-              {verifyConfirmUser?.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Decline Document Dialog */}
-      <Dialog open={declineConfirmOpen} onOpenChange={(open) => { setDeclineConfirmOpen(open); if (!open) { setDeclineConfirmUser(null); setDeclineRemarks(""); } }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <XCircle className="size-5 text-red-500" />
-              Decline Document
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to decline {declineConfirmUser?.firstName} {declineConfirmUser?.lastName}&apos;s Certificate of Employment?
-              Their account will be marked as declined.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label>Reason for declining (required)</Label>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Explain why the document is being declined..."
-              value={declineRemarks}
-              onChange={(e) => setDeclineRemarks(e.target.value)}
-            />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setDeclineConfirmOpen(false); setDeclineConfirmUser(null); setDeclineRemarks(""); }}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDecline} disabled={!declineRemarks.trim()}>
-              Decline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Request Resubmission Dialog */}
-      <Dialog open={resubmitConfirmOpen} onOpenChange={(open) => { setResubmitConfirmOpen(open); if (!open) { setResubmitConfirmUser(null); setResubmitRemarks(""); } }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="size-5 text-orange-500" />
-              Request Resubmission
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to request {resubmitConfirmUser?.firstName} {resubmitConfirmUser?.lastName} to resubmit their Certificate of Employment?
-              They will be prompted to upload a new document when they try to log in.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label>Reason for resubmission (required)</Label>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Explain why the document needs to be resubmitted..."
-              value={resubmitRemarks}
-              onChange={(e) => setResubmitRemarks(e.target.value)}
-            />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setResubmitConfirmOpen(false); setResubmitConfirmUser(null); setResubmitRemarks(""); }}>
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              className="bg-orange-600 hover:bg-orange-700"
-              onClick={handleConfirmResubmission}
-              disabled={!resubmitRemarks.trim()}
-            >
-              Request Resubmission
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1313,19 +1078,6 @@ export default function UserManagementPage() {
                   {selectedUser.status === "Active" ? <CheckCircle2 className="size-3 mr-1" /> : <XCircle className="size-3 mr-1" />}
                   {selectedUser.status}
                 </Badge>
-                {selectedUser.type === "client" && (
-                  <Badge
-                    variant={selectedUser.verificationStatus === "Verified" ? "outline" : "secondary"}
-                    className={
-                      selectedUser.verificationStatus === "Verified"
-                        ? "text-green-600 border-green-300"
-                        : "text-yellow-600 border-yellow-300 bg-yellow-50"
-                    }
-                  >
-                    <Shield className="size-3 mr-1" />
-                    {selectedUser.verificationStatus || "Pending"}
-                  </Badge>
-                )}
               </div>
 
               {/* Account ID and Type */}
@@ -1648,8 +1400,8 @@ export default function UserManagementPage() {
         <CardHeader className="gap-3 space-y-0">
           <CardTitle>Directory</CardTitle>
           <CardDescription>
-            Search by name, role, or account ID. Filter by verification to work
-            through pending accounts in the order they registered.
+            Search by name, role, or account ID. Deactivate an account to
+            archive it, and activate it to restore access.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -1677,37 +1429,16 @@ export default function UserManagementPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="w-[190px]">
-              <Select
-                value={verificationFilter}
-                onValueChange={handleVerificationFilterChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Verification" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VERIFICATION_FILTERS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                {showQueue && (
-                  <TableHead className="w-[72px]">Queue</TableHead>
-                )}
                 <TableHead>Name</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Organization</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Verification</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -1726,13 +1457,8 @@ export default function UserManagementPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedUsers.map((u, index) => (
+                paginatedUsers.map((u) => (
                   <TableRow key={u.id}>
-                    {showQueue && (
-                      <TableCell className="text-sm font-medium text-muted-foreground">
-                        {(page - 1) * PAGE_SIZE + index + 1}
-                      </TableCell>
-                    )}
                     <TableCell>
                       <button
                         className="flex flex-col text-left hover:underline"
@@ -1756,26 +1482,6 @@ export default function UserManagementPage() {
                       {u.role}
                     </TableCell>
                     <TableCell>
-                      {u.type === "client" ? (
-                        <Badge
-                          variant={u.verificationStatus === "Verified" ? "outline" : "secondary"}
-                          className={
-                            u.verificationStatus === "Verified"
-                              ? "text-green-600 border-green-300"
-                              : "text-yellow-600 border-yellow-300 bg-yellow-50"
-                          }
-                        >
-                          {u.verificationStatus || "Pending"}
-                        </Badge>
-                      ) : u.role === "Provincial Government" ? (
-                        <Badge variant="outline" className="text-green-600 border-green-300">
-                          Verified
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       <Badge
                         variant={u.status === "Active" ? "outline" : "secondary"}
                         className={u.status === "Active" ? "" : "text-red-600"}
@@ -1795,28 +1501,14 @@ export default function UserManagementPage() {
                           Update
                         </Button>
                         {u.type === "client" && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDocuments(u)}
-                              title="View submitted documents"
-                            >
-                              <FileText className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleConfirmToggleVerification(u)}
-                              title={u.verificationStatus === "Verified" ? "Set as Pending" : "Set as Verified"}
-                            >
-                              {u.verificationStatus === "Verified" ? (
-                                <ShieldCheck className="size-4 text-green-600" />
-                              ) : (
-                                <ShieldX className="size-4 text-yellow-600" />
-                              )}
-                            </Button>
-                          </>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewDocuments(u)}
+                            title="View submitted documents"
+                          >
+                            <FileText className="size-4" />
+                          </Button>
                         )}
                         {u.id !== currentUserId && (
                           <Button

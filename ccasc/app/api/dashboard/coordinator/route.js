@@ -3,6 +3,11 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
 import { summarizeRevenue } from "@/lib/revenue-summary";
+import {
+  CULTURAL_CENTER_VENUE_ID,
+  SPORTS_COMPLEX_VENUE_ID,
+  reportVenueIdsForUserType,
+} from "@/lib/report-venue-scope";
 
 import { requireApiAuth } from "@/lib/api-auth";
 export async function GET(request) {
@@ -12,8 +17,15 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");
-    const venueFilter = venueId === "2" ? [2] : [1];
-    const venueLabel = venueId === "2" ? "Sports Complex" : "Cultural Center";
+    // A Program Coordinator is locked to their own venue - the scope comes from
+    // the session, so a hand-edited query string cannot show the other venue.
+    // An Admin (who may open this screen) can still pick via `?venueId=`.
+    const scoped = reportVenueIdsForUserType(guard.user.type);
+    const venueFilter = scoped.length
+      ? scoped
+      : venueId === "2"
+        ? [SPORTS_COMPLEX_VENUE_ID]
+        : [CULTURAL_CENTER_VENUE_ID];
 
     const now = new Date();
 

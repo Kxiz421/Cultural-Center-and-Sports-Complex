@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
+import { RevenueCharts } from "@/components/revenue-charts";
 import { CalendarDays, ClipboardList, TrendingUp } from "lucide-react";
 
 function formatPhp(amount) {
@@ -182,6 +183,8 @@ export default function AccountingDashboardPage() {
         revenue={revenue}
         note="Client payments recorded in this window."
       />
+
+      <RevenueCharts description="Client payments across both venues." />
 
       {/* Monthly Revenue */}
       <div className="grid gap-4">

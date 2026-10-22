@@ -6,13 +6,11 @@ import { toast } from "sonner";
 import {
   Eye,
   EyeOff,
-  Upload,
   ArrowLeft,
   Loader2,
   CheckCircle2,
 } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
-import { uploadIdProof } from "@/lib/upload-id-proof";
 import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -180,7 +178,6 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
 export default function RegisterPage() {
   const { start: startRouteTransition } = useRouteTransition();
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [organizations, setOrganizations] = useState([]);
@@ -207,9 +204,6 @@ export default function RegisterPage() {
     cityName: "",
     barangayName: "",
   });
-  const [idProofFile, setIdProofFile] = useState(null);
-  const [idProofPreview, setIdProofPreview] = useState(null);
-  const [idProofData, setIdProofData] = useState(null);
   const [emailCheck, setEmailCheck] = useState(null);
   const [emailChecking, setEmailChecking] = useState(false);
   const emailRequestRef = useRef(0);
@@ -348,44 +342,6 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, barangayName: name }));
   };
 
-  const handleIdProofUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
-    if (!validTypes.includes(file.type)) {
-      toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
-      e.target.value = "";
-      return;
-    }
-
-    // Validate file size (max 50MB)
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("File size too large. Maximum is 50MB.");
-      e.target.value = "";
-      return;
-    }
-
-    setIdProofFile(file);
-    setIdProofPreview(URL.createObjectURL(file));
-    setUploading(true);
-
-    try {
-      // Direct browser → Vercel Blob upload on Vercel (up to 50MB);
-      // falls back to the disk-based endpoint on localhost.
-      const url = await uploadIdProof(file);
-      setIdProofData(url);
-    } catch (error) {
-      toast.error(error.message || "Failed to upload image");
-      setIdProofFile(null);
-      setIdProofPreview(null);
-      e.target.value = "";
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const validatePassword = (password) => {
     if (password.length < 8) return "Password must be at least 8 characters long.";
     if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter.";
@@ -445,12 +401,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Validate ID proof is uploaded
-    if (!idProofData) {
-      toast.error("Please upload your Certificate of Employment (ID).");
-      return;
-    }
-
     // Validate password
     const passwordError = validatePassword(formData.password);
     if (passwordError) {
@@ -480,7 +430,6 @@ export default function RegisterPage() {
           password: formData.password,
           organizationId: formData.organizationId,
           otherOrganization: formData.otherOrganization,
-          idProof: idProofData,
           gender: formData.gender,
           birthday: formData.birthday,
           addressLine: formData.addressLine,
@@ -498,7 +447,7 @@ export default function RegisterPage() {
         return;
       }
 
-      toast.success("Registration submitted! Please wait for admin verification before signing in.");
+      toast.success("Registration successful! You can now sign in with your account.");
       // Covered transition into the sign-in page (see
       // `components/route-transition.jsx`); the success toast still shows
       // because sonner renders above the curtain.
@@ -991,71 +940,13 @@ export default function RegisterPage() {
                   </div>
                 </div>
               </section>
-
-              {/* ID Proof Upload */}
-              <section className="space-y-4">
-                <h2 className="text-lg font-semibold">Verification Document</h2>
-                <div className="space-y-2">
-                  <Label htmlFor="idProof" className={LABEL_CLASS}>
-                    Certificate of Employment (ID){" "}
-                    <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="flex items-center gap-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="lg"
-                      className="gap-2"
-                      disabled={uploading}
-                      onClick={() => document.getElementById("idProof").click()}
-                    >
-                      {uploading ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="size-4" />
-                          {idProofFile ? "Change file" : "Upload image"}
-                        </>
-                      )}
-                    </Button>
-                    <input
-                      id="idProof"
-                      type="file"
-                      accept="image/jpeg,image/png,image/gif,image/webp"
-                      className="hidden"
-                      onChange={handleIdProofUpload}
-                    />
-                    {idProofFile && (
-                      <span className="max-w-[240px] truncate text-base text-muted-foreground">
-                        {idProofFile.name}
-                      </span>
-                    )}
-                  </div>
-                  {idProofPreview && (
-                    <div className="relative mt-2 h-40 w-60 overflow-hidden rounded-lg border">
-                      <Image
-                        src={idProofPreview}
-                        alt="ID proof preview"
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Accepted formats: JPEG, PNG, GIF, WebP. Max size: 50MB.
-                  </p>
-                </div>
-              </section>
             </CardContent>
             <div className="px-6 pb-6">
               <Button
                 type="submit"
                 size="lg"
                 className="w-full text-base"
-                disabled={loading || uploading || !contactsVerified}
+                disabled={loading || !contactsVerified}
               >
                 {loading ? (
                   <>

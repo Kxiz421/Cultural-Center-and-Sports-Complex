@@ -125,6 +125,17 @@ export const API_RULES = [
 
   // ---- Role-specific portals -------------------------------------------
   {
+    // Revenue trend + facility/particular breakdown for the staff dashboards.
+    // Venue scoping for a Program Coordinator is enforced inside the route.
+    prefix: "/api/dashboard/revenue-charts",
+    types: [
+      USER_TYPE.ADMIN,
+      USER_TYPE.ACCOUNTING_CLERK,
+      USER_TYPE.LTOO,
+      ...PROGRAM_COORDINATOR_TYPES,
+    ],
+  },
+  {
     prefix: "/api/dashboard/accounting",
     types: [USER_TYPE.ACCOUNTING_CLERK, USER_TYPE.ADMIN],
   },

@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
+import { RevenueCharts } from "@/components/revenue-charts";
 import { CalendarDays, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
 
 function formatPhp(amount) {
@@ -81,6 +82,8 @@ export default function CoordinatorDashboardPage() {
         revenue={revenue}
         note={`Recorded receipts for ${venueLabel}.`}
       />
+
+      <RevenueCharts description={`Recorded receipts for ${venueLabel}.`} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
