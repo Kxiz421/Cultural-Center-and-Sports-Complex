@@ -85,6 +85,12 @@ export async function GET(request) {
       where.payment = { booking: { reservation: { venueId: { in: scope } } } };
     }
 
+    const monthParam = parseInt(searchParams.get("month"), 10);
+    const selectedMonth =
+      window.period === "month" && monthParam >= 1 && monthParam <= 12
+        ? monthParam
+        : null;
+
     const [transactions, facilities] = await Promise.all([
       prisma.transaction.findMany({
         where,
@@ -141,8 +147,19 @@ export async function GET(request) {
       ]),
     );
 
+    const breakdownTransactions = selectedMonth
+      ? transactions.filter((transaction) => {
+          const when = new Date(transaction.paymentDate);
+          return (
+            !Number.isNaN(when.getTime()) &&
+            when.getMonth() + 1 === selectedMonth
+          );
+        })
+      : transactions;
+
     const charts = buildRevenueCharts({
       transactions,
+      breakdownTransactions,
       facilitiesById,
       group,
       window,
@@ -151,6 +168,7 @@ export async function GET(request) {
     return noCacheJson({
       period: window.period,
       year: window.year ?? null,
+      month: selectedMonth,
       label: window.label,
       group,
       allowedGroups,

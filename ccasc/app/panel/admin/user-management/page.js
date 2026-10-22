@@ -136,7 +136,7 @@ function AddressCascade({ value, onChange }) {
           <SelectTrigger>
             <SelectValue placeholder="Select province" />
           </SelectTrigger>
-          <SelectContent className="max-h-72">
+          <SelectContent position="popper" className="max-h-60">
             {provinces.map((province) => (
               <SelectItem key={province.code} value={province.code}>
                 {province.name}
@@ -157,7 +157,7 @@ function AddressCascade({ value, onChange }) {
               placeholder={provinceCode ? "Select city/municipality" : "Select province first"}
             />
           </SelectTrigger>
-          <SelectContent className="max-h-72">
+          <SelectContent position="popper" className="max-h-60">
             {cities.map((city) => (
               <SelectItem key={city.code} value={city.code}>
                 {city.name}
@@ -180,7 +180,7 @@ function AddressCascade({ value, onChange }) {
               placeholder={cityCode ? "Select barangay" : "Select city first"}
             />
           </SelectTrigger>
-          <SelectContent className="max-h-72">
+          <SelectContent position="popper" className="max-h-60">
             {barangays.map((barangay) => (
               <SelectItem key={barangay.code} value={barangay.name}>
                 {barangay.name}
@@ -676,7 +676,7 @@ export default function UserManagementPage() {
               Add user
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>Register account</DialogTitle>
               <DialogDescription>
@@ -856,7 +856,6 @@ export default function UserManagementPage() {
 
               {/* Password */}
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold">Password</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Password</Label>

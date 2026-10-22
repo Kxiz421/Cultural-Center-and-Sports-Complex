@@ -170,8 +170,26 @@ function prepareReservation(reservation, facilitiesById) {
  * @param {"particular"|"package"|"facility"} input.group
  * @param {object} input.window result of {@link resolveChartWindow}
  */
-export function buildRevenueCharts({ transactions, facilitiesById, group, window }) {
+export function buildRevenueCharts({
+  transactions,
+  facilitiesById,
+  group,
+  window,
+  breakdownTransactions,
+}) {
   const graph = window.buckets.map((label) => ({ label, amount: 0 }));
+
+  for (const transaction of transactions || []) {
+    const amount = Number(transaction.payment?.amountPaid ?? 0);
+    if (!amount) continue;
+
+    const when = new Date(transaction.paymentDate);
+    if (Number.isNaN(when.getTime())) continue;
+
+    const index = window.bucketIndex(when);
+    if (index >= 0 && index < graph.length) graph[index].amount += amount;
+  }
+
   const pie = new Map();
   let total = 0;
 
@@ -184,15 +202,10 @@ export function buildRevenueCharts({ transactions, facilitiesById, group, window
     pie.set(key, entry);
   };
 
-  for (const transaction of transactions || []) {
+  for (const transaction of breakdownTransactions ?? transactions ?? []) {
     const amount = Number(transaction.payment?.amountPaid ?? 0);
     if (!amount) continue;
 
-    const when = new Date(transaction.paymentDate);
-    if (Number.isNaN(when.getTime())) continue;
-
-    const index = window.bucketIndex(when);
-    if (index >= 0 && index < graph.length) graph[index].amount += amount;
     total += amount;
 
     const reservation = transaction.payment?.booking?.reservation;
