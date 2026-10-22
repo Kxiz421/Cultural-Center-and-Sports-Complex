@@ -1,11 +1,20 @@
 const PHILSMS_ENDPOINT = "https://app.philsms.com/api/v3/sms/send";
 
+function apiToken() {
+  return String(process.env.PHILSMS_API_TOKEN ?? "").trim();
+}
+
+function senderId() {
+  return String(process.env.PHILSMS_SENDER_ID ?? "").trim() || "CSASC";
+}
+
 export function isSmsEnabled() {
-  return Boolean(process.env.PHILSMS_API_TOKEN);
+  return Boolean(apiToken());
 }
 
 export async function sendOtpSms(toE164, otp) {
-  if (!toE164 || !isSmsEnabled()) return false;
+  const token = apiToken();
+  if (!toE164 || !token) return false;
 
   try {
     const res = await fetch(PHILSMS_ENDPOINT, {
@@ -13,22 +22,31 @@ export async function sendOtpSms(toE164, otp) {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        Authorization: `Bearer ${process.env.PHILSMS_API_TOKEN}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         recipient: toE164,
-        sender_id: process.env.PHILSMS_SENDER_ID || "CSASC",
+        sender_id: senderId(),
         type: "plain",
         message: `CSASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
       }),
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json().catch(() => null);
+    const raw = await res.text();
+
+    let data = null;
+    try {
+      data = JSON.parse(raw);
+    } catch (parseError) {
+      data = null;
+    }
 
     if (!res.ok || data?.status !== "success") {
       console.error(
-        `Failed to send OTP SMS to ${toE164}: HTTP ${res.status} ${data?.message ?? ""}`,
+        `PhilSMS rejected the send (HTTP ${res.status}): ${
+          data?.message ?? raw.slice(0, 300)
+        }`,
       );
       return false;
     }
