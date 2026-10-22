@@ -339,7 +339,7 @@ export async function PATCH(request) {
       });
 
       // Create payment record
-      await prisma.payment.create({
+      const payment = await prisma.payment.create({
         data: {
           bookingId: booking.bookingId,
           amountPaid: paidAmount,
@@ -347,6 +347,19 @@ export async function PATCH(request) {
           amountAfterDiscount: paidAmount,
           staffId: acting.performedBy ? parseInt(acting.performedBy.replace("STF-", ""), 10) || null : null,
           paymentStatusId: 5, // Fully Paid
+        },
+      });
+
+      // A receipt (`Transaction`) is what every dashboard's revenue and the
+      // LTOO payments module read, so a confirmed booking must leave one behind
+      // - otherwise its payment is invisible to all of them.
+      await prisma.transaction.create({
+        data: {
+          receiptNumber: "",
+          paymentDate: new Date(),
+          recordedBy: acting.performedByName,
+          paymentId: payment.paymentId,
+          entryType: "payment",
         },
       });
 
