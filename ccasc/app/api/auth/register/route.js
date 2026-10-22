@@ -1,10 +1,45 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { toE164Ph } from "@/lib/phone";
+import {
+  REGISTER_CHANNEL,
+  clearRegistrationVerifications,
+  isRegistrationTargetVerified,
+} from "@/lib/register-otp";
+
+const ALLOWED_GENDERS = ["Male", "Female", "Other"];
+
+/** Parse a "YYYY-MM-DD" birthday into a Date, or null when invalid/absent. */
+function parseBirthday(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date > new Date()) return null; // no future birthdays
+  return date;
+}
 
 export async function POST(request) {
   try {
-    const { firstName, middleName, lastName, username, email, contactNumber, password, organizationId, otherOrganization, idProof } = await request.json();
+    const {
+      firstName,
+      middleName,
+      lastName,
+      username,
+      email,
+      contactNumber,
+      password,
+      organizationId,
+      otherOrganization,
+      idProof,
+      gender,
+      birthday,
+      addressLine,
+      province,
+      city,
+      barangay,
+    } = await request.json();
 
     // Validate required fields
     if (!firstName || !lastName || !email || !password) {
@@ -25,6 +60,40 @@ export async function POST(request) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: "Invalid email format" },
+        { status: 400 }
+      );
+    }
+
+    // Mobile number is required and must be a valid PH mobile.
+    if (!toE164Ph(contactNumber)) {
+      return NextResponse.json(
+        { error: "Enter a valid mobile number (e.g., 09171234567)." },
+        { status: 400 }
+      );
+    }
+
+    // Personal details collected at registration.
+    if (!ALLOWED_GENDERS.includes(gender)) {
+      return NextResponse.json(
+        { error: "Please select your gender." },
+        { status: 400 }
+      );
+    }
+    if (!parseBirthday(birthday)) {
+      return NextResponse.json(
+        { error: "Please enter a valid birthday." },
+        { status: 400 }
+      );
+    }
+    if (!String(addressLine ?? "").trim()) {
+      return NextResponse.json(
+        { error: "Please enter your street address." },
+        { status: 400 }
+      );
+    }
+    if (!String(province ?? "").trim() || !String(city ?? "").trim() || !String(barangay ?? "").trim()) {
+      return NextResponse.json(
+        { error: "Please complete your province, city/municipality, and barangay." },
         { status: 400 }
       );
     }
@@ -92,6 +161,23 @@ export async function POST(request) {
       }
     }
 
+    // Both the email and the mobile number must have been verified with a
+    // one-time code before the account can be created (and therefore before
+    // the registrant can ever sign in).
+    const [emailVerified, phoneVerified] = await Promise.all([
+      isRegistrationTargetVerified(REGISTER_CHANNEL.EMAIL, email),
+      isRegistrationTargetVerified(REGISTER_CHANNEL.SMS, contactNumber),
+    ]);
+    if (!emailVerified || !phoneVerified) {
+      return NextResponse.json(
+        {
+          error:
+            "Please verify both your email address and mobile number before registering.",
+        },
+        { status: 400 }
+      );
+    }
+
     // Handle organization: a typed custom name gets its own org row (dedupe
     // case-insensitively); no shared generic "Other" bucket is created.
     let orgId;
@@ -133,12 +219,21 @@ export async function POST(request) {
         contactNumber,
         password: hashedPassword,
         idProof: idProof || null,
+        gender,
+        birthday: parseBirthday(birthday),
+        addressLine: String(addressLine).trim(),
+        province: String(province).trim(),
+        city: String(city).trim(),
+        barangay: String(barangay).trim(),
         accountStatus: "Pending",
         verificationStatus: "Pending",
         clientRoleId: "PUB",
         clientOrgId: orgId,
       },
     });
+
+    // Spend the verification codes now that the account exists.
+    await clearRegistrationVerifications(email, contactNumber);
 
     return NextResponse.json(
       {

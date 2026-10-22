@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
+import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
 import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, ShieldX, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
 import {
   Avatar,
@@ -84,6 +85,126 @@ function nextAccountId(existing, roleValue) {
   return `${prefix}-${max + 1}`;
 }
 
+const GENDERS = ["Male", "Female", "Other"];
+
+/**
+ * Cascading Province -> City/Municipality -> Barangay dropdowns backed by the
+ * public PSGC API. Reports the chosen NAMES upward through `onChange` so the
+ * parent form only has to store plain strings.
+ */
+function AddressCascade({ value, onChange }) {
+  const [provinces, setProvinces] = React.useState([]);
+  const [cities, setCities] = React.useState([]);
+  const [barangays, setBarangays] = React.useState([]);
+  const [provinceCode, setProvinceCode] = React.useState("");
+  const [cityCode, setCityCode] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    fetchProvinces().then((list) => {
+      if (active) setProvinces(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pickProvince = async (code) => {
+    const province = provinces.find((p) => p.code === code);
+    setProvinceCode(code);
+    setCityCode("");
+    setCities([]);
+    setBarangays([]);
+    onChange({ province: province?.name ?? "", city: "", barangay: "" });
+    if (!code) return;
+    setBusy(true);
+    try {
+      setCities(await fetchCities(code));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickCity = async (code) => {
+    const city = cities.find((c) => c.code === code);
+    setCityCode(code);
+    setBarangays([]);
+    onChange({ province: value.province, city: city?.name ?? "", barangay: "" });
+    if (!code) return;
+    setBusy(true);
+    try {
+      setBarangays(await fetchBarangays(code));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <div className="space-y-2">
+        <Label>Province</Label>
+        <Select value={provinceCode} onValueChange={pickProvince} disabled={busy}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select province" />
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            {provinces.map((province) => (
+              <SelectItem key={province.code} value={province.code}>
+                {province.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>City / Municipality</Label>
+        <Select
+          value={cityCode}
+          onValueChange={pickCity}
+          disabled={!provinceCode || busy}
+        >
+          <SelectTrigger>
+            <SelectValue
+              placeholder={provinceCode ? "Select city/municipality" : "Select province first"}
+            />
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            {cities.map((city) => (
+              <SelectItem key={city.code} value={city.code}>
+                {city.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Barangay</Label>
+        <Select
+          value={value.barangay || ""}
+          onValueChange={(name) =>
+            onChange({ province: value.province, city: value.city, barangay: name })
+          }
+          disabled={!cityCode || busy}
+        >
+          <SelectTrigger>
+            <SelectValue
+              placeholder={cityCode ? "Select barangay" : "Select city first"}
+            />
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            {barangays.map((barangay) => (
+              <SelectItem key={barangay.code} value={barangay.name}>
+                {barangay.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 export default function UserManagementPage() {
   const [query, setQuery] = React.useState("");
   const [users, setUsers] = React.useState([]);
@@ -105,6 +226,12 @@ export default function UserManagementPage() {
     contact: "",
     password: "",
     confirmPassword: "",
+    gender: "",
+    birthday: "",
+    addressLine: "",
+    province: "",
+    city: "",
+    barangay: "",
   });
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = React.useState(false);
@@ -167,6 +294,12 @@ export default function UserManagementPage() {
     email: "",
     contact: "",
     role: null,
+    gender: "",
+    birthday: "",
+    addressLine: "",
+    province: "",
+    city: "",
+    barangay: "",
   });
 
   const resetForm = () => {
@@ -180,6 +313,12 @@ export default function UserManagementPage() {
       email: "",
       contact: "",
       role: null,
+      gender: "",
+      birthday: "",
+      addressLine: "",
+      province: "",
+      city: "",
+      barangay: "",
     });
   };
 
@@ -258,6 +397,12 @@ export default function UserManagementPage() {
           password: form.password,
           performedBy: currentUserId,
           performedByName: currentUserName,
+          gender: form.gender || null,
+          birthday: form.birthday || null,
+          addressLine: form.addressLine.trim() || null,
+          province: form.province || null,
+          city: form.city || null,
+          barangay: form.barangay || null,
           roleType: form.role.includes('coord') || form.role === 'acct' || form.role === 'ltoo' ? 'staff' : 'client',
           roleId: form.role === 'coord-cc' ? 2 :
                  form.role === 'coord-sc' ? 2 :
@@ -300,6 +445,12 @@ export default function UserManagementPage() {
       contact: String(user.contact || "").replace(/\D/g, "").slice(0, 11),
       password: "",
       confirmPassword: "",
+      gender: user.gender || "",
+      birthday: user.birthday ? String(user.birthday).slice(0, 10) : "",
+      addressLine: user.addressLine || "",
+      province: user.province || "",
+      city: user.city || "",
+      barangay: user.barangay || "",
     });
     setShowNewPassword(false);
     setShowConfirmNewPassword(false);
@@ -371,6 +522,12 @@ export default function UserManagementPage() {
         contact,
         performedBy: currentUserId,
         performedByName: currentUserName,
+        gender: editForm.gender || null,
+        birthday: editForm.birthday || null,
+        addressLine: editForm.addressLine.trim(),
+        province: editForm.province.trim(),
+        city: editForm.city.trim(),
+        barangay: editForm.barangay.trim(),
       };
       if (password) {
         body.password = password;
@@ -756,6 +913,53 @@ export default function UserManagementPage() {
                   }
                 />
               </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select
+                    value={form.gender}
+                    onValueChange={(value) =>
+                      setForm((f) => ({ ...f, gender: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GENDERS.map((g) => (
+                        <SelectItem key={g} value={g}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Birthday</Label>
+                  <Input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={form.birthday}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, birthday: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Street address</Label>
+                <Input
+                  placeholder="House No. / Street / Purok"
+                  value={form.addressLine}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, addressLine: e.target.value }))
+                  }
+                />
+              </div>
+              <AddressCascade
+                value={form}
+                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+              />
               <div className="space-y-2">
                 <Label>Role</Label>
                 <Select
@@ -1007,7 +1211,7 @@ export default function UserManagementPage() {
               Decline Document
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to decline {declineConfirmUser?.firstName} {declineConfirmUser?.lastName}'s Certificate of Employment?
+              Are you sure you want to decline {declineConfirmUser?.firstName} {declineConfirmUser?.lastName}&apos;s Certificate of Employment?
               Their account will be marked as declined.
             </DialogDescription>
           </DialogHeader>
@@ -1191,6 +1395,78 @@ export default function UserManagementPage() {
                     />
                   </div>
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select
+                      value={editForm.gender}
+                      onValueChange={(value) =>
+                        setEditForm((f) => ({ ...f, gender: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GENDERS.map((g) => (
+                          <SelectItem key={g} value={g}>
+                            {g}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Birthday</Label>
+                    <Input
+                      type="date"
+                      max={new Date().toISOString().slice(0, 10)}
+                      value={editForm.birthday}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, birthday: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Street address</Label>
+                  <Input
+                    placeholder="House No. / Street / Purok"
+                    value={editForm.addressLine}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, addressLine: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Province</Label>
+                    <Input
+                      value={editForm.province}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, province: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>City / Municipality</Label>
+                    <Input
+                      value={editForm.city}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, city: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Barangay</Label>
+                    <Input
+                      value={editForm.barangay}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, barangay: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Password change section */}
@@ -1264,7 +1540,7 @@ export default function UserManagementPage() {
               Confirm Save
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to update {selectedUser?.firstName} {selectedUser?.lastName}'s account details?
+              Are you sure you want to update {selectedUser?.firstName} {selectedUser?.lastName}&apos;s account details?
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">

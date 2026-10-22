@@ -54,6 +54,12 @@ export async function GET() {
         rolePriority: roleOrder[s.staffRole.roleName] ?? 99,
         verificationStatus: null,
         profilePhoto: s.profilePhoto,
+        gender: s.gender,
+        birthday: s.birthday,
+        addressLine: s.addressLine,
+        province: s.province,
+        city: s.city,
+        barangay: s.barangay,
         createdAt: s.createdAt,
       })),
       ...clients.map((c) => ({
@@ -72,6 +78,12 @@ export async function GET() {
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
         verificationStatus: c.verificationStatus,
         profilePhoto: c.profilePhoto,
+        gender: c.gender,
+        birthday: c.birthday,
+        addressLine: c.addressLine,
+        province: c.province,
+        city: c.city,
+        barangay: c.barangay,
         createdAt: c.createdAt,
       })),
     ];
@@ -110,6 +122,18 @@ export async function POST(request) {
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 12);
+
+    // Optional personal / address details (collected on the registration and
+    // admin forms). Invalid dates are stored as null rather than failing.
+    const birthdayDate = data.birthday ? new Date(data.birthday) : null;
+    const personal = {
+      gender: data.gender || null,
+      birthday: birthdayDate && !Number.isNaN(birthdayDate.getTime()) ? birthdayDate : null,
+      addressLine: data.addressLine || null,
+      province: data.province || null,
+      city: data.city || null,
+      barangay: data.barangay || null,
+    };
 
     const autoUsername = (data.username || `${data.firstName}.${data.lastName}`)
       .toLowerCase()
@@ -155,6 +179,7 @@ export async function POST(request) {
           profilePhoto: null,
           staffRoleId: parseInt(data.roleId),
           staffOrgId: parseInt(data.orgId),
+          ...personal,
         },
       });
 
@@ -187,6 +212,7 @@ export async function POST(request) {
           profilePhoto: null,
           clientRoleId: data.roleId,
           clientOrgId: parseInt(data.orgId),
+          ...personal,
         },
       });
 
@@ -334,7 +360,18 @@ export async function PUT(request) {
 
   try {
     const body = await request.json();
-    const { userId, email, contact, password } = body;
+    const {
+      userId,
+      email,
+      contact,
+      password,
+      gender,
+      birthday,
+      addressLine,
+      province,
+      city,
+      barangay,
+    } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -398,6 +435,20 @@ export async function PUT(request) {
         ? undefined
         : String(contact).replace(/\D/g, "").slice(0, 11);
 
+    // Optional personal / address fields. Only fields actually present in the
+    // request are touched, so a partial update never blanks the rest.
+    const personalUpdate = {};
+    if (gender !== undefined) personalUpdate.gender = gender || null;
+    if (birthday !== undefined) {
+      const parsed = birthday ? new Date(birthday) : null;
+      personalUpdate.birthday =
+        parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+    }
+    if (addressLine !== undefined) personalUpdate.addressLine = addressLine || null;
+    if (province !== undefined) personalUpdate.province = province || null;
+    if (city !== undefined) personalUpdate.city = city || null;
+    if (barangay !== undefined) personalUpdate.barangay = barangay || null;
+
     // Helper to get user name for logging
     async function getTargetName(prefix, id) {
       if (prefix === "STF") {
@@ -411,7 +462,7 @@ export async function PUT(request) {
     }
 
     if (prefix === "STF") {
-      const updateData = {};
+      const updateData = { ...personalUpdate };
       if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
       if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
@@ -421,7 +472,7 @@ export async function PUT(request) {
         data: updateData,
       });
     } else if (prefix === "CLT") {
-      const updateData = {};
+      const updateData = { ...personalUpdate };
       if (trimmedEmail !== undefined) updateData.email = trimmedEmail;
       if (contactDigits !== undefined) updateData.contactNumber = contactDigits;
       if (password !== undefined) updateData.password = await bcrypt.hash(password, 12);
@@ -446,6 +497,27 @@ export async function PUT(request) {
     }
     if (password !== undefined) {
       changes.push({ label: "Password", from: null, to: null, masked: true });
+    }
+    if (personalUpdate.gender !== undefined && personalUpdate.gender !== existing.gender) {
+      changes.push({ label: "Gender", from: existing.gender, to: personalUpdate.gender });
+    }
+    if (
+      personalUpdate.birthday !== undefined &&
+      String(personalUpdate.birthday ?? "") !== String(existing.birthday ?? "")
+    ) {
+      changes.push({ label: "Birthday", from: existing.birthday, to: personalUpdate.birthday });
+    }
+    if (personalUpdate.addressLine !== undefined && personalUpdate.addressLine !== existing.addressLine) {
+      changes.push({ label: "Address", from: existing.addressLine, to: personalUpdate.addressLine });
+    }
+    if (personalUpdate.province !== undefined && personalUpdate.province !== existing.province) {
+      changes.push({ label: "Province", from: existing.province, to: personalUpdate.province });
+    }
+    if (personalUpdate.city !== undefined && personalUpdate.city !== existing.city) {
+      changes.push({ label: "City/Municipality", from: existing.city, to: personalUpdate.city });
+    }
+    if (personalUpdate.barangay !== undefined && personalUpdate.barangay !== existing.barangay) {
+      changes.push({ label: "Barangay", from: existing.barangay, to: personalUpdate.barangay });
     }
 
     if (changes.length > 0) {

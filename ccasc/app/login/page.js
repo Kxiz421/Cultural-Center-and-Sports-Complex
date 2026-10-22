@@ -27,6 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getSession, signIn } from "next-auth/react";
+import { toE164Ph } from "@/lib/phone";
 import { USER_TYPE, homeForUserType } from "@/lib/auth-roles";
 import { MOCK_ADMIN_USER } from "@/lib/data/admin-mock";
 import { SESSION_REPLACED_REASON } from "@/lib/session-reason";
@@ -51,6 +52,22 @@ const LOGIN_ERROR_MESSAGES = {
     "Sign-in is temporarily unavailable. Please contact the administrator.",
 };
 
+const EMAIL_IDENTIFIER_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Classify what the visitor typed into the single recovery field. An email is
+ * recovered straight through email, a mobile number straight through SMS, and
+ * anything else (i.e. a username) opens the channel chooser - so the user is
+ * only asked where to send the code when the identifier itself is ambiguous.
+ */
+function recoveryKind(identifier) {
+  const value = String(identifier ?? "").trim();
+  if (!value) return "unknown";
+  if (EMAIL_IDENTIFIER_RE.test(value)) return "email";
+  if (toE164Ph(value)) return "phone";
+  return "username";
+}
+
 export default function LoginPage() {
   const { start: startRouteTransition } = useRouteTransition();
   const [email, setEmail] = React.useState("");
@@ -64,6 +81,7 @@ export default function LoginPage() {
   const [recoverIdentifier, setRecoverIdentifier] = React.useState("");
   const [recoverChannels, setRecoverChannels] = React.useState([]);
   const [recoverChannel, setRecoverChannel] = React.useState("email");
+  const [recoverTargetLabel, setRecoverTargetLabel] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [otpCells, setOtpCells] = React.useState(() =>
@@ -92,6 +110,7 @@ export default function LoginPage() {
       setRecoverIdentifier("");
       setRecoverChannels([]);
       setRecoverChannel("email");
+      setRecoverTargetLabel("");
       setNewPassword("");
       setConfirmPassword("");
       setShowNewPassword(false);
@@ -228,13 +247,38 @@ export default function LoginPage() {
     }
   };
 
-  const handleLookup = async () => {
-    const identifier = recoverIdentifier.trim();
-    if (!identifier) {
-      toast.error("Enter your email, username, or mobile number.");
-      return;
-    }
+  /** Request a recovery code on a specific channel and advance to the code step. */
+  const sendRecoveryCode = async (identifier, channel) => {
+    setFpLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", identifier, channel }),
+      });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send recovery code.");
+        return;
+      }
+
+      setRecoverTargetLabel(data.target || "");
+      setFpStep("code");
+      setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
+      toast.success(
+        `A recovery code has been sent to ${data.target || recoverTarget}.`,
+      );
+    } catch (err) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  /** Username path: look up the account and offer its recovery channels. */
+  const lookupRecovery = async (identifier) => {
     setFpLoading(true);
     try {
       const res = await fetch("/api/auth/password-reset", {
@@ -247,7 +291,6 @@ export default function LoginPage() {
 
       if (!res.ok) {
         toast.error(data.error || "We couldn't find an account with those details.");
-        setFpLoading(false);
         return;
       }
 
@@ -256,7 +299,6 @@ export default function LoginPage() {
         toast.error(
           "No recovery method is available for this account. Please contact the administrator.",
         );
-        setFpLoading(false);
         return;
       }
 
@@ -270,40 +312,35 @@ export default function LoginPage() {
     }
   };
 
-  const handleSendCode = async () => {
+  /**
+   * Identify step. An email or mobile number is recovered on that same channel
+   * directly; only a username (which maps to both) opens the chooser.
+   */
+  const handleIdentify = async () => {
     const identifier = recoverIdentifier.trim();
-
-    setFpLoading(true);
-    try {
-      const res = await fetch("/api/auth/password-reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "send",
-          identifier,
-          channel: recoverChannel,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        toast.error(data.error || "Failed to send recovery code.");
-        setFpLoading(false);
-        return;
-      }
-      
-      setFpStep("code");
-      setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
-      toast.success(
-        `A recovery code has been sent to ${data.target || recoverTarget}.`,
-      );
-    } catch (err) {
-      toast.error("An error occurred. Please try again.");
-    } finally {
-      setFpLoading(false);
+    if (!identifier) {
+      toast.error("Enter your email, username, or mobile number.");
+      return;
     }
+
+    const kind = recoveryKind(identifier);
+    if (kind === "email") {
+      setRecoverChannel("email");
+      await sendRecoveryCode(identifier, "email");
+      return;
+    }
+    if (kind === "phone") {
+      setRecoverChannel("sms");
+      await sendRecoveryCode(identifier, "sms");
+      return;
+    }
+
+    await lookupRecovery(identifier);
   };
+
+  /** Channel step / "Resend code": send on the selected channel. */
+  const handleSendCode = () =>
+    sendRecoveryCode(recoverIdentifier.trim(), recoverChannel);
 
   const handleVerifyCode = async () => {
     const code = otpCells.join("");
@@ -522,8 +559,9 @@ export default function LoginPage() {
                   <DialogDescription>
                     {fpStep === "identify" && (
                       <>
-                        Enter your email, username, or mobile number. We&apos;ll show
-                        the recovery options saved on your account.
+                        Enter your email or mobile number and we&apos;ll send
+                        the recovery code straight to it. If you sign in with a
+                        username, you&apos;ll choose where to receive the code.
                       </>
                     )}
                     {fpStep === "channel" && (
@@ -536,7 +574,7 @@ export default function LoginPage() {
                       <>
                         A recovery code has been sent to{" "}
                         <span className="text-foreground font-medium">
-                          {recoverTarget}
+                          {recoverTargetLabel || recoverTarget}
                         </span>
                         . Enter the {OTP_LENGTH}-digit code below.
                       </>
@@ -739,7 +777,7 @@ export default function LoginPage() {
                   {fpStep === "identify" ? (
                     <Button
                       type="button"
-                      onClick={handleLookup}
+                      onClick={handleIdentify}
                       disabled={fpLoading}
                     >
                       Continue

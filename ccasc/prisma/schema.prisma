@@ -31,6 +31,12 @@ model Staff {
   password       String  @map("password") @db.VarChar(255)
   status         String  @default("Active") @map("status") @db.VarChar(50)
   profilePhoto   String? @map("profile_photo") @db.VarChar(255)
+  gender         String? @map("gender") @db.VarChar(20)
+  birthday       DateTime? @map("birthday") @db.Date
+  addressLine    String? @map("address_line") @db.VarChar(255)
+  province       String? @map("province") @db.VarChar(100)
+  city           String? @map("city") @db.VarChar(100)
+  barangay       String? @map("barangay") @db.VarChar(100)
   staffRoleId    Int     @map("staff_role_id")
   staffOrgId     Int     @map("staff_org_id")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -85,6 +91,12 @@ model Client {
   verificationStatus String  @default("Pending") @map("verification_status") @db.VarChar(50)
   remarks            String? @map("remarks") @db.Text
   profilePhoto       String? @map("profile_photo") @db.VarChar(255)
+  gender             String? @map("gender") @db.VarChar(20)
+  birthday           DateTime? @map("birthday") @db.Date
+  addressLine        String? @map("address_line") @db.VarChar(255)
+  province           String? @map("province") @db.VarChar(100)
+  city               String? @map("city") @db.VarChar(100)
+  barangay           String? @map("barangay") @db.VarChar(100)
   otp                String? @map("otp") @db.VarChar(10)
   otpExpiration      DateTime? @map("otp_expiration")
   activeSession      String? @map("active_session") @db.VarChar(64)
@@ -606,4 +618,21 @@ model CalendarBlock {
   venue FacilityVenue @relation(fields: [venueId], references: [venueId])
 
   @@map("CalendarBlock")
+}
+
+// One-time codes that prove a registrant owns an email address or mobile
+// number BEFORE the Client row is created. Keyed by the normalised target
+// (lowercased email, E.164 phone) so a code cannot be reused across accounts.
+model RegistrationOtp {
+  registrationOtpId Int      @id @default(autoincrement()) @map("registration_otp_id")
+  channel           String   @map("channel") @db.VarChar(10)
+  target            String   @map("target") @db.VarChar(150)
+  otp               String?  @map("otp") @db.VarChar(10)
+  otpExpiration     DateTime? @map("otp_expiration")
+  verified          Boolean  @default(false) @map("verified")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([channel, target])
+  @@map("RegistrationOtp")
 }
