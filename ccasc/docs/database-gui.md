@@ -7,7 +7,17 @@ It uses **Prisma Studio**, which is already part of the project, so there is not
 
 ---
 
-## Open it
+## Easiest way: double-click
+
+In the `ccasc` folder, double-click **`open-database.cmd`**.
+
+It starts Prisma Studio, waits until it is actually listening, then opens
+**http://localhost:5555** in your browser. A second window appears with the server log — close that
+window to stop the database browser.
+
+Tip: right-click the file → **Send to → Desktop (create shortcut)** to keep it on your desktop.
+
+## Open it from a terminal
 
 In a terminal, from the `ccasc` folder:
 
