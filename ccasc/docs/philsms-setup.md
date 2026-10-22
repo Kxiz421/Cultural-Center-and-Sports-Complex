@@ -28,7 +28,7 @@ the account** — there is nowhere to type an arbitrary number, so the reset can
 ## What you need
 
 - A **PhilSMS account** (free to create).
-- A **sender ID** — up to 11 characters, e.g. `CSASC`.
+- A **sender ID** — up to 11 characters, e.g. `CCASC`.
 - Access to your **Vercel** project.
 
 ---
@@ -39,7 +39,7 @@ the account** — there is nowhere to type an arbitrary number, so the reset can
 2. Register and confirm your email. Every new account gets **5 free SMS credits** to test with.
 3. Open the **Developers** section of the dashboard and copy your **API token** — a long string
    starting with a number and a pipe, like `49|LNFe8WJ7...`.
-4. **Register your sender ID:** dashboard → Sender IDs → add `CSASC`.
+4. **Register your sender ID:** dashboard → Sender IDs → add `CCASC`.
    - It's free, but the telco takes **2–3 days** to approve it. Start this immediately — it's the
      only part of this setup you have to wait for.
    - Until it's approved, sending may use a default sender.
@@ -58,7 +58,7 @@ the account** — there is nowhere to type an arbitrary number, so the reset can
 | Name | Value |
 |---|---|
 | `PHILSMS_API_TOKEN` | the API token from step A3 |
-| `PHILSMS_SENDER_ID` | `CSASC` |
+| `PHILSMS_SENDER_ID` | `CCASC` |
 
 4. Save them.
 

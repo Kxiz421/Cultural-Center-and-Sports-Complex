@@ -5,7 +5,7 @@ function apiToken() {
 }
 
 function senderId() {
-  return String(process.env.PHILSMS_SENDER_ID ?? "").trim() || "CSASC";
+  return String(process.env.PHILSMS_SENDER_ID ?? "").trim() || "CCASC";
 }
 
 export function isSmsEnabled() {
@@ -28,7 +28,7 @@ export async function sendOtpSms(toE164, otp) {
         recipient: toE164,
         sender_id: senderId(),
         type: "plain",
-        message: `CSASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
+        message: `CCASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
       }),
       signal: AbortSignal.timeout(10000),
     });
