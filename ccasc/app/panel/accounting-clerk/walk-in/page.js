@@ -56,6 +56,7 @@ import {
 } from "@/components/reservation-virtual-package-panel";
 import { VenueRentalParticularsList } from "@/components/venue-rental-particulars-list";
 import OrderOfPaymentDocument from "@/components/order-of-payment-document";
+import { WizardSteps, WizardNav } from "@/components/reservation-wizard";
 import {
   getMinEventDate,
   getMinEventDateKey,
@@ -193,6 +194,7 @@ export default function WalkInReservationPage() {
 
   // Dialog and submission
   const [showOrder, setShowOrder] = React.useState(false);
+  const [step, setStep] = React.useState(0);
   // Order of Payment generated for the walk-in client after a successful save.
   const [savedOrder, setSavedOrder] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -499,6 +501,55 @@ export default function WalkInReservationPage() {
   };
 
   const isSportsComplex = venueId === "2";
+
+  // Wizard steps (client details first for walk-in reservations). Sports
+  // Complex facilities need dates first, so its facility step follows Dates.
+  const STEP_CLIENT = 0;
+  const STEP_DETAILS = 1;
+  const STEP_DATES = isSportsComplex ? 2 : 3;
+  const STEP_PACKAGE = isSportsComplex ? 3 : 2;
+  const STEP_REVIEW = 4;
+  const WIZARD_STEPS = [
+    "Client",
+    "Reservation Details",
+    isSportsComplex ? "Select Dates" : "Package",
+    isSportsComplex ? "Facilities" : "Select Dates",
+    "Review & Submit",
+  ];
+  const STEP_HINTS = [
+    "Choose whether this is a new walk-in client or an existing user.",
+    "Enter the venue, event name, and time slot.",
+    isSportsComplex
+      ? "Select the event date(s) from the calendar."
+      : "Choose a package, or build your own with the additional services.",
+    isSportsComplex
+      ? "Select one or more facilities for this event."
+      : "Select the event date(s) from the calendar.",
+    "Review the details, then save and print the Order of Payment.",
+  ];
+  const stepValid = [];
+  stepValid[STEP_CLIENT] = isExistingUser
+    ? Boolean(selectedClient)
+    : Boolean(clientName);
+  stepValid[STEP_DETAILS] = Boolean(venueId && eventType);
+  stepValid[STEP_DATES] = selectedDates.size > 0;
+  stepValid[STEP_PACKAGE] = true;
+  stepValid[STEP_REVIEW] = true;
+  const stepError = (s) =>
+    s === STEP_CLIENT
+      ? isExistingUser
+        ? "Please search and select an existing user."
+        : "Please enter the walk-in client's name."
+      : s === STEP_DETAILS
+        ? "Please select a venue and enter an event type."
+        : "Please select at least one date.";
+  const goNext = () => {
+    if (!stepValid[step]) {
+      toast.error(stepError(step));
+      return;
+    }
+    setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
+  };
 
   const reservedFacilityIdsGlobal = React.useMemo(() => {
     const reserved = new Set();
@@ -1148,6 +1199,7 @@ export default function WalkInReservationPage() {
       setSelectedFacilityIds([]);
       setReservedByDate({});
       setFacilityQuantities({});
+      setStep(0);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -1405,6 +1457,8 @@ const renderPerDateFacilities = (date, cust) => {
         </p>
       </div>
 
+      <WizardSteps steps={WIZARD_STEPS} current={step} onSelect={setStep} />
+
       {/* Order of Payment — generated once the reservation is saved */}
       {savedOrder && (
         <div className="flex flex-col gap-4">
@@ -1447,6 +1501,7 @@ const renderPerDateFacilities = (date, cust) => {
       )}
 
       {/* Toggle: Existing User or Walk-in */}
+      {step === STEP_CLIENT && (
       <Card>
         <CardHeader>
           <CardTitle>Client Type</CardTitle>
@@ -1485,19 +1540,18 @@ const renderPerDateFacilities = (date, cust) => {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Client Information */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Client Information</CardTitle>
-            <CardDescription>
-              {isExistingUser
-                ? "Search for an existing registered user."
-                : "Enter the walk-in client's details."}
-            </CardDescription>
+            <CardTitle>{WIZARD_STEPS[step]}</CardTitle>
+            <CardDescription>{STEP_HINTS[step]}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {step === STEP_CLIENT && (
+            <>
             {isExistingUser ? (
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1607,8 +1661,12 @@ const renderPerDateFacilities = (date, cust) => {
                 </div>
               </div>
             )}
-            <Separator className="my-6" />
+            </>
+            )}
+            {step === STEP_CLIENT && <Separator className="my-6" />}
             {/* Reservation Details inside Client Info Card */}
+            {step === STEP_DETAILS && (
+            <>
             <div className="space-y-2">
               <Label>Venue *</Label>
               <Select value={venueId} onValueChange={setVenueId}>
@@ -1632,6 +1690,10 @@ const renderPerDateFacilities = (date, cust) => {
                 onChange={(e) => setEventType(e.target.value)}
               />
             </div>
+            </>
+            )}
+            {/* Select dates */}
+            {step === STEP_DATES && (
             <div className="space-y-2">
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
@@ -1668,6 +1730,10 @@ const renderPerDateFacilities = (date, cust) => {
                 </div>
               )}
             </div>
+            )}
+            {/* Time slot */}
+            {step === STEP_DETAILS && (
+            <>
             {isSportsComplex ? (
                 <div className="space-y-2">
                   <Label>Time Slot</Label>
@@ -1700,6 +1766,10 @@ const renderPerDateFacilities = (date, cust) => {
                 )}
               </div>
               )}
+            </>
+            )}
+            {step === STEP_PACKAGE && (
+            <>
             {!isSportsComplex && (
               <div className="space-y-2">
                 <Label>Package</Label>
@@ -1719,6 +1789,37 @@ const renderPerDateFacilities = (date, cust) => {
                 )}
               </div>
               )}
+            {/* Customize Per Date — below the package dropdown, unlocked by dates */}
+            {!isSportsComplex && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                <Button
+                  type="button"
+                  variant={customizePerDate ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleCustomizeMode}
+                  disabled={selectedDates.size === 0}
+                  className="flex items-center gap-2"
+                >
+                  <Layers className="size-4" />
+                  {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
+                </Button>
+                {customizePerDate && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCustomizeDialog(true)}
+                  >
+                    Edit Per-Date Details
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {selectedDates.size === 0
+                    ? "Select dates in the next step to unlock per-date settings."
+                    : "Set a different package and services for each selected date."}
+                </span>
+              </div>
+            )}
 {/* Conditional: Package Inclusions, virtual packages, particulars, or Facilities */}
             {isSportsComplex ? (
               <div className="space-y-2">
@@ -1941,6 +2042,9 @@ const renderPerDateFacilities = (date, cust) => {
               ) : (packageId === "custom" || packageId === "0" || !packageId) ? null : null}
             </div>
             )}
+            </>
+            )}
+            {step === STEP_REVIEW && (
             <div className="space-y-2">
               <Label>Additional Notes</Label>
               <Input
@@ -1949,11 +2053,13 @@ const renderPerDateFacilities = (date, cust) => {
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Summary & Generate */}
+      {/* Summary & Generate (Review step) */}
+      {step === STEP_REVIEW && (
       <Card>
         <CardHeader>
           <CardTitle>Reservation Summary</CardTitle>
@@ -2063,6 +2169,15 @@ const renderPerDateFacilities = (date, cust) => {
           </Button>
         </CardContent>
       </Card>
+      )}
+
+      <WizardNav
+        onBack={step > 0 ? () => setStep(step - 1) : undefined}
+        onNext={goNext}
+        nextLabel="Next"
+        nextDisabled={!stepValid[step]}
+        hideNext={step === WIZARD_STEPS.length - 1}
+      />
 
       {/* Confirmation Dialog */}
       <Dialog open={showOrder} onOpenChange={setShowOrder}>

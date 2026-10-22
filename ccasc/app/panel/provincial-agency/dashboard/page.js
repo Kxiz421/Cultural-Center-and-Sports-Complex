@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Bell, FileText, History } from "lucide-react";
+import ReservationsTracker from "@/components/reservations-tracker";
 
 export default function ProvincialAgencyDashboard() {
   const [data, setData] = useState(null);
@@ -142,6 +143,14 @@ export default function ProvincialAgencyDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Reservations tracker — search, filters and the live process per reservation. */}
+      <ReservationsTracker
+        showNewReservation={false}
+        title="My Reservations"
+        description="Track your reservations and what to do next. Select one to see its status."
+        documentsHref="/panel/provincial-agency/documents"
+      />
     </div>
   );
 }

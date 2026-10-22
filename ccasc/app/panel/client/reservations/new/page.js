@@ -11,9 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Layers, RotateCcw, Loader2, Info } from "lucide-react";
+import { Calendar, Clock, Building2, Package, ChevronLeft, ChevronRight, Trash2, Layers, Printer, RotateCcw, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import OrderOfPaymentDocument from "@/components/order-of-payment-document";
+import { WizardSteps, WizardNav } from "@/components/reservation-wizard";
 import { excludeArchivedFacilities } from "@/lib/facility-status";
 import {
   isVirtualPackageId,
@@ -146,6 +148,8 @@ export default function ClientNewReservationPage() {
   const [availLoading, setAvailLoading] = React.useState(false);
   const [particularQuantities, setParticularQuantities] = React.useState({});
   const [submitting, setSubmitting] = React.useState(false);
+  const [step, setStep] = React.useState(0);
+  const [savedOrder, setSavedOrder] = React.useState(null);
   const [particularsLoading, setParticularsLoading] = React.useState(true);
   const submitLockRef = React.useRef(false);
 
@@ -821,6 +825,51 @@ export default function ClientNewReservationPage() {
 
   const isSportsComplex = form.venueId === "2";
 
+  // Wizard. Sports Complex facilities can only be chosen once dates are
+  // selected (availability is per date), so its facility step follows Dates.
+  const STEP_DETAILS = 0;
+  const STEP_DATES = isSportsComplex ? 1 : 2;
+  const STEP_PACKAGE = isSportsComplex ? 2 : 1;
+  const STEP_REVIEW = 3;
+  const WIZARD_STEPS = [
+    "Reservation Details",
+    isSportsComplex ? "Select Dates" : "Package",
+    isSportsComplex ? "Facilities" : "Select Dates",
+    "Review & Submit",
+  ];
+  const STEP_HINTS = [
+    "Choose the venue, give your event a name, and pick a time slot.",
+    isSportsComplex
+      ? "Select your event date(s) from the calendar."
+      : "Choose a package, or build your own with the additional services.",
+    isSportsComplex
+      ? "Select one or more facilities for your event."
+      : "Select your event date(s) from the calendar.",
+    "Review the details below, then generate your Order of Payment.",
+  ];
+  const stepValid = [];
+  stepValid[STEP_DETAILS] = Boolean(form.venueId && form.eventType && form.timeSlotId);
+  stepValid[STEP_DATES] = selectedDates.size > 0;
+  stepValid[STEP_PACKAGE] = isSportsComplex
+    ? customizePerDate || selectedFacilityIds.length > 0
+    : true;
+  stepValid[STEP_REVIEW] = true;
+  const stepError = (s) =>
+    s === STEP_DETAILS
+      ? "Please select a venue, event type, and time slot."
+      : s === STEP_DATES
+        ? "Please select at least one date."
+        : isSportsComplex
+          ? "Please select at least one facility."
+          : "Please complete your package selection.";
+  const goNext = () => {
+    if (!stepValid[step]) {
+      toast.error(stepError(step));
+      return;
+    }
+    setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
+  };
+
   const summaryLines = isSportsComplex
     ? buildFacilitySummaryLines({
         facilities,
@@ -1088,8 +1137,27 @@ export default function ClientNewReservationPage() {
       }
 
       const data = await res.json();
-      toast.success(`Reservation ${data.id} created! Redirecting…`);
-      router.push(`/panel/client/reservations?id=${data.id}`);
+      toast.success(`Reservation ${data.id} created!`);
+      // Show the Order of Payment first; closing it returns to My Reservations.
+      setSavedOrder({
+        controlNumber: data.id,
+        clientName: clientInfo.name || "Client",
+        contactNumber: "",
+        activityName: form.eventType,
+        activityDate: sortedDates
+          .map((d) =>
+            new Date(`${d}T00:00:00`).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })
+          )
+          .join(", "),
+        chargeLines: summaryLines,
+        totalAmount: total,
+        eventDates: sortedDates,
+        venueName: form.venueId === "1" ? "Cultural Center" : "Sports Complex",
+      });
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -1295,29 +1363,36 @@ const renderPerDateFacilities = (date, cust) => {
         </p>
       </div>
 
+      <WizardSteps steps={WIZARD_STEPS} current={step} onSelect={setStep} />
+
+      {step <= 2 && (
       <Card>
         <CardHeader>
-          <CardTitle>Client Information</CardTitle>
-          <CardDescription>
-            Your account details and reservation preferences.
-          </CardDescription>
+          <CardTitle>{WIZARD_STEPS[step]}</CardTitle>
+          <CardDescription>{STEP_HINTS[step]}</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Logged-in User Info */}
-          <div className="rounded-lg border bg-muted/30 p-4 mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Building2 className="size-4 text-primary" />
-              <span className="text-sm font-medium">Logged-in User</span>
-              <Badge variant="secondary" className="ml-auto">Client</Badge>
-            </div>
-            <p className="text-sm font-medium">{clientInfo.name || "Client"}</p>
-            <p className="text-xs text-muted-foreground">{clientInfo.email || ""}</p>
-          </div>
+          {step === 0 && (
+            <>
+              {/* Logged-in User Info */}
+              <div className="rounded-lg border bg-muted/30 p-4 mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="size-4 text-primary" />
+                  <span className="text-sm font-medium">Logged-in User</span>
+                  <Badge variant="secondary" className="ml-auto">Client</Badge>
+                </div>
+                <p className="text-sm font-medium">{clientInfo.name || "Client"}</p>
+                <p className="text-xs text-muted-foreground">{clientInfo.email || ""}</p>
+              </div>
 
-          <Separator className="mb-6" />
+              <Separator className="mb-6" />
+            </>
+          )}
 
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
+              {step === 0 && (
+              <>
               <div className="space-y-2">
                 <Label htmlFor="venue">Venue <span className="text-red-500">*</span></Label>
                 <Select value={form.venueId} onValueChange={(v) => handleChange("venueId", v)}>
@@ -1377,8 +1452,10 @@ const renderPerDateFacilities = (date, cust) => {
                 )}
               </div>
               )}
+              </>
+              )}
 
-              {!isSportsComplex && (
+              {step === STEP_PACKAGE && !isSportsComplex && (
               <div className="space-y-2">
                 <Label htmlFor="package">Package</Label>
                 <Select
@@ -1403,6 +1480,7 @@ const renderPerDateFacilities = (date, cust) => {
               )}
             </div>
 {/* Date Picker - Calendar Grid */}
+            {step === STEP_DATES && (
             <div className="space-y-2">
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
@@ -1413,9 +1491,9 @@ const renderPerDateFacilities = (date, cust) => {
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
 
-              {/* Customize Per Date Button - available for Cultural Center, even for a single date */}
+              {/* Customize Per Date - unlocks once at least one date is selected */}
               {selectedDates.size > 0 && !isSportsComplex && (
-                <div className="flex items-center gap-2 pt-2">
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
                   <Button
                     type="button"
                     variant={customizePerDate ? "default" : "outline"}
@@ -1436,11 +1514,48 @@ const renderPerDateFacilities = (date, cust) => {
                       Edit Per-Date Details
                     </Button>
                   )}
+                  <span className="text-xs text-muted-foreground">
+                    Set a different package and services for each selected date.
+                  </span>
                 </div>
               )}
             </div>
+            )}
 
             {/* Conditional: Package Inclusions, Particulars Selector, or Facilities */}
+            {step === STEP_PACKAGE && (
+            <>
+            {/* Customize Per Date - below the package dropdown, unlocked by dates */}
+            {!isSportsComplex && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                <Button
+                  type="button"
+                  variant={customizePerDate ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleCustomizeMode}
+                  disabled={selectedDates.size === 0}
+                  className="flex items-center gap-2"
+                >
+                  <Layers className="size-4" />
+                  {customizePerDate ? "Using Per-Date Settings" : "Customize Per Date"}
+                </Button>
+                {customizePerDate && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCustomizeDialog(true)}
+                  >
+                    Edit Per-Date Details
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {selectedDates.size === 0
+                    ? "Select dates in the next step to unlock per-date settings."
+                    : "Set a different package and services for each selected date."}
+                </span>
+              </div>
+            )}
             {isSportsComplex ? (
               <div className="space-y-2">
                 <Label>Facilities</Label>
@@ -1673,7 +1788,10 @@ const renderPerDateFacilities = (date, cust) => {
               ) : null}
             </div>
             )}
+            </>
+            )}
 
+            {step === STEP_REVIEW && (
             <div className="space-y-2">
               <Label htmlFor="notes">Additional Notes</Label>
               <Textarea
@@ -1684,12 +1802,15 @@ const renderPerDateFacilities = (date, cust) => {
                 rows={3}
               />
             </div>
+            )}
 
             </div>{/* end space-y-6 */}
         </CardContent>
       </Card>
+      )}
 
-      {/* Reservation Summary */}
+      {/* Reservation Summary (Review step) */}
+      {step === STEP_REVIEW && (
       <Card>
         <CardHeader>
           <CardTitle>Reservation Summary</CardTitle>
@@ -1764,6 +1885,15 @@ const renderPerDateFacilities = (date, cust) => {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      <WizardNav
+        onBack={step > 0 ? () => setStep(step - 1) : undefined}
+        onNext={goNext}
+        nextLabel="Next"
+        nextDisabled={!stepValid[step]}
+        hideNext={step === WIZARD_STEPS.length - 1}
+      />
 
       {/* Per-Date Customization Dialog */}
       <Dialog open={showCustomizeDialog} onOpenChange={setShowCustomizeDialog}>
@@ -1851,6 +1981,65 @@ const renderPerDateFacilities = (date, cust) => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCustomizeDialog(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order of Payment — shown first; closing it returns to My Reservations */}
+      <Dialog
+        open={!!savedOrder}
+        onOpenChange={(open) => {
+          if (!open) {
+            router.push(
+              `/panel/client/reservations?id=${savedOrder?.controlNumber || ""}`
+            );
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="no-print">
+            <DialogTitle>Order of Payment</DialogTitle>
+            <DialogDescription>
+              Your reservation has been created. Present this Order of Payment at the
+              cashier, Provincial Treasurer&apos;s Office. Closing this returns you to My
+              Reservations.
+            </DialogDescription>
+          </DialogHeader>
+          {savedOrder && (
+            <OrderOfPaymentDocument
+              controlNumber={savedOrder.controlNumber}
+              date={new Date().toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+              clientName={savedOrder.clientName}
+              address=""
+              contactNumber={savedOrder.contactNumber}
+              activityName={savedOrder.activityName}
+              activityDate={savedOrder.activityDate}
+              participants=""
+              chargeLines={savedOrder.chargeLines}
+              totalAmount={savedOrder.totalAmount}
+              eventDates={savedOrder.eventDates}
+              venueName={savedOrder.venueName}
+            />
+          )}
+          <DialogFooter className="no-print gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => window.print()}>
+              <Printer className="mr-2 size-4" />
+              Print Order of Payment
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/panel/client/reservations?id=${savedOrder?.controlNumber || ""}`
+                )
+              }
+            >
+              Close &amp; Go to My Reservations
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

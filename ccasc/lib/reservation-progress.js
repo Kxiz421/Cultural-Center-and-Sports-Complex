@@ -121,7 +121,11 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
     TERMINAL_STATUSES.includes(reservationStatus) || bookingStatus === "Cancelled";
 
   const nothingToPay = totalAmount <= 0;
+  // Sports Complex reservations are processed by the Program Coordinator, so
+  // "Reservation Submitted" and "Order of Payment" are already handled for the
+  // client/PDA — they show as done and the flow starts at the Official Receipt.
   const orderOfPaymentDone =
+    isSportsComplex ||
     nothingToPay ||
     DOWN_PAYMENT_STATUSES.includes(paymentStatus) ||
     (requiredDownPayment > 0 && amountPaid >= requiredDownPayment);
