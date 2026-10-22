@@ -1,57 +1,52 @@
-const PHILSMS_ENDPOINT = "https://app.philsms.com/api/v3/sms/send";
+const SMSGATE_DEFAULT_URL = "https://api.sms-gate.app/3rdparty/v1";
 
-function apiToken() {
-  return String(process.env.PHILSMS_API_TOKEN ?? "").trim();
+function username() {
+  return String(process.env.SMSGATE_USERNAME ?? "").trim();
 }
 
-function senderId() {
-  return String(process.env.PHILSMS_SENDER_ID ?? "").trim() || "CCASC";
+function password() {
+  return String(process.env.SMSGATE_PASSWORD ?? "").trim();
+}
+
+function apiBase() {
+  const configured = String(process.env.SMSGATE_API_URL ?? "").trim();
+  return (configured || SMSGATE_DEFAULT_URL).replace(/\/+$/, "");
 }
 
 export function isSmsEnabled() {
-  return Boolean(apiToken());
+  return Boolean(username() && password());
 }
 
 export async function sendOtpSms(toE164, otp) {
-  const token = apiToken();
-  if (!toE164 || !token) return false;
+  if (!toE164 || !isSmsEnabled()) return false;
 
   try {
-    const res = await fetch(PHILSMS_ENDPOINT, {
+    const res = await fetch(`${apiBase()}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Basic ${Buffer.from(
+          `${username()}:${password()}`,
+        ).toString("base64")}`,
       },
       body: JSON.stringify({
-        recipient: toE164,
-        sender_id: senderId(),
-        type: "plain",
-        message: `CCASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
+        textMessage: {
+          text: `CCASC: Your password reset code is ${otp}. Valid for 5 minutes. Do not share it.`,
+        },
+        phoneNumbers: [toE164],
       }),
       signal: AbortSignal.timeout(10000),
     });
 
-    const raw = await res.text();
-
-    let data = null;
-    try {
-      data = JSON.parse(raw);
-    } catch (parseError) {
-      data = null;
-    }
-
-    if (!res.ok || data?.status !== "success") {
+    if (!res.ok) {
+      const raw = await res.text().catch(() => "");
       console.error(
-        `PhilSMS rejected the send (HTTP ${res.status}): ${
-          data?.message ?? raw.slice(0, 300)
-        }`,
+        `SMSGate rejected the send (HTTP ${res.status}): ${raw.slice(0, 300)}`,
       );
       return false;
     }
 
-    console.log(`OTP SMS sent to ${toE164}`);
+    console.log(`OTP SMS queued to ${toE164}`);
     return true;
   } catch (error) {
     console.error("Failed to send OTP SMS:", error.message);
