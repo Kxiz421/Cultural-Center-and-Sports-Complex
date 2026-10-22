@@ -15,7 +15,10 @@
  */
 
 import { register } from "node:module";
+import { createHmac } from "node:crypto";
 import bcrypt from "bcryptjs";
+
+process.env.AUTH_SECRET ||= "verify-password-reset-secret";
 
 /* -------------------------------------------------------------------------
  * Module stubs.
@@ -28,9 +31,19 @@ import bcrypt from "bcryptjs";
 
 const PRISMA_STUB = [
   "const store = { staff: [], client: [] };",
-  "function findUnique(rows, email) {",
-  "  const row = rows.find((r) => r.email === email);",
+  "function findUnique(rows, where) {",
+  "  const row = rows.find((r) =>",
+  "    (where.email !== undefined && r.email === where.email) ||",
+  "    (where.username !== undefined && r.username === where.username)",
+  "  );",
   "  return row ? { ...row } : null;",
+  "}",
+  "function findManyByContact(rows, forms, take) {",
+  "  const wanted = forms || [];",
+  "  return rows",
+  "    .filter((r) => wanted.includes(r.contactNumber))",
+  "    .slice(0, take || 2)",
+  "    .map((r) => ({ ...r }));",
   "}",
   "function update(rows, idKey, where, data) {",
   "  const row = rows.find((r) => r[idKey] === where[idKey]);",
@@ -40,11 +53,13 @@ const PRISMA_STUB = [
   "}",
   "const prisma = {",
   "  staff: {",
-  "    findUnique: async ({ where }) => findUnique(store.staff, where.email),",
+  "    findUnique: async ({ where }) => findUnique(store.staff, where),",
+  "    findMany: async ({ where, take }) => findManyByContact(store.staff, where?.contactNumber?.in, take),",
   "    update: async ({ where, data }) => update(store.staff, 'staffId', where, data),",
   "  },",
   "  client: {",
-  "    findUnique: async ({ where }) => findUnique(store.client, where.email),",
+  "    findUnique: async ({ where }) => findUnique(store.client, where),",
+  "    findMany: async ({ where, take }) => findManyByContact(store.client, where?.contactNumber?.in, take),",
   "    update: async ({ where, data }) => update(store.client, 'clientId', where, data),",
   "  },",
   "};",
@@ -59,6 +74,24 @@ const MODULE_STUBS = {
     "export const sendOtpEmail = async (to, otp) => {",
     "  globalThis.__otpSends.push({ to, otp });",
     "  return true;",
+    "};",
+    "export const maskEmail = (value) => {",
+    "  const email = String(value ?? '').trim();",
+    "  const at = email.indexOf('@');",
+    "  if (at <= 0) return '';",
+    "  const local = email.slice(0, at);",
+    "  const domain = email.slice(at);",
+    "  const visible = local.slice(0, 2);",
+    "  return visible + String.fromCharCode(8226).repeat(Math.max(local.length - visible.length, 1)) + domain;",
+    "};",
+  ].join("\n"),
+  "@/lib/firebase-admin": [
+    "globalThis.__firebaseConfigured = true;",
+    "globalThis.__firebaseTokens = new Map();",
+    "export const isFirebaseConfigured = () => globalThis.__firebaseConfigured === true;",
+    "export const verifyFirebaseIdToken = async (idToken) => {",
+    "  const phoneNumber = globalThis.__firebaseTokens.get(idToken);",
+    "  return phoneNumber ? { phoneNumber } : null;",
     "};",
   ].join("\n"),
   "@/lib/rate-limit": [
@@ -128,6 +161,8 @@ function seed({ staff = [], client = [] } = {}) {
   prismaStore.staff = staff;
   prismaStore.client = client;
   (globalThis.__otpSends ||= []).length = 0;
+  globalThis.__firebaseConfigured = true;
+  (globalThis.__firebaseTokens ||= new Map()).clear();
   return { staff: prismaStore.staff, client: prismaStore.client };
 }
 
@@ -416,7 +451,7 @@ async function scenarioRouteEndToEnd() {
   });
 
   const { result: posted, warnings } = await mutedWarnings(() =>
-    POST(request({ email: SHARED })),
+    POST(request({ identifier: SHARED })),
   );
 
   check("POST answers 200", status(posted) === 200, `got ${status(posted)}`);
@@ -440,7 +475,7 @@ async function scenarioRouteEndToEnd() {
   check("POST left the shadowed Client row alone", tables.client[0].otp === null);
 
   const wrong = await mutedWarnings(() =>
-    PATCH(request({ email: SHARED, otp: "000001" })),
+    PATCH(request({ identifier: SHARED, otp: "000001" })),
   );
   check(
     "PATCH rejects a wrong code with 400",
@@ -449,7 +484,7 @@ async function scenarioRouteEndToEnd() {
   );
 
   const patched = await mutedWarnings(() =>
-    PATCH(request({ email: SHARED, otp: codeOnTargetRow })),
+    PATCH(request({ identifier: SHARED, otp: codeOnTargetRow })),
   );
   check(
     "PATCH accepts the emailed code",
@@ -458,7 +493,7 @@ async function scenarioRouteEndToEnd() {
   );
 
   const put = await mutedWarnings(() =>
-    PUT(request({ email: SHARED, otp: codeOnTargetRow, newPassword: NEW_PASSWORD })),
+    PUT(request({ identifier: SHARED, otp: codeOnTargetRow, newPassword: NEW_PASSWORD })),
   );
   check("PUT succeeds and reports success", status(put.result) === 200, `got ${status(put.result)}`);
   check(
@@ -501,7 +536,7 @@ async function scenarioUnknownEmailSendsNoCode() {
 
   const tables = seed({ staff: [], client: [] });
 
-  const padded = await POST(request({ email: "  nobody@example.com  " }));
+  const padded = await POST(request({ identifier: "  nobody@example.com  " }));
   check(
     "POST answers 404 for an unknown email (even padded)",
     status(padded) === 404,
@@ -549,13 +584,13 @@ async function scenarioAllUserTypes() {
 
     const newPassword = `New${c.kind}${c.id}Pw1!`;
 
-    const posted = await POST(request({ email: c.email }));
+    const posted = await POST(request({ identifier: c.email }));
     const codeOnRow =
       c.kind === "staff" ? tables.staff[0].otp : tables.client[0].otp;
 
-    const patched = await PATCH(request({ email: c.email, otp: codeOnRow }));
+    const patched = await PATCH(request({ identifier: c.email, otp: codeOnRow }));
     const put = await PUT(
-      request({ email: c.email, otp: codeOnRow, newPassword }),
+      request({ identifier: c.email, otp: codeOnRow, newPassword }),
     );
 
     const loginRow = loginRowFor(tables, c.email);
@@ -567,6 +602,477 @@ async function scenarioAllUserTypes() {
         status(put) === 200 &&
         globalThis.__otpSends.length === 1,
       `POST ${status(posted)}, PATCH ${status(patched)}, PUT ${status(put)}, sends ${globalThis.__otpSends.length}`,
+    );
+    check(
+      `${c.label}: signs in with the new password`,
+      await bcrypt.compare(newPassword, loginRow.password),
+    );
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * 9-15. Single identifier (email / username / mobile) + Firebase phone reset.
+ *
+ * Resolution mirrors login (email, then username, Staff before Client) and
+ * falls back to the mobile number, which login does not accept. The lookup
+ * must only ever reveal masked channels, and Firebase only proves control of a
+ * phone number - so `firebase-verify` must refuse a verified number that is
+ * not the one stored on the identified account, and the ticket it returns must
+ * be signed, account-bound and short-lived.
+ * ---------------------------------------------------------------------- */
+
+const SMS_PHONE = "09171234567";
+const SMS_E164 = "+639171234567";
+const SMS_MASKED = "09•••4567";
+const CLIENT_EMAIL = "keypii123@gmail.com";
+
+const { toE164Ph } = await import(
+  new URL("../lib/phone.js", import.meta.url).href
+);
+
+const lookup = (identifier) => POST(request({ action: "lookup", identifier }));
+const sendEmail = (identifier) =>
+  POST(request({ action: "send", identifier, channel: "email" }));
+const firebaseVerify = (identifier, idToken) =>
+  POST(request({ action: "firebase-verify", identifier, idToken }));
+
+/** Register an ID token that the stubbed admin SDK resolves to this phone. */
+function tokenFor(idToken, phoneNumber) {
+  globalThis.__firebaseTokens.set(idToken, phoneNumber);
+  return idToken;
+}
+
+async function scenarioLookup() {
+  console.log("\n9. Lookup finds the account by email, username or mobile");
+
+  seed({
+    staff: [],
+    client: [
+      {
+        clientId: 27,
+        username: "keisha",
+        email: CLIENT_EMAIL,
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  const byEmail = await lookup(CLIENT_EMAIL);
+  check("lookup by email answers 200", status(byEmail) === 200, `got ${status(byEmail)}`);
+  check(
+    "lookup sends no email",
+    globalThis.__otpSends.length === 0,
+    `emails ${globalThis.__otpSends.length}`,
+  );
+
+  const channels = byEmail.body?.channels ?? [];
+  const emailCh = channels.find((c) => c.type === "email");
+  const smsCh = channels.find((c) => c.type === "sms");
+  check(
+    "email channel is masked, never the raw address",
+    !!emailCh &&
+      emailCh.target !== CLIENT_EMAIL &&
+      emailCh.target.startsWith("ke") &&
+      emailCh.target.endsWith("@gmail.com"),
+    `got ${emailCh?.target}`,
+  );
+  check("sms channel is masked", smsCh?.target === SMS_MASKED, `got ${smsCh?.target}`);
+
+  const byUsername = await lookup("keisha");
+  check(
+    "lookup by username finds the same account",
+    status(byUsername) === 200 &&
+      (byUsername.body?.channels?.length ?? 0) === channels.length,
+    `got ${status(byUsername)}`,
+  );
+
+  const byPhone = await lookup(SMS_PHONE);
+  check("lookup by mobile number answers 200", status(byPhone) === 200, `got ${status(byPhone)}`);
+
+  const unknown = await lookup("nobody@example.com");
+  check("lookup for unknown details answers 404", status(unknown) === 404, `got ${status(unknown)}`);
+}
+
+async function scenarioFirebaseReset() {
+  console.log("\n10. Firebase phone verification resets the password (Staff and Client)");
+
+  const cases = [
+    { kind: "staff", id: 19, email: "pcsc@gmail.com" },
+    { kind: "client", id: 27, email: CLIENT_EMAIL },
+  ];
+
+  for (const c of cases) {
+    const row = {
+      username: `${c.kind}${c.id}`,
+      email: c.email,
+      contactNumber: SMS_PHONE,
+      password: "old-hash",
+      otp: null,
+      otpExpiration: null,
+    };
+    const tables =
+      c.kind === "staff"
+        ? seed({ staff: [{ ...row, staffId: c.id }], client: [] })
+        : seed({ staff: [], client: [{ ...row, clientId: c.id }] });
+
+    const verified = await firebaseVerify(
+      c.email,
+      tokenFor(`token-${c.kind}-${c.id}`, SMS_E164),
+    );
+    check(
+      `${c.kind}: firebase-verify answers 200 with a ticket`,
+      status(verified) === 200 && typeof verified.body?.ticket === "string",
+      `got ${status(verified)} ${JSON.stringify(verified.body)}`,
+    );
+
+    const newPassword = `Phone${c.kind}1!`;
+    const put = await PUT(
+      request({
+        identifier: c.email,
+        ticket: verified.body?.ticket,
+        newPassword,
+      }),
+    );
+    check(
+      `${c.kind}: PUT with the ticket succeeds`,
+      status(put) === 200,
+      `got ${status(put)}`,
+    );
+
+    const updated = c.kind === "staff" ? tables.staff[0] : tables.client[0];
+    check(
+      `${c.kind}: login accepts the new password`,
+      await bcrypt.compare(newPassword, updated.password),
+    );
+    check(
+      `${c.kind}: PUT cleared the OTP fields`,
+      updated.otp === null && updated.otpExpiration === null,
+    );
+  }
+}
+
+async function scenarioFirebaseRejections() {
+  console.log("\n11. Wrong numbers, bad tokens and unknown details are refused");
+
+  seed({
+    staff: [],
+    client: [
+      {
+        clientId: 9,
+        email: "nophone@email.com",
+        contactNumber: "N/A",
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  const noPhoneLookup = await lookup("nophone@email.com");
+  check(
+    "an account with no mobile on file lists email only",
+    status(noPhoneLookup) === 200 &&
+      noPhoneLookup.body?.channels?.length === 1 &&
+      noPhoneLookup.body.channels[0].type === "email",
+    JSON.stringify(noPhoneLookup.body?.channels),
+  );
+
+  seed({
+    staff: [],
+    client: [
+      {
+        clientId: 27,
+        email: CLIENT_EMAIL,
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  const otherNumber = await firebaseVerify(
+    CLIENT_EMAIL,
+    tokenFor("token-other-number", "+639998887777"),
+  );
+  check(
+    "a verified number that is not on the account answers 403",
+    status(otherNumber) === 403,
+    `got ${status(otherNumber)}`,
+  );
+
+  const badToken = await firebaseVerify(CLIENT_EMAIL, "not-a-real-token");
+  check(
+    "an unknown token answers 401",
+    status(badToken) === 401,
+    `got ${status(badToken)}`,
+  );
+
+  const missingToken = await firebaseVerify(CLIENT_EMAIL, "");
+  check(
+    "a missing token answers 400",
+    status(missingToken) === 400,
+    `got ${status(missingToken)}`,
+  );
+
+  const unknownAccount = await firebaseVerify(
+    "nobody@example.com",
+    tokenFor("token-unknown-account", SMS_E164),
+  );
+  check(
+    "unknown details still answer 404",
+    status(unknownAccount) === 404,
+    `got ${status(unknownAccount)}`,
+  );
+}
+
+async function scenarioAmbiguousPhone() {
+  console.log("\n12. A mobile number shared by two accounts is refused");
+
+  seed({
+    staff: [
+      {
+        staffId: 3,
+        email: "clerk@scgcc.gov.ph",
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+    client: [
+      {
+        clientId: 4,
+        email: "shared@email.com",
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  const res = await firebaseVerify(
+    SMS_PHONE,
+    tokenFor("token-ambiguous", SMS_E164),
+  );
+  check("answers 409", status(res) === 409, `got ${status(res)}`);
+}
+
+async function scenarioFirebaseDisabled() {
+  console.log("\n13. Without Firebase config the channel hides and the API answers 503");
+
+  seed({
+    staff: [],
+    client: [
+      {
+        clientId: 5,
+        email: "x@email.com",
+        contactNumber: SMS_PHONE,
+        password: "h",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  globalThis.__firebaseConfigured = false;
+  try {
+    const hidden = await lookup("x@email.com");
+    check(
+      "lookup lists email only while Firebase is off",
+      status(hidden) === 200 &&
+        hidden.body?.channels?.length === 1 &&
+        hidden.body.channels[0].type === "email",
+      JSON.stringify(hidden.body?.channels),
+    );
+
+    const res = await firebaseVerify("x@email.com", "any-token");
+    check(
+      "firebase-verify answers 503",
+      status(res) === 503,
+      `got ${status(res)}`,
+    );
+
+    const emailStillWorks = await sendEmail("x@email.com");
+    check(
+      "email reset is unaffected by the Firebase flag",
+      status(emailStillWorks) === 200,
+      `got ${status(emailStillWorks)}`,
+    );
+  } finally {
+    globalThis.__firebaseConfigured = true;
+  }
+}
+
+async function scenarioTicketGuards() {
+  console.log("\n14. Tickets are signed, account-bound and short-lived");
+
+  const tables = seed({
+    staff: [],
+    client: [
+      {
+        clientId: 27,
+        email: CLIENT_EMAIL,
+        contactNumber: SMS_PHONE,
+        password: "old-hash",
+        otp: null,
+        otpExpiration: null,
+      },
+      {
+        clientId: 28,
+        email: "someone.else@email.com",
+        contactNumber: "09170000099",
+        password: "old-hash",
+        otp: null,
+        otpExpiration: null,
+      },
+    ],
+  });
+
+  const issued = await firebaseVerify(
+    CLIENT_EMAIL,
+    tokenFor("token-guards", SMS_E164),
+  );
+  const ticket = issued.body?.ticket;
+  check("a ticket was issued for the right number", typeof ticket === "string");
+
+  const otherAccount = await PUT(
+    request({
+      identifier: "someone.else@email.com",
+      ticket,
+      newPassword: "NopeNope1!",
+    }),
+  );
+  check(
+    "a ticket for one account cannot reset another",
+    status(otherAccount) === 400,
+    `got ${status(otherAccount)}`,
+  );
+  check(
+    "the other account's password is untouched",
+    tables.client[1].password === "old-hash",
+  );
+
+  const tampered = await PUT(
+    request({
+      identifier: CLIENT_EMAIL,
+      ticket: `${String(ticket).slice(0, -2)}xy`,
+      newPassword: "NopeNope1!",
+    }),
+  );
+  check(
+    "a tampered ticket is rejected",
+    status(tampered) === 400,
+    `got ${status(tampered)}`,
+  );
+
+  const expiredPayload = Buffer.from(
+    JSON.stringify({ u: "client", i: 27, exp: Date.now() - 1000 }),
+  ).toString("base64url");
+  const expiredSignature = createHmac("sha256", process.env.AUTH_SECRET)
+    .update(expiredPayload)
+    .digest("base64url");
+  const expired = await PUT(
+    request({
+      identifier: CLIENT_EMAIL,
+      ticket: `${expiredPayload}.${expiredSignature}`,
+      newPassword: "NopeNope1!",
+    }),
+  );
+  check(
+    "an expired ticket is rejected",
+    status(expired) === 400,
+    `got ${status(expired)}`,
+  );
+
+  const noProof = await PUT(
+    request({ identifier: CLIENT_EMAIL, newPassword: "NopeNope1!" }),
+  );
+  check(
+    "a reset with neither code nor ticket is rejected",
+    status(noProof) === 400,
+    `got ${status(noProof)}`,
+  );
+
+  check(
+    "no rejected attempt changed the password",
+    tables.client[0].password === "old-hash",
+  );
+
+  const good = await PUT(
+    request({ identifier: CLIENT_EMAIL, ticket, newPassword: "TicketOk1!" }),
+  );
+  check(
+    "the untouched ticket still works",
+    status(good) === 200,
+    `got ${status(good)}`,
+  );
+  check(
+    "and the new password is live",
+    await bcrypt.compare("TicketOk1!", tables.client[0].password),
+  );
+}
+
+async function scenarioAllUserTypesPhone() {
+  console.log("\n15. Every user type completes the Firebase phone reset");
+
+  const cases = [
+    { label: "Staff / Admin", kind: "staff", id: 1, phone: "09170000001" },
+    { label: "Staff / Accounting Clerk", kind: "staff", id: 3, phone: "09170000002" },
+    { label: "Staff / Program Coordinator (Sports)", kind: "staff", id: 2, phone: "09170000003" },
+    { label: "Staff / Program Coordinator (Cultural)", kind: "staff", id: 5, phone: "09170000004" },
+    { label: "Staff / Local Treasury Operations Officer", kind: "staff", id: 4, phone: "09170000005" },
+    { label: "Client / Public Client", kind: "client", id: 2, phone: "09170000006" },
+    { label: "Client / Provincial Government", kind: "client", id: 1, phone: "09170000007" },
+  ];
+
+  for (const c of cases) {
+    const email = `${c.id}@${c.kind === "staff" ? "scgcc.gov.ph" : "email.com"}`;
+    const username = `${c.kind}${c.id}`;
+    const base = {
+      username,
+      email,
+      contactNumber: c.phone,
+      password: "old-hash",
+      otp: null,
+      otpExpiration: null,
+    };
+    const tables =
+      c.kind === "staff"
+        ? seed({ staff: [{ ...base, staffId: c.id }], client: [] })
+        : seed({ staff: [], client: [{ ...base, clientId: c.id }] });
+
+    const newPassword = `Sms${c.kind}${c.id}Pw1!`;
+
+    const byUsername = await lookup(username);
+    check(
+      `${c.label}: lookup by username offers email + SMS`,
+      status(byUsername) === 200 && byUsername.body?.channels?.length === 2,
+      JSON.stringify(byUsername.body?.channels),
+    );
+
+    const verified = await firebaseVerify(
+      username,
+      tokenFor(`tok-${username}`, toE164Ph(c.phone)),
+    );
+    const put = await PUT(
+      request({
+        identifier: username,
+        ticket: verified.body?.ticket,
+        newPassword,
+      }),
+    );
+
+    const loginRow = loginRowFor(tables, email);
+
+    check(
+      `${c.label}: verify + PUT both 200`,
+      status(verified) === 200 && status(put) === 200,
+      `verify ${status(verified)}, PUT ${status(put)}`,
     );
     check(
       `${c.label}: signs in with the new password`,
@@ -588,6 +1094,13 @@ await scenarioUnknownEmail();
 await scenarioRouteEndToEnd();
 await scenarioUnknownEmailSendsNoCode();
 await scenarioAllUserTypes();
+await scenarioLookup();
+await scenarioFirebaseReset();
+await scenarioFirebaseRejections();
+await scenarioAmbiguousPhone();
+await scenarioFirebaseDisabled();
+await scenarioTicketGuards();
+await scenarioAllUserTypesPhone();
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed.`);

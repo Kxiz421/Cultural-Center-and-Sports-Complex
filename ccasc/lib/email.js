@@ -163,6 +163,22 @@ function escapeHtml(value) {
 }
 
 /**
+ * Partially hide an email address for display, keeping the first two
+ * characters of the local part and the whole domain.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function maskEmail(value) {
+  const email = String(value ?? "").trim();
+  const at = email.indexOf("@");
+  if (at <= 0) return "";
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  const visible = local.slice(0, 2);
+  return `${visible}${"•".repeat(Math.max(local.length - visible.length, 1))}${domain}`;
+}
+
+/**
  * Notify a user that an admin updated their account details.
  * @param {string} to - Recipient email address
  * @param {object} details

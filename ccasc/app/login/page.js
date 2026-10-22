@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Eye, EyeOff, Mail } from "lucide-react";
+import { Eye, EyeOff, Mail, Phone } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -30,6 +30,7 @@ import { getSession, signIn } from "next-auth/react";
 import { USER_TYPE, homeForUserType } from "@/lib/auth-roles";
 import { MOCK_ADMIN_USER } from "@/lib/data/admin-mock";
 import { SESSION_REPLACED_REASON } from "@/lib/session-reason";
+import { toE164Ph } from "@/lib/phone";
 
 const OTP_LENGTH = 6;
 const DEMO_RESET_PW_KEY = "ccasc_demo_reset_password";
@@ -60,14 +61,20 @@ export default function LoginPage() {
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [fpOpen, setFpOpen] = React.useState(false);
-  const [recoverEmail, setRecoverEmail] = React.useState("");
-  const [fpStep, setFpStep] = React.useState("email");
+  const [fpStep, setFpStep] = React.useState("identify");
+  const [recoverIdentifier, setRecoverIdentifier] = React.useState("");
+  const [recoverChannels, setRecoverChannels] = React.useState([]);
+  const [recoverChannel, setRecoverChannel] = React.useState("email");
+  const [recoverPhone, setRecoverPhone] = React.useState("");
+  const [resetTicket, setResetTicket] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [otpCells, setOtpCells] = React.useState(() =>
     Array.from({ length: OTP_LENGTH }, () => ""),
   );
   const otpInputRefs = React.useRef([]);
+  const recaptchaRef = React.useRef(null);
+  const confirmationRef = React.useRef(null);
   const [fpLoading, setFpLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -80,14 +87,64 @@ export default function LoginPage() {
     }
   }, []);
 
-  const emailLooksValid = (value) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  const recoverTarget =
+    recoverChannels.find((c) => c.type === recoverChannel)?.target ?? "";
+
+  const isSmsChannel = recoverChannel === "sms";
+
+  const clearRecaptcha = () => {
+    if (!recaptchaRef.current) return;
+    try {
+      recaptchaRef.current.clear();
+    } catch (clearError) {
+      console.warn("Failed to clear reCAPTCHA verifier:", clearError);
+    }
+    recaptchaRef.current = null;
+  };
+
+  const phoneErrorMessage = (err) => {
+    const code = String(err?.code ?? "");
+    if (code.includes("invalid-verification-code")) {
+      return "That code is incorrect. Check the message and try again.";
+    }
+    if (code.includes("too-many-requests")) {
+      return "Too many attempts on this number. Please wait a while and try again.";
+    }
+    if (code.includes("invalid-phone-number")) {
+      return "That mobile number doesn't look valid. Please check it and try again.";
+    }
+    if (code.includes("quota-exceeded")) {
+      return "The SMS limit has been reached. Please try again later, or recover using your email address.";
+    }
+    if (code.includes("operation-not-allowed") || code.includes("argument-error")) {
+      return "Phone recovery is not available right now. Please recover using your email address.";
+    }
+    return err?.message || "We couldn't send the code. Please try again.";
+  };
+
+  const handleChannelContinue = () => {
+    if (!isSmsChannel) {
+      handleSendCode();
+      return;
+    }
+    if (!recoverPhone) {
+      const e164 = toE164Ph(recoverIdentifier);
+      if (e164) setRecoverPhone(`0${e164.slice(3)}`);
+    }
+    setFpStep("phone");
+  };
 
   const handleForgotDialogOpen = (open) => {
     setFpOpen(open);
     if (!open) {
-      setFpStep("email");
-      setRecoverEmail("");
+      clearRecaptcha();
+      confirmationRef.current = null;
+      setFpStep("identify");
+      setRecoverIdentifier("");
+      setRecoverChannels([]);
+      setRecoverChannel("email");
+      setRecoverPhone("");
+      setResetTicket("");
       setNewPassword("");
       setConfirmPassword("");
       setShowNewPassword(false);
@@ -224,23 +281,61 @@ export default function LoginPage() {
     }
   };
 
-  const handleSendCode = async () => {
-    const email = recoverEmail.trim();
-    if (!email) {
-      toast.error("Please enter the email address registered to your account.");
+  const handleLookup = async () => {
+    const identifier = recoverIdentifier.trim();
+    if (!identifier) {
+      toast.error("Enter your email, username, or mobile number.");
       return;
     }
-    if (!emailLooksValid(email)) {
-      toast.error("Please enter a valid email address (for example, name@example.com).");
-      return;
-    }
-    
+
     setFpLoading(true);
     try {
       const res = await fetch("/api/auth/password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ action: "lookup", identifier }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "We couldn't find an account with those details.");
+        setFpLoading(false);
+        return;
+      }
+
+      const channels = data.channels ?? [];
+      if (channels.length === 0) {
+        toast.error(
+          "No recovery method is available for this account. Please contact the administrator.",
+        );
+        setFpLoading(false);
+        return;
+      }
+
+      setRecoverChannels(channels);
+      setRecoverChannel(channels[0].type);
+      setFpStep("channel");
+    } catch (err) {
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  const handleSendCode = async () => {
+    const identifier = recoverIdentifier.trim();
+
+    setFpLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send",
+          identifier,
+          channel: recoverChannel,
+        }),
       });
       
       const data = await res.json();
@@ -253,9 +348,95 @@ export default function LoginPage() {
       
       setFpStep("code");
       setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
-      toast.success(`A recovery code has been sent to ${email}.`);
+      toast.success(
+        `A recovery code has been sent to ${data.target || recoverTarget}.`,
+      );
     } catch (err) {
       toast.error("An error occurred. Please try again.");
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  const handleSendPhoneCode = async () => {
+    const phone = recoverPhone.trim();
+    const e164 = toE164Ph(phone);
+    if (!e164) {
+      toast.error("Enter a valid 11-digit mobile number (for example, 09171234567).");
+      return;
+    }
+
+    setFpLoading(true);
+    try {
+      const [{ getFirebaseAuth }, { RecaptchaVerifier, signInWithPhoneNumber }] =
+        await Promise.all([
+          import("@/lib/firebase-client"),
+          import("firebase/auth"),
+        ]);
+
+      const auth = getFirebaseAuth();
+      clearRecaptcha();
+
+      const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha", {
+        size: "invisible",
+      });
+      recaptchaRef.current = verifier;
+
+      confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
+
+      setResetTicket("");
+      setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
+      setFpStep("code");
+      toast.success(`A verification code has been sent to ${phone}.`);
+    } catch (err) {
+      clearRecaptcha();
+      toast.error(phoneErrorMessage(err));
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  const handleFirebaseConfirm = async () => {
+    const code = otpCells.join("");
+    if (code.length < OTP_LENGTH) {
+      toast.error(`Enter all ${OTP_LENGTH} digits of the recovery code.`);
+      return;
+    }
+
+    const confirmation = confirmationRef.current;
+    if (!confirmation) {
+      toast.error("Please request a new code.");
+      setFpStep("phone");
+      return;
+    }
+
+    setFpLoading(true);
+    try {
+      const credential = await confirmation.confirm(code);
+      const idToken = await credential.user.getIdToken();
+
+      const res = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "firebase-verify",
+          identifier: recoverIdentifier.trim(),
+          idToken,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "We couldn't complete phone verification.");
+        setFpLoading(false);
+        return;
+      }
+
+      setResetTicket(data.ticket ?? "");
+      setFpStep("password");
+    } catch (err) {
+      toast.error(phoneErrorMessage(err));
     } finally {
       setFpLoading(false);
     }
@@ -274,7 +455,7 @@ export default function LoginPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: recoverEmail.trim(),
+          identifier: recoverIdentifier.trim(),
           otp: code,
         }),
       });
@@ -329,21 +510,33 @@ export default function LoginPage() {
     
     setFpLoading(true);
     try {
-      const otp = otpCells.join("");
       const res = await fetch("/api/auth/password-reset", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: recoverEmail.trim(),
-          otp,
-          newPassword: next,
-        }),
+        body: JSON.stringify(
+          isSmsChannel
+            ? {
+                identifier: recoverIdentifier.trim(),
+                ticket: resetTicket,
+                newPassword: next,
+              }
+            : {
+                identifier: recoverIdentifier.trim(),
+                otp: otpCells.join(""),
+                newPassword: next,
+              },
+        ),
       });
       
       const data = await res.json();
       
       if (!res.ok) {
-        toast.error(data.error || "Failed to reset password. The code may have expired.");
+        toast.error(
+          data.error ||
+            (isSmsChannel
+              ? "Failed to reset password. Your verification may have expired."
+              : "Failed to reset password. The code may have expired."),
+        );
         setFpLoading(false);
         return;
       }
@@ -466,24 +659,40 @@ export default function LoginPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>
-                    {fpStep === "email"
+                    {fpStep === "identify"
                       ? "Reset access"
-                      : fpStep === "code"
-                        ? "Enter recovery code"
-                        : "Create new password"}
+                      : fpStep === "channel"
+                        ? "Choose recovery method"
+                        : fpStep === "phone"
+                          ? "Enter your mobile number"
+                          : fpStep === "code"
+                            ? "Enter recovery code"
+                            : "Create new password"}
                   </DialogTitle>
                   <DialogDescription>
-                    {fpStep === "email" && (
+                    {fpStep === "identify" && (
                       <>
-                        Enter your registered email. We&apos;ll send a recovery
-                        code you can use to set a new password.
+                        Enter your email, username, or mobile number. We&apos;ll show
+                        the recovery options saved on your account.
+                      </>
+                    )}
+                    {fpStep === "channel" && (
+                      <>
+                        Choose where to send your recovery code. Only part of the
+                        address is shown, to keep your account private.
+                      </>
+                    )}
+                    {fpStep === "phone" && (
+                      <>
+                        Enter the mobile number saved on your account. We&apos;ll
+                        text you a verification code.
                       </>
                     )}
                     {fpStep === "code" && (
                       <>
                         A recovery code has been sent to{" "}
                         <span className="text-foreground font-medium">
-                          {recoverEmail.trim()}
+                          {isSmsChannel ? recoverPhone.trim() : recoverTarget}
                         </span>
                         . Enter the {OTP_LENGTH}-digit code below.
                       </>
@@ -497,21 +706,92 @@ export default function LoginPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
-                  {fpStep === "email" && (
+                  <div id="firebase-recaptcha" />
+                  {fpStep === "identify" && (
                     <div className="space-y-2">
-                      <Label htmlFor="recover-email">Registered email</Label>
-                      <div className="relative">
-                        <Mail className="text-muted-foreground absolute top-2.5 left-2 size-4" />
-                        <Input
-                          id="recover-email"
-                          className="pl-8 text-foreground placeholder:text-muted-foreground"
-                          type="email"
-                          value={recoverEmail}
-                          onChange={(e) => setRecoverEmail(e.target.value)}
-                          placeholder="name@example.com"
-                          autoComplete="email"
-                        />
+                      <Label htmlFor="recover-identifier">
+                        Email, username, or mobile number
+                      </Label>
+                      <Input
+                        id="recover-identifier"
+                        className="text-foreground placeholder:text-muted-foreground"
+                        type="text"
+                        value={recoverIdentifier}
+                        onChange={(e) => setRecoverIdentifier(e.target.value)}
+                        placeholder="name@example.com, username, or 09171234567"
+                        autoComplete="username"
+                      />
+                    </div>
+                  )}
+                  {fpStep === "channel" && (
+                    <div className="space-y-2">
+                      {recoverChannels.map((option) => (
+                        <button
+                          key={option.type}
+                          type="button"
+                          onClick={() => setRecoverChannel(option.type)}
+                          aria-pressed={recoverChannel === option.type}
+                          className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                            recoverChannel === option.type
+                              ? "border-primary bg-primary/5"
+                              : "hover:bg-muted"
+                          }`}
+                        >
+                          {option.type === "email" ? (
+                            <Mail className="text-muted-foreground size-4 shrink-0" />
+                          ) : (
+                            <Phone className="text-muted-foreground size-4 shrink-0" />
+                          )}
+                          <span className="flex-1">
+                            <span className="block text-sm font-medium">
+                              {option.type === "email"
+                                ? "Email"
+                                : "Text message (SMS)"}
+                            </span>
+                            <span className="text-muted-foreground block text-xs">
+                              {option.target}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {fpStep === "phone" && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="recover-phone">
+                          Registered mobile number
+                        </Label>
+                        <div className="relative">
+                          <Phone className="text-muted-foreground absolute top-2.5 left-2 size-4" />
+                          <Input
+                            id="recover-phone"
+                            className="pl-8 text-foreground placeholder:text-muted-foreground"
+                            type="tel"
+                            inputMode="numeric"
+                            value={recoverPhone}
+                            onChange={(e) =>
+                              setRecoverPhone(
+                                e.target.value.replace(/\D/g, "").slice(0, 11),
+                              )
+                            }
+                            placeholder="09XX XXX XXXX"
+                            autoComplete="tel"
+                          />
+                        </div>
+                        <p className="text-muted-foreground text-xs">
+                          It must match the number saved on your account.
+                        </p>
                       </div>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="px-0"
+                        onClick={() => setFpStep("channel")}
+                      >
+                        Choose a different method
+                      </Button>
                     </div>
                   )}
                   {fpStep === "code" && (
@@ -553,7 +833,7 @@ export default function LoginPage() {
                       <Button
                         type="button"
                         className="w-full"
-                        onClick={handleVerifyCode}
+                        onClick={isSmsChannel ? handleFirebaseConfirm : handleVerifyCode}
                       >
                         Verify code and continue
                       </Button>
@@ -651,19 +931,35 @@ export default function LoginPage() {
                   >
                     Close
                   </Button>
-                  {fpStep === "email" ? (
+                  {fpStep === "identify" ? (
                     <Button
                       type="button"
-                      onClick={handleSendCode}
+                      onClick={handleLookup}
                       disabled={fpLoading}
                     >
-                      Send verification code
+                      Continue
+                    </Button>
+                  ) : fpStep === "channel" ? (
+                    <Button
+                      type="button"
+                      onClick={handleChannelContinue}
+                      disabled={fpLoading}
+                    >
+                      Continue
+                    </Button>
+                  ) : fpStep === "phone" ? (
+                    <Button
+                      type="button"
+                      onClick={handleSendPhoneCode}
+                      disabled={fpLoading}
+                    >
+                      Send code
                     </Button>
                   ) : fpStep === "code" ? (
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={handleSendCode}
+                      onClick={isSmsChannel ? handleSendPhoneCode : handleSendCode}
                       disabled={fpLoading}
                     >
                       Resend code
