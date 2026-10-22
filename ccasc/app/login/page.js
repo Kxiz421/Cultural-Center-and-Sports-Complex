@@ -68,6 +68,16 @@ function recoveryKind(identifier) {
   return "username";
 }
 
+/** Strength rules shared by the forced-change dialog. */
+function passwordProblem(password) {
+  if (password.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter.";
+  if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter.";
+  if (!/[0-9]/.test(password)) return "Password must contain at least one number.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character (e.g., @, #, $).";
+  return null;
+}
+
 export default function LoginPage() {
   const { start: startRouteTransition } = useRouteTransition();
   const [email, setEmail] = React.useState("");
@@ -89,6 +99,15 @@ export default function LoginPage() {
   );
   const otpInputRefs = React.useRef([]);
   const [fpLoading, setFpLoading] = React.useState(false);
+
+  // Forced password change (account created with the default password).
+  const [pwChangeOpen, setPwChangeOpen] = React.useState(false);
+  const [pwChangeIdentifier, setPwChangeIdentifier] = React.useState("");
+  const [pwChangeCurrent, setPwChangeCurrent] = React.useState("");
+  const [pwChangeNew, setPwChangeNew] = React.useState("");
+  const [pwChangeConfirm, setPwChangeConfirm] = React.useState("");
+  const [pwChangeLoading, setPwChangeLoading] = React.useState(false);
+  const [showPwChange, setShowPwChange] = React.useState(false);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -169,6 +188,83 @@ export default function LoginPage() {
     focusOtpCell(Math.min(chars.length, OTP_LENGTH) - 1);
   };
 
+  /**
+   * Runs one sign-in attempt and returns true when a session was issued.
+   * A correct password on an account still holding its default password opens
+   * the forced-change dialog instead of signing in.
+   */
+  const attemptLogin = async (identifierValue, passwordValue) => {
+    // Single authentication point: Auth.js verifies the credentials,
+    // enforces the IP rate limit, and issues the signed httpOnly session
+    // cookie. Identity is never derived from localStorage again.
+    const result = await signIn("credentials", {
+      email: identifierValue,
+      password: passwordValue,
+      redirect: false,
+    });
+
+    // Auth.js's response shape varies by version and can omit `code`, so
+    // success is decided from the session itself, not from `result.ok`.
+    const session = await getSession();
+    const user = session?.user;
+
+    if (!user?.type) {
+      if (result?.code === "password_change_required") {
+        setPwChangeIdentifier(identifierValue);
+        setPwChangeCurrent(passwordValue);
+        setPwChangeNew("");
+        setPwChangeConfirm("");
+        setPwChangeOpen(true);
+        return false;
+      }
+      // No session means the credentials were rejected (or auth is
+      // misconfigured). Report the specific reason when the code is known.
+      const message =
+        LOGIN_ERROR_MESSAGES[result?.code] ??
+        LOGIN_ERROR_MESSAGES[result?.error] ??
+        LOGIN_ERROR_MESSAGES.CredentialsSignin;
+      toast.error(message);
+      return false;
+    }
+
+    // Display-only mirrors (panel headers + audit trail) - no longer a
+    // security boundary; proxy.js and lib/api-auth.js enforce access.
+    localStorage.setItem("user_id", user.userId ?? "");
+    localStorage.setItem(
+      "user_name",
+      `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim(),
+    );
+    localStorage.setItem("role", user.type);
+    localStorage.setItem("userType", user.type);
+    localStorage.setItem("firstname", user.firstName ?? "");
+    localStorage.setItem("lastname", user.lastName ?? "");
+    localStorage.setItem("email", user.email ?? "");
+
+    // Declined Certificate of Employment -> restricted session (resubmit only)
+    if (user.type === USER_TYPE.RESUBMIT_ONLY) {
+      const reason = user.remarks ? ` Reason: ${user.remarks}` : "";
+      toast.error(
+        `Your Certificate of Employment has been declined. Please resubmit a valid document.${reason}`,
+      );
+      window.location.href = "/resubmit";
+      return true;
+    }
+
+    toast.success("Logged in successfully.");
+    // Hard navigation on purpose: the panel needs a fresh session inside
+    // SessionProvider, which a client-side push would not provide. The
+    // curtain still covers the hand-off, instead of leaving the sign-in form
+    // on screen while the dashboard downloads.
+    const home = homeForUserType(user.type);
+    // `start` declines when another transition is mid-flight; without the
+    // fallback a successful sign-in would leave the form on screen while the
+    // visitor is already authenticated.
+    if (!startRouteTransition(home, "Signing you in…", { hard: true })) {
+      window.location.assign(home);
+    }
+    return true;
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
@@ -177,73 +273,59 @@ export default function LoginPage() {
     }
 
     setLoginLoading(true);
-
     try {
-      // Single authentication point: Auth.js verifies the credentials,
-      // enforces the IP rate limit, and issues the signed httpOnly session
-      // cookie. Identity is never derived from localStorage again.
-      const result = await signIn("credentials", {
-        email: email.trim(),
-        password,
-        redirect: false,
-      });
-
-      // Auth.js's response shape varies by version and can omit `code`, so
-      // success is decided from the session itself, not from `result.ok`.
-      const session = await getSession();
-      const user = session?.user;
-
-      if (!user?.type) {
-        // No session means the credentials were rejected (or auth is
-        // misconfigured). Report the specific reason when the code is known.
-        const message =
-          LOGIN_ERROR_MESSAGES[result?.code] ??
-          LOGIN_ERROR_MESSAGES[result?.error] ??
-          LOGIN_ERROR_MESSAGES.CredentialsSignin;
-        toast.error(message);
-        setLoginLoading(false);
-        return;
-      }
-
-      // Display-only mirrors (panel headers + audit trail) - no longer a
-      // security boundary; proxy.js and lib/api-auth.js enforce access.
-      localStorage.setItem("user_id", user.userId ?? "");
-      localStorage.setItem(
-        "user_name",
-        `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim(),
-      );
-      localStorage.setItem("role", user.type);
-      localStorage.setItem("userType", user.type);
-      localStorage.setItem("firstname", user.firstName ?? "");
-      localStorage.setItem("lastname", user.lastName ?? "");
-      localStorage.setItem("email", user.email ?? "");
-
-      // Declined Certificate of Employment -> restricted session (resubmit only)
-      if (user.type === USER_TYPE.RESUBMIT_ONLY) {
-        const reason = user.remarks ? ` Reason: ${user.remarks}` : "";
-        toast.error(
-          `Your Certificate of Employment has been declined. Please resubmit a valid document.${reason}`,
-        );
-        window.location.href = "/resubmit";
-        return;
-      }
-
-      toast.success("Logged in successfully.");
-      // Hard navigation on purpose: the panel needs a fresh session inside
-      // SessionProvider, which a client-side push would not provide. The
-      // curtain still covers the hand-off, instead of leaving the sign-in form
-      // on screen while the dashboard downloads.
-      const home = homeForUserType(user.type);
-      // `start` declines when another transition is mid-flight; without the
-      // fallback a successful sign-in would leave the form on screen while the
-      // visitor is already authenticated.
-      if (!startRouteTransition(home, "Signing you in…", { hard: true })) {
-        window.location.assign(home);
-      }
+      await attemptLogin(email.trim(), password);
     } catch (err) {
       toast.error("An error occurred during login. Please try again.");
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  /** Set the new password, then sign in with it. */
+  const handleForcedPasswordChange = async () => {
+    const next = pwChangeNew.trim();
+    const confirm = pwChangeConfirm.trim();
+    if (!next || !confirm) {
+      toast.error("Enter and confirm your new password.");
+      return;
+    }
+    if (next !== confirm) {
+      toast.error("Passwords do not match. Check and try again.");
+      return;
+    }
+    const problem = passwordProblem(next);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+
+    setPwChangeLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: pwChangeIdentifier,
+          currentPassword: pwChangeCurrent,
+          newPassword: next,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to update the password.");
+        return;
+      }
+
+      toast.success("Password updated. Signing you in…");
+      setPwChangeOpen(false);
+      setPassword(next);
+      setEmail(pwChangeIdentifier);
+      await attemptLogin(pwChangeIdentifier, next);
+    } catch (err) {
+      toast.error("Failed to update the password.");
+    } finally {
+      setPwChangeLoading(false);
     }
   };
 
@@ -821,6 +903,81 @@ export default function LoginPage() {
           </CardFooter>
         </form>
         </Card>
+
+        {/* Forced password change for a default-password account */}
+        <Dialog open={pwChangeOpen} onOpenChange={setPwChangeOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Set a new password</DialogTitle>
+              <DialogDescription>
+                This account is still using its default password. Choose a new
+                password to continue signing in.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="pc-new-password">New password</Label>
+                <div className="relative">
+                  <Input
+                    id="pc-new-password"
+                    type={showPwChange ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={pwChangeNew}
+                    onChange={(e) => setPwChangeNew(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="pr-10 text-foreground placeholder:text-muted-foreground"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                    onClick={() => setShowPwChange((v) => !v)}
+                    aria-label={showPwChange ? "Hide password" : "Show password"}
+                  >
+                    {showPwChange ? (
+                      <Eye className="size-4" />
+                    ) : (
+                      <EyeOff className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  At least 8 characters with 1 uppercase, 1 lowercase, 1 number,
+                  and 1 special character.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pc-confirm-password">Confirm password</Label>
+                <Input
+                  id="pc-confirm-password"
+                  type={showPwChange ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={pwChangeConfirm}
+                  onChange={(e) => setPwChangeConfirm(e.target.value)}
+                  placeholder="Re-enter your new password"
+                  className="text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPwChangeOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleForcedPasswordChange}
+                disabled={pwChangeLoading}
+              >
+                {pwChangeLoading ? "Saving…" : "Save and sign in"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="mt-4 flex gap-3">
           <Button

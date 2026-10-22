@@ -327,29 +327,32 @@ export default function UserManagementPage() {
       return;
     }
 
-    if (!form.password || form.password !== form.confirmPassword) {
-      toast.error("Passwords must match and cannot be empty.");
-      return;
-    }
-    if (form.password.length < 8) {
-      toast.error("Password must be at least 8 characters long.");
-      return;
-    }
-    if (!/[A-Z]/.test(form.password)) {
-      toast.error("Password must contain at least one uppercase letter.");
-      return;
-    }
-    if (!/[a-z]/.test(form.password)) {
-      toast.error("Password must contain at least one lowercase letter.");
-      return;
-    }
-    if (!/[0-9]/.test(form.password)) {
-      toast.error("Password must contain at least one number.");
-      return;
-    }
-    if (!/[^A-Za-z0-9]/.test(form.password)) {
-      toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
-      return;
+    // Password is optional - a blank one issues the default "12345".
+    if (form.password || form.confirmPassword) {
+      if (form.password !== form.confirmPassword) {
+        toast.error("Passwords must match.");
+        return;
+      }
+      if (form.password.length < 8) {
+        toast.error("Password must be at least 8 characters long.");
+        return;
+      }
+      if (!/[A-Z]/.test(form.password)) {
+        toast.error("Password must contain at least one uppercase letter.");
+        return;
+      }
+      if (!/[a-z]/.test(form.password)) {
+        toast.error("Password must contain at least one lowercase letter.");
+        return;
+      }
+      if (!/[0-9]/.test(form.password)) {
+        toast.error("Password must contain at least one number.");
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(form.password)) {
+        toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
+        return;
+      }
     }
 
     if (!email) {
@@ -673,14 +676,72 @@ export default function UserManagementPage() {
               Add user
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Register account</DialogTitle>
+              <DialogDescription>
+                Details are saved to the database right away. Leave the password
+                blank to issue the default password <strong>12345</strong>; the
+                account must change it on first sign-in.
+              </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-3 py-2">
-              <div className="grid gap-2 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>First name</Label>
+
+            <div className="space-y-6 py-2">
+              {/* Account */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Account</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select
+                      value={form.role}
+                      onValueChange={(value) =>
+                        setForm((f) => ({ ...f, role: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="coord-cc">
+                          Program Coordinator – Cultural Center
+                        </SelectItem>
+                        <SelectItem value="coord-sc">
+                          Program Coordinator – Sports Complex
+                        </SelectItem>
+                        <SelectItem value="acct">
+                          Accounting Clerk – Cultural Center
+                        </SelectItem>
+                        <SelectItem value="ltoo">
+                          Local Treasury Operations Officer
+                        </SelectItem>
+                        <SelectItem value="provincial-agency">
+                          Provincial Department Agency
+                        </SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Username</Label>
+                    <Input
+                      autoComplete="off"
+                      placeholder="Optional"
+                      value={form.username}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, username: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Personal information */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Personal information</h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>First name</Label>
                     <Input
                       placeholder="Given name"
                       value={form.firstName}
@@ -709,177 +770,161 @@ export default function UserManagementPage() {
                       }
                     />
                   </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Username</Label>
-                <Input
-                  autoComplete="off"
-                  value={form.username}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, username: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Password</Label>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      value={form.password}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, password: e.target.value }))
-                      }
-                      className="pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      aria-pressed={showPassword}
-                    > 
-                      {showPassword ? (
-                        <Eye className="size-4" />
-                      ) : (
-                        <EyeOff className="size-4" />
-                      )}
-                    </Button>
-                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Confirm password</Label>
-                  <div className="relative">
-                    <Input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={form.confirmPassword}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          confirmPassword: e.target.value,
-                        }))
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select
+                      value={form.gender}
+                      onValueChange={(value) =>
+                        setForm((f) => ({ ...f, gender: value }))
                       }
-                      className="pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
-                      onClick={() => setShowConfirmPassword((v) => !v)}
-                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                      aria-pressed={showConfirmPassword}
                     >
-                      {showConfirmPassword ? (
-                        <Eye className="size-4" />
-                      ) : (
-                        <EyeOff className="size-4" />
-                      )}
-                    </Button>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GENDERS.map((g) => (
+                          <SelectItem key={g} value={g}>
+                            {g}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Birthday</Label>
+                    <Input
+                      type="date"
+                      max={new Date().toISOString().slice(0, 10)}
+                      value={form.birthday}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, birthday: e.target.value }))
+                      }
+                    />
                   </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, email: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Contact number</Label>
-                <Input
-                  placeholder="09123456789"
-                  value={form.contact}
-                  maxLength={11}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Gender</Label>
-                  <Select
-                    value={form.gender}
-                    onValueChange={(value) =>
-                      setForm((f) => ({ ...f, gender: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GENDERS.map((g) => (
-                        <SelectItem key={g} value={g}>
-                          {g}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              </section>
+
+              {/* Contact */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Contact</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={form.email}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, email: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contact number</Label>
+                    <Input
+                      placeholder="09123456789"
+                      value={form.contact}
+                      maxLength={11}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))
+                      }
+                    />
+                  </div>
                 </div>
+              </section>
+
+              {/* Address */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Address</h3>
                 <div className="space-y-2">
-                  <Label>Birthday</Label>
+                  <Label>Street address</Label>
                   <Input
-                    type="date"
-                    max={new Date().toISOString().slice(0, 10)}
-                    value={form.birthday}
+                    placeholder="House No. / Street / Purok"
+                    value={form.addressLine}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, birthday: e.target.value }))
+                      setForm((f) => ({ ...f, addressLine: e.target.value }))
                     }
                   />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Street address</Label>
-                <Input
-                  placeholder="House No. / Street / Purok"
-                  value={form.addressLine}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, addressLine: e.target.value }))
-                  }
+                <AddressCascade
+                  value={form}
+                  onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
                 />
-              </div>
-              <AddressCascade
-                value={form}
-                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
-              />
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select
-                  value={form.role}
-                  onValueChange={(value) =>
-                    setForm((f) => ({ ...f, role: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="coord-cc">
-                      Program Coordinator – Cultural Center
-                    </SelectItem>
-                    <SelectItem value="coord-sc">
-                      Program Coordinator – Sports Complex
-                    </SelectItem>
-                    <SelectItem value="acct">
-                      Accounting Clerk – Cultural Center
-                    </SelectItem>
-                    <SelectItem value="ltoo">
-                      Local Treasury Operations Officer
-                    </SelectItem>
-                    <SelectItem value="provincial-agency">
-                      Provincial Department Agency
-                    </SelectItem>
-                    <SelectItem value="client">Client</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              </section>
+
+              {/* Password */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Password</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Leave blank for the default 12345"
+                        value={form.password}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, password: e.target.value }))
+                        }
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showPassword}
+                      >
+                        {showPassword ? (
+                          <Eye className="size-4" />
+                        ) : (
+                          <EyeOff className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confirm password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Re-enter the password"
+                        value={form.confirmPassword}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            confirmPassword: e.target.value,
+                          }))
+                        }
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showConfirmPassword}
+                      >
+                        {showConfirmPassword ? (
+                          <Eye className="size-4" />
+                        ) : (
+                          <EyeOff className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  Leave blank to use the default password <strong>12345</strong> —
+                  the account must set a new password on first sign-in.
+                </p>
+              </section>
             </div>
             <DialogFooter>
               <Button
@@ -898,12 +943,15 @@ export default function UserManagementPage() {
                 if (!fn || !ln) { toast.error("First name and last name are required."); return; }
                 if (!form.email.trim()) { toast.error("Email is required."); return; }
                 if (!form.role) { toast.error("Please select a role."); return; }
-                if (!form.password || form.password !== form.confirmPassword) { toast.error("Passwords must match and cannot be empty."); return; }
-                if (form.password.length < 8) { toast.error("Password must be at least 8 characters long."); return; }
-                if (!/[A-Z]/.test(form.password)) { toast.error("Password must contain at least one uppercase letter."); return; }
-                if (!/[a-z]/.test(form.password)) { toast.error("Password must contain at least one lowercase letter."); return; }
-                if (!/[0-9]/.test(form.password)) { toast.error("Password must contain at least one number."); return; }
-                if (!/[^A-Za-z0-9]/.test(form.password)) { toast.error("Password must contain at least one special character."); return; }
+                // Password is optional: blank means the default 12345.
+                if (form.password || form.confirmPassword) {
+                  if (form.password !== form.confirmPassword) { toast.error("Passwords must match."); return; }
+                  if (form.password.length < 8) { toast.error("Password must be at least 8 characters long."); return; }
+                  if (!/[A-Z]/.test(form.password)) { toast.error("Password must contain at least one uppercase letter."); return; }
+                  if (!/[a-z]/.test(form.password)) { toast.error("Password must contain at least one lowercase letter."); return; }
+                  if (!/[0-9]/.test(form.password)) { toast.error("Password must contain at least one number."); return; }
+                  if (!/[^A-Za-z0-9]/.test(form.password)) { toast.error("Password must contain at least one special character."); return; }
+                }
                 setConfirmSaveOpen(true);
               }}>
                 Save

@@ -17,43 +17,36 @@ import {
 } from "@/components/ui/select";
 
 const PERIODS = [
-  { value: "day", label: "Day" },
-  { value: "month", label: "Month" },
-  { value: "year", label: "Year" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+  { value: "year", label: "Yearly" },
 ];
 
 const GROUP_OPTIONS = [
   { value: "particular", label: "Per Particular" },
+  { value: "package", label: "Per Package" },
   { value: "facility", label: "Per Facility" },
 ];
 
-const MONTHS = [
-  { value: "0", label: "January" },
-  { value: "1", label: "February" },
-  { value: "2", label: "March" },
-  { value: "3", label: "April" },
-  { value: "4", label: "May" },
-  { value: "5", label: "June" },
-  { value: "6", label: "July" },
-  { value: "7", label: "August" },
-  { value: "8", label: "September" },
-  { value: "9", label: "October" },
-  { value: "10", label: "November" },
-  { value: "11", label: "December" },
-];
+const GROUP_NOUN = {
+  particular: "particular",
+  package: "package",
+  facility: "facility",
+};
 
 const PIE_COLORS = [
-  "#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed",
-  "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5",
-  "#0d9488", "#a16207",
+  "#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2",
+  "#db2777", "#65a30d", "#ea580c", "#4f46e5", "#0d9488", "#a16207",
 ];
 
 function formatPhp(amount) {
+  const value = Number(amount) || 0;
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-    minimumFractionDigits: 2,
-  }).format(Number(amount) || 0);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function recentYears(count = 6) {
@@ -69,7 +62,6 @@ function polar(cx, cy, r, fraction) {
 
 function slicePath(cx, cy, r, start, end) {
   if (end - start >= 0.9999) {
-    // A lone slice is a full circle; an arc cannot close on itself.
     return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`;
   }
   const [x1, y1] = polar(cx, cy, r, start);
@@ -79,20 +71,20 @@ function slicePath(cx, cy, r, start, end) {
 }
 
 /**
- * Revenue Analytics: a trend bar chart plus a facility / particular pie chart,
- * filterable by period (day, month, year) and grouping. Venue scoping is applied
- * server-side, so a Program Coordinator only ever sees their own venue.
+ * Revenue Analytics: a time-based revenue graph (weekly / monthly / yearly)
+ * plus a breakdown pie of what that revenue is made of - particulars and
+ * packages for the Cultural Center, facilities for the Sports Complex. Venue
+ * scoping is applied server-side, so a Program Coordinator only ever sees
+ * their own venue.
  */
 export function RevenueCharts({
   title = "Revenue Analytics",
-  description = "Collected revenue over time and per facility or particular.",
+  description = "Revenue over time and what it is made of.",
 }) {
   const today = React.useMemo(() => new Date(), []);
   const [period, setPeriod] = React.useState("month");
-  const [group, setGroup] = React.useState("particular");
   const [year, setYear] = React.useState(String(today.getFullYear()));
-  const [month, setMonth] = React.useState(String(today.getMonth()));
-  const [day, setDay] = React.useState(String(today.getDate()));
+  const [group, setGroup] = React.useState("");
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -100,10 +92,11 @@ export function RevenueCharts({
     let active = true;
 
     async function load() {
-      const query = new URLSearchParams({ period, year, month, day, group });
+      const params = new URLSearchParams({ period, year });
+      if (group) params.set("group", group);
       try {
         const res = await fetch(
-          `/api/dashboard/revenue-charts?${query.toString()}`,
+          `/api/dashboard/revenue-charts?${params.toString()}`,
         );
         const json = await res.json();
         if (active) setData(res.ok ? json : null);
@@ -118,34 +111,32 @@ export function RevenueCharts({
     return () => {
       active = false;
     };
-  }, [period, year, month, day, group]);
+  }, [period, year, group]);
 
-  const trend = data?.trend || [];
-  const breakdown = data?.breakdown || [];
+  const graph = data?.graph || [];
+  const pie = data?.pie || [];
   const total = data?.total || 0;
-  const allowedGroups = data?.allowedGroups || ["particular", "facility"];
+  const allowedGroups = data?.allowedGroups || ["particular"];
   const groupOptions = GROUP_OPTIONS.filter((option) =>
     allowedGroups.includes(option.value),
   );
-  const selectedGroup = allowedGroups.includes(group) ? group : allowedGroups[0];
+  const activeGroup = allowedGroups.includes(group) ? group : allowedGroups[0];
+  const activeNoun = GROUP_NOUN[activeGroup] || "item";
 
-  const maxTrend = Math.max(1, ...trend.map((bucket) => bucket.amount));
-  const pieTotal = breakdown.reduce((sum, row) => sum + row.amount, 0) || 1;
+  const maxGraph = Math.max(1, ...graph.map((bucket) => bucket.amount));
 
-  // Running totals, built without mutating anything during render.
-  const cumulative = breakdown.reduce(
+  // Running totals for the pie, built without mutating during render.
+  const pieSum = pie.reduce((sum, row) => sum + row.amount, 0) || 1;
+  const cumulative = pie.reduce(
     (acc, row) => [...acc, (acc[acc.length - 1] ?? 0) + row.amount],
     [],
   );
-  const slices = breakdown.map((row, index) => ({
+  const slices = pie.map((row, index) => ({
     ...row,
-    start: (index === 0 ? 0 : cumulative[index - 1]) / pieTotal,
-    end: cumulative[index] / pieTotal,
+    start: (index === 0 ? 0 : cumulative[index - 1]) / pieSum,
+    end: cumulative[index] / pieSum,
     color: PIE_COLORS[index % PIE_COLORS.length],
-    percent: (row.amount / pieTotal) * 100,
   }));
-
-  const daysInMonth = new Date(Number(year), Number(month) + 1, 0).getDate();
 
   return (
     <Card>
@@ -154,9 +145,10 @@ export function RevenueCharts({
         <CardDescription>
           {data?.scopeLabel ? `${description} ${data.scopeLabel}.` : description}
         </CardDescription>
+
         <div className="flex flex-wrap items-end gap-3 pt-3">
           <div className="space-y-1">
-            <span className="text-muted-foreground text-xs">Period</span>
+            <span className="text-muted-foreground text-xs">Show revenue</span>
             <Select value={period} onValueChange={setPeriod}>
               <SelectTrigger className="w-[130px]">
                 <SelectValue />
@@ -171,33 +163,17 @@ export function RevenueCharts({
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <span className="text-muted-foreground text-xs">Year</span>
-            <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="w-[110px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {recentYears().map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(period === "month" || period === "day") && (
+          {period === "month" && (
             <div className="space-y-1">
-              <span className="text-muted-foreground text-xs">Month</span>
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-[150px]">
+              <span className="text-muted-foreground text-xs">Year</span>
+              <Select value={year} onValueChange={setYear}>
+                <SelectTrigger className="w-[110px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MONTHS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                  {recentYears().map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -205,29 +181,9 @@ export function RevenueCharts({
             </div>
           )}
 
-          {period === "day" && (
-            <div className="space-y-1">
-              <span className="text-muted-foreground text-xs">Day</span>
-              <Select value={day} onValueChange={setDay}>
-                <SelectTrigger className="w-[90px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {Array.from({ length: daysInMonth }, (_, i) => String(i + 1)).map(
-                    (option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           <div className="space-y-1">
-            <span className="text-muted-foreground text-xs">Group by</span>
-            <Select value={selectedGroup} onValueChange={setGroup}>
+            <span className="text-muted-foreground text-xs">Break down by</span>
+            <Select value={activeGroup} onValueChange={setGroup}>
               <SelectTrigger className="w-[160px]">
                 <SelectValue />
               </SelectTrigger>
@@ -254,82 +210,158 @@ export function RevenueCharts({
       </CardHeader>
 
       <CardContent className="grid gap-8 lg:grid-cols-2">
-        {/* Trend bar chart */}
-        <div className="space-y-2">
+        {/* Revenue graph */}
+        <div className="space-y-3">
           <p className="text-sm font-medium">
-            Revenue per {period === "year" ? "month" : period === "day" ? "hour" : "day"}
+            Revenue{" "}
+            {period === "week"
+              ? "per week"
+              : period === "year"
+                ? "per year"
+                : "per month"}
           </p>
-          {trend.length === 0 || loading ? (
-            <p className="text-muted-foreground py-12 text-center text-sm">
+          {loading || graph.length === 0 ? (
+            <p className="text-muted-foreground py-16 text-center text-sm">
               {loading ? "Loading…" : "No data for this period."}
             </p>
           ) : (
-            <div className="flex h-52 items-end gap-1 overflow-x-auto pb-2">
-              {trend.map((bucket, index) => {
-                const pct = (bucket.amount / maxTrend) * 100;
-                return (
-                  <div
-                    key={index}
-                    className="flex min-w-[14px] flex-1 flex-col items-center gap-1"
-                    title={`${bucket.label}: ${formatPhp(bucket.amount)}`}
-                  >
-                    <div className="flex w-full flex-1 items-end">
-                      <div
-                        className="bg-primary/80 hover:bg-primary w-full rounded-t transition-all"
-                        style={{ height: `${bucket.amount > 0 ? Math.max(pct, 2) : 0}%` }}
-                      />
+            <div className="relative h-56 w-full">
+              {/* gridlines */}
+              {[0, 25, 50, 75, 100].map((line) => (
+                <div
+                  key={line}
+                  className="border-border/60 absolute inset-x-0 border-t"
+                  style={{ bottom: `${line}%` }}
+                />
+              ))}
+              <div className="relative flex h-56 items-end gap-2">
+                {graph.map((bucket, index) => {
+                  const pct = (bucket.amount / maxGraph) * 100;
+                  return (
+                    <div
+                      key={index}
+                      className="group flex h-full flex-1 flex-col items-center justify-end gap-1"
+                    >
+                      <div className="relative flex w-full flex-1 items-end justify-center">
+                        <span className="bg-popover text-popover-foreground border-border pointer-events-none absolute -top-1 z-10 rounded-md border px-2 py-1 text-[11px] font-medium whitespace-nowrap opacity-0 shadow-md transition-opacity group-hover:opacity-100">
+                          {formatPhp(bucket.amount)}
+                        </span>
+                        <div
+                          className="from-primary/30 via-primary/70 to-primary w-full max-w-[42px] rounded-t-lg bg-gradient-to-t shadow-[0_-2px_8px_rgba(37,99,235,0.25)] transition-all duration-300 group-hover:brightness-110"
+                          style={{ height: `${bucket.amount > 0 ? Math.max(pct, 3) : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-muted-foreground truncate text-[10px] whitespace-nowrap">
+                        {bucket.label}
+                      </span>
                     </div>
-                    <span className="text-muted-foreground text-[10px] whitespace-nowrap">
-                      {bucket.label}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Breakdown pie chart */}
-        <div className="space-y-2">
+        {/* Breakdown pie */}
+        <div className="space-y-3">
           <p className="text-sm font-medium">
-            Share per {selectedGroup === "facility" ? "facility" : "particular"}
+            Revenue &amp; usage per {activeNoun}
           </p>
-          {breakdown.length === 0 || loading ? (
-            <p className="text-muted-foreground py-12 text-center text-sm">
+          {loading || pie.length === 0 ? (
+            <p className="text-muted-foreground py-16 text-center text-sm">
               {loading ? "Loading…" : "No revenue in this period."}
             </p>
           ) : (
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
-              <svg viewBox="0 0 140 140" className="size-44 shrink-0">
-                {slices.map((slice, index) => (
-                  <path
-                    key={index}
-                    d={slicePath(70, 70, 66, slice.start, slice.end)}
-                    fill={slice.color}
-                    stroke="var(--background)"
-                    strokeWidth={1}
+            <div className="flex flex-col items-center gap-6 sm:flex-row">
+              <svg viewBox="0 0 160 160" className="size-48 shrink-0">
+                <defs>
+                  <filter
+                    id="pie-depth"
+                    x="-25%"
+                    y="-25%"
+                    width="150%"
+                    height="150%"
                   >
-                    <title>{`${slice.label}: ${formatPhp(slice.amount)} (${slice.percent.toFixed(1)}%)`}</title>
-                  </path>
-                ))}
+                    <feDropShadow
+                      dx="0"
+                      dy="3"
+                      stdDeviation="4"
+                      floodColor="#0f172a"
+                      floodOpacity="0.28"
+                    />
+                  </filter>
+                  <radialGradient id="pie-sheen" cx="34%" cy="28%" r="78%">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+                    <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <g filter="url(#pie-depth)">
+                  {slices.map((slice, index) => (
+                    <path
+                      key={index}
+                      d={slicePath(80, 80, 74, slice.start, slice.end)}
+                      fill={slice.color}
+                      stroke="var(--background)"
+                      strokeWidth={1.5}
+                    >
+                      <title>{`${slice.label}: ${formatPhp(slice.amount)} (${slice.percent}%)`}</title>
+                    </path>
+                  ))}
+                </g>
+                <circle
+                  cx="80"
+                  cy="80"
+                  r="74"
+                  fill="url(#pie-sheen)"
+                  pointerEvents="none"
+                />
+                <circle cx="80" cy="80" r="42" fill="var(--card)" />
+                <text
+                  x="80"
+                  y="74"
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[9px]"
+                >
+                  Total
+                </text>
+                <text
+                  x="80"
+                  y="90"
+                  textAnchor="middle"
+                  className="fill-foreground text-[12px] font-semibold"
+                >
+                  {formatPhp(total)}
+                </text>
               </svg>
-              <ul className="w-full space-y-1.5">
+
+              <ul className="w-full space-y-2">
                 {slices.map((slice, index) => (
                   <li
                     key={index}
-                    className="flex items-center justify-between gap-2 text-sm"
+                    className="flex items-start justify-between gap-3 text-sm"
                   >
-                    <span className="flex min-w-0 items-center gap-2">
+                    <span className="flex min-w-0 items-start gap-2">
                       <span
-                        className="size-3 shrink-0 rounded-sm"
+                        className="mt-1 size-3 shrink-0 rounded-full shadow-sm"
                         style={{ backgroundColor: slice.color }}
                       />
-                      <span className="truncate">{slice.label}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">
+                          {slice.label}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {slice.reservations} reservation
+                          {slice.reservations === 1 ? "" : "s"}
+                          {slice.quantity > 0 ? ` · ${slice.quantity} unit${slice.quantity === 1 ? "" : "s"}` : ""}
+                        </span>
+                      </span>
                     </span>
-                    <span className="shrink-0 tabular-nums">
-                      {formatPhp(slice.amount)}
-                      <span className="text-muted-foreground ml-2 text-xs">
-                        {slice.percent.toFixed(1)}%
+                    <span className="shrink-0 text-right tabular-nums">
+                      <span className="block font-medium">
+                        {formatPhp(slice.amount)}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {slice.percent}%
                       </span>
                     </span>
                   </li>

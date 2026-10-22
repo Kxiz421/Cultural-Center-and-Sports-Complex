@@ -39,6 +39,17 @@ class RateLimitedError extends CredentialsSignin {
   }
 }
 
+/**
+ * Credentials were correct, but the account still holds its default password.
+ * No session is issued - the login page collects a new password first.
+ */
+class PasswordChangeRequiredError extends CredentialsSignin {
+  constructor() {
+    super();
+    this.code = "password_change_required";
+  }
+}
+
 /** Account statuses that must never produce a usable session. */
 const BLOCKED_STATUSES = ["Deactivated", "Inactive", "Suspended"];
 
@@ -84,6 +95,7 @@ const STAFF_AUTH_SELECT = {
   staffId: true,
   password: true,
   status: true,
+  mustChangePassword: true,
   firstName: true,
   lastName: true,
   email: true,
@@ -96,6 +108,7 @@ const CLIENT_AUTH_SELECT = {
   clientId: true,
   password: true,
   accountStatus: true,
+  mustChangePassword: true,
   firstName: true,
   lastName: true,
   email: true,
@@ -169,6 +182,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (BLOCKED_STATUSES.includes(String(staff.status ?? ""))) {
             throw new AccountDeactivatedError();
           }
+          if (staff.mustChangePassword) {
+            throw new PasswordChangeRequiredError();
+          }
 
           clearLoginAttempts(ip);
           return {
@@ -193,6 +209,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
           if (BLOCKED_STATUSES.includes(String(client.accountStatus ?? ""))) {
             throw new AccountDeactivatedError();
+          }
+          if (client.mustChangePassword) {
+            throw new PasswordChangeRequiredError();
           }
 
           // Registration no longer requires admin verification: a newly created

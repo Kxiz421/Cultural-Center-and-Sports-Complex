@@ -3,9 +3,11 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import { requireApiAuth } from "@/lib/api-auth";
 import {
   REVENUE_GROUP_FACILITY,
+  REVENUE_GROUP_PACKAGE,
   REVENUE_GROUP_PARTICULAR,
 } from "@/lib/report-revenue";
 import {
+  CULTURAL_CENTER_VENUE_ID,
   isSportsComplexOnly,
   resolveReportVenueIds,
   venueScopeLabel,
@@ -29,17 +31,19 @@ const ALLOWED_TYPES = [
 /**
  * GET /api/dashboard/revenue-charts
  *
- * Trend + breakdown behind the Revenue Analytics card on the staff dashboards.
+ * Two series behind the Revenue Analytics card on the staff dashboards:
+ *   graph - collected revenue per week / month / year bucket
+ *   pie   - revenue (and usage) per particular / package / facility
  *
  * Query params
- *   period  day | month | year        (default: month)
- *   year / month / day                period parts
- *   group   facility | particular     (default: particular)
+ *   period  week | month | year   (default: month)
+ *   year    the year for period=month
+ *   group   particular | package | facility  (default: first allowed)
  *
  * Venue scoping: a Program Coordinator is always limited to their own venue -
- * the Sports Complex only ever sees its facility revenue, the Cultural Center
- * sees its own particular/facility revenue. The scope comes from the session,
- * never the query string, so it cannot be widened by hand.
+ * the Sports Complex only ever breaks down per facility, the Cultural Center
+ * per particular / package. The scope comes from the session, never the query
+ * string, so it cannot be widened by hand.
  */
 export async function GET(request) {
   const guard = await requireApiAuth(ALLOWED_TYPES);
@@ -51,18 +55,24 @@ export async function GET(request) {
     const window = resolveChartWindow({
       period: searchParams.get("period"),
       year: searchParams.get("year"),
-      month: searchParams.get("month"),
-      day: searchParams.get("day"),
     });
 
     // Session scope only.
     const scope = resolveReportVenueIds(guard.user.type, []);
+    const culturalOnly =
+      scope && scope.length === 1 && scope[0] === CULTURAL_CENTER_VENUE_ID;
 
-    // The Sports Complex bills per facility, so that scope never offers the
-    // per-particular breakdown.
+    // The Sports Complex bills per facility (never per particular / package);
+    // the Cultural Center is the opposite. An unrestricted view offers all.
     const allowedGroups = isSportsComplexOnly(scope)
       ? [REVENUE_GROUP_FACILITY]
-      : [REVENUE_GROUP_PARTICULAR, REVENUE_GROUP_FACILITY];
+      : culturalOnly
+        ? [REVENUE_GROUP_PARTICULAR, REVENUE_GROUP_PACKAGE]
+        : [
+            REVENUE_GROUP_PARTICULAR,
+            REVENUE_GROUP_PACKAGE,
+            REVENUE_GROUP_FACILITY,
+          ];
 
     const requestedGroup = searchParams.get("group");
     const group =
@@ -140,15 +150,13 @@ export async function GET(request) {
 
     return noCacheJson({
       period: window.period,
-      year: window.year,
-      month: window.month ?? null,
-      day: window.day ?? null,
+      year: window.year ?? null,
       label: window.label,
       group,
       allowedGroups,
       scopeLabel: venueScopeLabel(scope && scope.length ? scope : []),
-      trend: charts.trend,
-      breakdown: charts.breakdown,
+      graph: charts.graph,
+      pie: charts.pie,
       total: charts.total,
     });
   } catch (error) {

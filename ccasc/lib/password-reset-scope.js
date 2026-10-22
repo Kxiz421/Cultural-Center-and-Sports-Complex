@@ -37,6 +37,7 @@ const STAFF_RESET_SELECT = {
   contactNumber: true,
   otp: true,
   otpExpiration: true,
+  passwordResetAt: true,
 };
 
 const CLIENT_RESET_SELECT = {
@@ -45,6 +46,7 @@ const CLIENT_RESET_SELECT = {
   contactNumber: true,
   otp: true,
   otpExpiration: true,
+  passwordResetAt: true,
 };
 
 function shapeStaff(row) {
@@ -55,6 +57,7 @@ function shapeStaff(row) {
     contactNumber: row.contactNumber ?? null,
     otp: row.otp,
     otpExpiration: row.otpExpiration,
+    passwordResetAt: row.passwordResetAt ?? null,
   };
 }
 
@@ -66,6 +69,7 @@ function shapeClient(row) {
     contactNumber: row.contactNumber ?? null,
     otp: row.otp,
     otpExpiration: row.otpExpiration,
+    passwordResetAt: row.passwordResetAt ?? null,
   };
 }
 

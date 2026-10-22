@@ -1,47 +1,48 @@
 /**
  * Dashboard revenue charts.
  *
- * Builds the two series behind the "Revenue Analytics" card on every
+ * Two INDEPENDENT series feed the "Revenue Analytics" card on every
  * revenue-bearing staff dashboard:
  *
- *   `trend`     - collected revenue per bucket of the selected period
- *                 (year -> 12 months, month -> each day, day -> each hour).
- *   `breakdown` - the same revenue split per facility or per particular,
- *                 reusing the exact allocation rules of the Revenue Report
- *                 (`lib/report-revenue.js`) so the pie matches that report.
+ *   `graph` - collected revenue per time bucket (Weekly -> last 8 weeks,
+ *             Monthly -> the 12 months of a year, Yearly -> the last 5 years).
+ *             Same shape for the Cultural Center and the Sports Complex.
+ *   `pie`   - what the revenue is made of: each particular or package used
+ *             (Cultural Center) or each facility used (Sports Complex), with
+ *             the amount, its share and how many reservations used it.
  *
- * Revenue is taken from the receipt rows (`Transaction.payment.amountPaid`) so
- * the charts reconcile with the daily/weekly/monthly/yearly cards, then each
- * receipt is spread across its reservation's facilities/particulars by the same
- * weights the report uses. Nothing here touches Prisma.
+ * Revenue is the receipt rows (`Transaction.payment.amountPaid`) so the charts
+ * reconcile with the daily/weekly/monthly/yearly cards, then each receipt is
+ * spread across its reservation's particular / package / facility by the same
+ * weights the Revenue Report uses (`lib/report-revenue.js`). Nothing here
+ * touches Prisma.
  */
 
 import {
   REVENUE_GROUP_FACILITY,
+  REVENUE_GROUP_PACKAGE,
   REVENUE_GROUP_PARTICULAR,
   reservationAllocations,
   round2,
 } from "@/lib/report-revenue";
 import { extractChargeBreakdownFromNotes } from "@/lib/reservation-charge-breakdown";
 
-export const CHART_PERIODS = ["day", "month", "year"];
-export const CHART_GROUPS = [REVENUE_GROUP_PARTICULAR, REVENUE_GROUP_FACILITY];
+export const CHART_PERIODS = ["week", "month", "year"];
+export const CHART_GROUPS = [
+  REVENUE_GROUP_PARTICULAR,
+  REVENUE_GROUP_PACKAGE,
+  REVENUE_GROUP_FACILITY,
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const MONTH_LABELS_FULL = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => {
-  const suffix = h < 12 ? "AM" : "PM";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour} ${suffix}`;
-});
+const WEEK_BUCKETS = 8;
+const YEAR_BUCKETS = 5;
 
 export function isChartPeriod(value) {
   return CHART_PERIODS.includes(value);
@@ -56,68 +57,77 @@ function toInt(value, fallback) {
   return Number.isInteger(parsed) ? parsed : fallback;
 }
 
-function clampMonth(value) {
-  return Math.min(11, Math.max(0, value));
-}
-
-function clampDay(value, year, month) {
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  return Math.min(lastDay, Math.max(1, value));
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 /**
- * Resolve the selected period into a date range plus the bucket grid the trend
- * chart is drawn on.
+ * Resolve the selected period into the bucket grid the graph is drawn on.
  *
- * @param {{ period?: string, year?: string|number, month?: string|number, day?: string|number }} input
+ * @param {{ period?: string, year?: string|number }} input
  * @param {Date} [now]
- * @returns {{ period: string, year: number, month?: number, day?: number,
- *             label: string, start: Date, end: Date,
+ * @returns {{ period: string, year: number|null, label: string,
+ *             start: Date, end: Date,
  *             buckets: string[], bucketIndex: (d: Date) => number }}
  */
 export function resolveChartWindow(input = {}, now = new Date()) {
   const period = isChartPeriod(input.period) ? input.period : "month";
-  const year = toInt(input.year, now.getFullYear());
+
+  if (period === "week") {
+    const today = startOfDay(now);
+    const thisWeekStart = new Date(today);
+    thisWeekStart.setDate(today.getDate() - today.getDay());
+
+    const firstStart = new Date(thisWeekStart);
+    firstStart.setDate(thisWeekStart.getDate() - 7 * (WEEK_BUCKETS - 1));
+
+    const end = new Date(thisWeekStart);
+    end.setDate(thisWeekStart.getDate() + 7);
+    end.setMilliseconds(end.getMilliseconds() - 1);
+
+    const buckets = Array.from({ length: WEEK_BUCKETS }, (_, i) => {
+      const d = new Date(firstStart);
+      d.setDate(firstStart.getDate() + 7 * i);
+      return `${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`;
+    });
+
+    return {
+      period,
+      year: null,
+      label: "Last 8 weeks",
+      start: firstStart,
+      end,
+      buckets,
+      bucketIndex: (date) =>
+        Math.floor((startOfDay(date) - firstStart) / DAY_MS / 7),
+    };
+  }
 
   if (period === "year") {
+    const thisYear = now.getFullYear();
+    const firstYear = thisYear - (YEAR_BUCKETS - 1);
     return {
       period,
-      year,
-      label: String(year),
-      start: new Date(year, 0, 1, 0, 0, 0, 0),
-      end: new Date(year, 11, 31, 23, 59, 59, 999),
-      buckets: MONTH_LABELS.slice(),
-      bucketIndex: (date) => date.getMonth(),
+      year: null,
+      label: `${firstYear}\u2013${thisYear}`,
+      start: new Date(firstYear, 0, 1, 0, 0, 0, 0),
+      end: new Date(thisYear, 11, 31, 23, 59, 59, 999),
+      buckets: Array.from({ length: YEAR_BUCKETS }, (_, i) =>
+        String(firstYear + i),
+      ),
+      bucketIndex: (date) => date.getFullYear() - firstYear,
     };
   }
 
-  if (period === "day") {
-    const month = clampMonth(toInt(input.month, now.getMonth()));
-    const day = clampDay(toInt(input.day, now.getDate()), year, month);
-    return {
-      period,
-      year,
-      month,
-      day,
-      label: `${MONTH_LABELS_FULL[month]} ${day}, ${year}`,
-      start: new Date(year, month, day, 0, 0, 0, 0),
-      end: new Date(year, month, day, 23, 59, 59, 999),
-      buckets: HOUR_LABELS.slice(),
-      bucketIndex: (date) => date.getHours(),
-    };
-  }
-
-  const month = clampMonth(toInt(input.month, now.getMonth()));
-  const lastDay = new Date(year, month + 1, 0).getDate();
+  const year = toInt(input.year, now.getFullYear());
   return {
     period: "month",
     year,
-    month,
-    label: `${MONTH_LABELS_FULL[month]} ${year}`,
-    start: new Date(year, month, 1, 0, 0, 0, 0),
-    end: new Date(year, month + 1, 0, 23, 59, 59, 999),
-    buckets: Array.from({ length: lastDay }, (_, i) => String(i + 1)),
-    bucketIndex: (date) => date.getDate() - 1,
+    label: String(year),
+    start: new Date(year, 0, 1, 0, 0, 0, 0),
+    end: new Date(year, 11, 31, 23, 59, 59, 999),
+    buckets: MONTH_LABELS.slice(),
+    bucketIndex: (date) => date.getMonth(),
   };
 }
 
@@ -157,18 +167,21 @@ function prepareReservation(reservation, facilitiesById) {
  * @param {object} input
  * @param {object[]} input.transactions receipt rows with `payment.booking.reservation`
  * @param {Map<number, {facilityName: string, rateDay: number}>} input.facilitiesById
- * @param {"facility"|"particular"} input.group
+ * @param {"particular"|"package"|"facility"} input.group
  * @param {object} input.window result of {@link resolveChartWindow}
  */
 export function buildRevenueCharts({ transactions, facilitiesById, group, window }) {
-  const trend = window.buckets.map((label) => ({ label, amount: 0 }));
-  const breakdown = new Map();
+  const graph = window.buckets.map((label) => ({ label, amount: 0 }));
+  const pie = new Map();
   let total = 0;
 
-  const add = (key, label, amount) => {
-    const entry = breakdown.get(key) || { key, label, amount: 0 };
+  const add = (key, label, amount, reservationId, quantity) => {
+    const entry =
+      pie.get(key) || { key, label, amount: 0, quantity: 0, reservationIds: new Set() };
     entry.amount += amount;
-    breakdown.set(key, entry);
+    entry.quantity += Number(quantity) || 0;
+    entry.reservationIds.add(reservationId);
+    pie.set(key, entry);
   };
 
   for (const transaction of transactions || []) {
@@ -179,39 +192,53 @@ export function buildRevenueCharts({ transactions, facilitiesById, group, window
     if (Number.isNaN(when.getTime())) continue;
 
     const index = window.bucketIndex(when);
-    if (index >= 0 && index < trend.length) trend[index].amount += amount;
+    if (index >= 0 && index < graph.length) graph[index].amount += amount;
     total += amount;
 
     const reservation = transaction.payment?.booking?.reservation;
     if (!reservation) {
-      add("unassigned", "Unassigned", amount);
+      add("unassigned", "Unassigned", amount, "unassigned", 0);
       continue;
     }
 
-    const allocations = reservationAllocations(
-      prepareReservation(reservation, facilitiesById),
-      group,
-    );
+    const prepared = prepareReservation(reservation, facilitiesById);
+    const allocations = reservationAllocations(prepared, group);
     const allocationTotal = allocations.reduce(
       (sum, item) => sum + (Number(item.amount) || 0),
       0,
     );
     if (allocationTotal <= 0) {
-      add("unassigned", "Unassigned", amount);
+      add("unassigned", "Unassigned", amount, reservation.reservationId, 0);
       continue;
     }
 
     for (const item of allocations) {
       const share = (Number(item.amount) || 0) / allocationTotal;
-      add(item.key, item.label, amount * share);
+      add(
+        item.key,
+        item.label,
+        amount * share,
+        reservation.reservationId,
+        item.quantity,
+      );
     }
   }
 
+  const totalRounded = round2(total);
+  const pieRows = [...pie.values()]
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      amount: round2(entry.amount),
+      quantity: entry.quantity,
+      reservations: entry.reservationIds.size,
+      percent: total > 0 ? round2((entry.amount / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
+
   return {
-    total: round2(total),
-    trend: trend.map((bucket) => ({ ...bucket, amount: round2(bucket.amount) })),
-    breakdown: [...breakdown.values()]
-      .map((row) => ({ ...row, amount: round2(row.amount) }))
-      .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label)),
+    total: totalRounded,
+    graph: graph.map((bucket) => ({ ...bucket, amount: round2(bucket.amount) })),
+    pie: pieRows,
   };
 }

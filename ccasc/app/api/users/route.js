@@ -121,7 +121,14 @@ export async function POST(request) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 12);
+    // Accounts created without a password get the default "12345" and are
+    // forced to change it on first sign-in (see auth.js + /api/auth/change-password).
+    const rawPassword = String(data.password ?? "").trim();
+    const usingDefaultPassword = rawPassword.length === 0;
+    const hashedPassword = await bcrypt.hash(
+      usingDefaultPassword ? "12345" : rawPassword,
+      12,
+    );
 
     // Optional personal / address details (collected on the registration and
     // admin forms). Invalid dates are stored as null rather than failing.
@@ -177,6 +184,7 @@ export async function POST(request) {
           password: hashedPassword,
           status: "Active",
           profilePhoto: null,
+          mustChangePassword: usingDefaultPassword,
           staffRoleId: parseInt(data.roleId),
           staffOrgId: parseInt(data.orgId),
           ...personal,
@@ -210,6 +218,7 @@ export async function POST(request) {
           idProof: null,
           accountStatus: "Active",
           profilePhoto: null,
+          mustChangePassword: usingDefaultPassword,
           clientRoleId: data.roleId,
           clientOrgId: parseInt(data.orgId),
           ...personal,

@@ -37,6 +37,11 @@ model Staff {
   province       String? @map("province") @db.VarChar(100)
   city           String? @map("city") @db.VarChar(100)
   barangay       String? @map("barangay") @db.VarChar(100)
+  // Set when an account is created with the default password so login forces a
+  // change before any session is issued.
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  // Last successful password reset, used to limit resets to once per 30 days.
+  passwordResetAt    DateTime? @map("password_reset_at")
   staffRoleId    Int     @map("staff_role_id")
   staffOrgId     Int     @map("staff_org_id")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -97,6 +102,8 @@ model Client {
   province           String? @map("province") @db.VarChar(100)
   city               String? @map("city") @db.VarChar(100)
   barangay           String? @map("barangay") @db.VarChar(100)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  passwordResetAt    DateTime? @map("password_reset_at")
   otp                String? @map("otp") @db.VarChar(10)
   otpExpiration      DateTime? @map("otp_expiration")
   activeSession      String? @map("active_session") @db.VarChar(64)

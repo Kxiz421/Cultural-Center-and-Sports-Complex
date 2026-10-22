@@ -48,6 +48,32 @@ function readChannel(value) {
   return null;
 }
 
+/** Per-account cooldown between successful password resets. */
+const RESET_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Block a reset request when the account already reset its password within the
+ * last 30 days. Returns the 429 response, or null when the reset may proceed.
+ */
+function resetCooldownResponse(account) {
+  if (!account?.passwordResetAt) return null;
+  const last = new Date(account.passwordResetAt).getTime();
+  if (Number.isNaN(last)) return null;
+  if (Date.now() - last >= RESET_COOLDOWN_MS) return null;
+
+  const when = new Date(last + RESET_COOLDOWN_MS).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  return NextResponse.json(
+    {
+      error: `You can only reset your password once a month. You can request another reset on ${when}.`,
+    },
+    { status: 429 },
+  );
+}
+
 /**
  * The masked recovery options available on this account. Only channels that
  * actually exist are listed, and every target is partially hidden so the
@@ -125,6 +151,10 @@ export async function POST(request) {
     if (action === ACTION.LOOKUP) {
       return NextResponse.json({ identifier, channels: channelsFor(account) });
     }
+
+    // Password resets are limited to once per 30 days per account.
+    const resetBlocked = resetCooldownResponse(account);
+    if (resetBlocked) return resetBlocked;
 
     const channel = readChannel(body?.channel);
     if (!channel) {
@@ -314,10 +344,12 @@ export async function PUT(request) {
 
     // Update the password and clear the OTP fields on the SAME row that was
     // resolved above - i.e. the row the login provider will authenticate.
+    // `passwordResetAt` starts the once-per-30-days clock for this account.
     await updatePasswordResetAccount(account, {
       password: hashedPassword,
       otp: null,
       otpExpiration: null,
+      passwordResetAt: new Date(),
     });
 
     clearOtpVerifyAttempts(limiterKey);
