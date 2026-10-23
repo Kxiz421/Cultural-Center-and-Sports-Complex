@@ -685,6 +685,9 @@ export async function GET(request) {
                 clientId: true,
                 eventType: true,
                 eventDate: true,
+                // Needed by computePhase(): a booking's venue decides whether the
+                // Sports Complex (Official Receipt) or Cultural Center cards show.
+                venueId: true,
                 venue: { select: { venue: true } },
                 additionalDates: { select: { eventDate: true } },
               },
