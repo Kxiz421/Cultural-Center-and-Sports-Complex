@@ -17,15 +17,9 @@ export function isSmsEnabled() {
   return Boolean(username() && password());
 }
 
-export async function sendOtpSms(
-  toE164,
-  otp,
-  { purpose = "reset", expiresInMinutes = 5 } = {},
-) {
-  if (!toE164 || !isSmsEnabled()) return false;
-
-  const label =
-    purpose === "verify" ? "verification code" : "password reset code";
+/** Low-level SMSGate POST. Returns true when the message was queued. */
+async function postMessage(toE164, text) {
+  if (!toE164 || !text || !isSmsEnabled()) return false;
 
   try {
     const res = await fetch(`${apiBase()}/messages`, {
@@ -37,9 +31,7 @@ export async function sendOtpSms(
         ).toString("base64")}`,
       },
       body: JSON.stringify({
-        textMessage: {
-          text: `CCASC: Your ${label} is ${otp}. Valid for ${expiresInMinutes} minutes. Do not share it.`,
-        },
+        textMessage: { text },
         phoneNumbers: [toE164],
       }),
       signal: AbortSignal.timeout(10000),
@@ -53,10 +45,38 @@ export async function sendOtpSms(
       return false;
     }
 
-    console.log(`OTP SMS queued to ${toE164}`);
+    console.log(`SMS queued to ${toE164}`);
     return true;
   } catch (error) {
-    console.error("Failed to send OTP SMS:", error.message);
+    console.error("Failed to send SMS:", error.message);
     return false;
   }
+}
+
+export async function sendOtpSms(
+  toE164,
+  otp,
+  { purpose = "reset", expiresInMinutes = 5 } = {},
+) {
+  if (!toE164 || !isSmsEnabled()) return false;
+
+  const label =
+    purpose === "verify" ? "verification code" : "password reset code";
+
+  return postMessage(
+    toE164,
+    `CCASC: Your ${label} is ${otp}. Valid for ${expiresInMinutes} minutes. Do not share it.`,
+  );
+}
+
+/**
+ * Send a plain progress/reminder text to a client. No-op when SMSGate is not
+ * configured or the number is invalid.
+ */
+export async function sendNotificationSms(toE164, text) {
+  const body = String(text ?? "").trim();
+  if (!body) return false;
+  // Keep a single message from running away; SMSGate splits long texts.
+  const clipped = body.length > 480 ? `${body.slice(0, 477)}...` : body;
+  return postMessage(toE164, clipped);
 }

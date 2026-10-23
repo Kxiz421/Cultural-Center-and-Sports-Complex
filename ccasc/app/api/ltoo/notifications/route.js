@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
 import { BOOKING_STATUS } from "@/lib/booking-status";
+import { formatDbDate } from "@/lib/utils";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -140,15 +142,30 @@ export async function POST(request) {
 
     // Create notification for the client. A walk-in has no account to notify.
     if (actualClientId != null) {
-      await prisma.notification.create({
-        data: {
-          message: `Your documents (Certification and Contract of Lease) are ready for release. Booking #${bookingId}.`,
-          type: "Document Release",
-          isRead: false,
-          sentAt: new Date(),
-          staffId: parseInt(staffId) || 1,
-          clientId: actualClientId,
+      const eventType = booking.reservation?.eventType || "";
+      const eventDateKey = booking.reservation?.eventDate
+        ? formatDbDate(booking.reservation.eventDate)
+        : "";
+      const venueName = booking.reservation?.venue?.venue || "";
+      await notifyClientEvent({
+        clientId: actualClientId,
+        type: "document",
+        message: `Your documents (Certification and Contract of Lease) are ready for release. Booking #${bookingId}.`,
+        email: {
+          subject: "Documents Ready for Release - CSASC",
+          heading: "📄 Documents Ready for Release",
+          accent: "#059669",
+          intro:
+            "Your Certification and Contract of Lease are ready for release at the Provincial Treasurer's Office.",
+          rows: [
+            { label: "Booking", value: `#${bookingId}` },
+            ...(eventType ? [{ label: "Event", value: eventType }] : []),
+            ...(eventDateKey ? [{ label: "Event date", value: eventDateKey }] : []),
+            ...(venueName ? [{ label: "Venue", value: venueName }] : []),
+          ],
+          note: "Please bring a valid ID when claiming your documents.",
         },
+        sms: `CSASC: Your Certification and Contract of Lease are ready for release (Booking #${bookingId}). Claim them at the Provincial Treasurer's Office.`,
       });
     }
 

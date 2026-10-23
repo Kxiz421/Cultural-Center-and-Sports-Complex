@@ -662,3 +662,155 @@ export async function sendUnpaidReservationReminderEmail(to, {
     return false;
   }
 }
+
+/**
+ * Generic branded notification email shared by every progress event
+ * (documents, booking, payment, cancellation, deadline reminders, ...).
+ *
+ * @param {string} to - Recipient email address
+ * @param {object} details
+ * @param {string} [details.subject]
+ * @param {string} [details.heading] - Big header line
+ * @param {string} [details.clientName] - Recipient's first name
+ * @param {string} [details.intro] - Introductory paragraph
+ * @param {Array<{label: string, value: unknown}>} [details.rows] - Detail table
+ * @param {string} [details.note] - Highlighted note/callout
+ * @param {string} [details.accent] - Header colour (defaults to CSASC blue)
+ * @returns {Promise<boolean>}
+ */
+export async function sendClientNotificationEmail(
+  to,
+  { subject, heading, clientName, intro, rows = [], note, accent = "#2563eb" } = {}
+) {
+  if (!to) return false;
+  try {
+    const safeName = escapeHtml(clientName || "there");
+    const rowsHtml = (rows || [])
+      .filter(
+        (row) => row && row.label && row.value != null && row.value !== ""
+      )
+      .map(
+        (row) => `
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #1a365d; white-space: nowrap;">${escapeHtml(
+              row.label
+            )}</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; color: #374151;">${escapeHtml(
+              row.value
+            )}</td>
+          </tr>`
+      )
+      .join("");
+    const noteHtml = note
+      ? `<div class="note">${escapeHtml(note)}</div>`
+      : "";
+
+    const info = await transporter.sendMail({
+      from: `"CSASC - Provincial Government of South Cotabato" <${process.env.SMTP_USER}>`,
+      to,
+      subject: subject || "CSASC Notification",
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body {
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              margin: 0;
+              padding: 0;
+              background-color: #f4f4f4;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .header {
+              color: white;
+              padding: 28px 20px;
+              text-align: center;
+              border-radius: 12px 12px 0 0;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 22px;
+              font-weight: 700;
+            }
+            .header p {
+              margin: 8px 0 0;
+              font-size: 13px;
+              opacity: 0.9;
+            }
+            .body {
+              background: white;
+              padding: 28px 20px;
+              border-radius: 0 0 12px 12px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            }
+            .details {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 20px 0;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            .note {
+              background: #fff8e1;
+              border-left: 4px solid #f59e0b;
+              padding: 12px 16px;
+              margin: 16px 0;
+              font-size: 13px;
+              color: #92400e;
+              border-radius: 4px;
+            }
+            .footer {
+              text-align: center;
+              padding: 20px;
+              color: #6b7280;
+              font-size: 12px;
+              line-height: 1.6;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header" style="background: ${accent};">
+              <h1>${escapeHtml(heading || "CSASC Update")}</h1>
+              <p>Provincial Government of South Cotabato</p>
+              <p>Gymnasium &amp; Cultural Center / Sports Complex</p>
+            </div>
+            <div class="body">
+              <p>Hello ${safeName},</p>
+              ${intro ? `<p>${escapeHtml(intro)}</p>` : ""}
+              ${
+                rowsHtml
+                  ? `<table class="details"><tbody>${rowsHtml}</tbody></table>`
+                  : ""
+              }
+              ${noteHtml}
+              <p style="font-size: 13px; color: #6b7280; margin-top: 20px;">
+                If you have any questions, please contact our office. This is an
+                automated message, please do not reply directly.
+              </p>
+            </div>
+            <div class="footer">
+              <p>
+                <strong>CSASC - Provincial Government of South Cotabato</strong><br>
+                Gymnasium &amp; Cultural Center / Sports Complex Management System
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    console.log(`Client notification email sent to ${to}: ${info.messageId}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to send client notification email:", error);
+    return false;
+  }
+}

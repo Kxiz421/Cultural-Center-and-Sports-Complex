@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
 import { documentEventDateKey } from "@/lib/document-event-date";
-import { createClientNotification } from "@/lib/coordinator-notifications";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
 import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
@@ -277,10 +277,27 @@ export async function PATCH(request) {
       });
 
       if (reservation) {
-        await createClientNotification({
+        const eventDateKey = reservation.eventDate
+          ? reservation.eventDate.toISOString().split("T")[0]
+          : "";
+        await notifyClientEvent({
           clientId: reservation.clientId,
           type: "Booking Confirmation",
-          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
+          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${eventDateKey} has been confirmed.`,
+          email: {
+            subject: `Booking Confirmed: ${reservation.eventType} - CSASC`,
+            heading: "✅ Booking Confirmed",
+            accent: "#059669",
+            intro: "Your booking has been confirmed. Here are the details:",
+            rows: [
+              { label: "Event", value: reservation.eventType },
+              { label: "Venue", value: reservation.venue.venue },
+              { label: "Event date", value: eventDateKey },
+            ],
+            note:
+              "Please keep your Order of Payment and settle any remaining balance before the event.",
+          },
+          sms: `CSASC: Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${eventDateKey} has been confirmed.`,
         });
       }
 
@@ -380,10 +397,27 @@ export async function PATCH(request) {
       });
 
       if (reservation) {
-        await createClientNotification({
+        const eventDateKey = reservation.eventDate
+          ? reservation.eventDate.toISOString().split("T")[0]
+          : "";
+        await notifyClientEvent({
           clientId: reservation.clientId,
           type: "Booking Confirmation",
-          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${reservation.eventDate.toISOString().split("T")[0]} has been confirmed.`,
+          message: `Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${eventDateKey} has been confirmed.`,
+          email: {
+            subject: `Booking Confirmed: ${reservation.eventType} - CSASC`,
+            heading: "✅ Booking Confirmed",
+            accent: "#059669",
+            intro: "Your booking has been confirmed. Here are the details:",
+            rows: [
+              { label: "Event", value: reservation.eventType },
+              { label: "Venue", value: reservation.venue.venue },
+              { label: "Event date", value: eventDateKey },
+            ],
+            note:
+              "Please keep your Order of Payment and settle any remaining balance before the event.",
+          },
+          sms: `CSASC: Your booking for "${reservation.eventType}" at ${reservation.venue.venue} on ${eventDateKey} has been confirmed.`,
         });
       }
 
@@ -393,6 +427,39 @@ export async function PATCH(request) {
         where: { reservationId: id },
         data: { reservationStatus: "Cancelled" },
       });
+
+      const cancelled = await prisma.reservation.findUnique({
+        where: { reservationId: id },
+        select: {
+          clientId: true,
+          eventType: true,
+          eventDate: true,
+          venue: { select: { venue: true } },
+        },
+      });
+      if (cancelled?.clientId) {
+        const eventDateKey = cancelled.eventDate
+          ? cancelled.eventDate.toISOString().split("T")[0]
+          : "";
+        await notifyClientEvent({
+          clientId: cancelled.clientId,
+          type: "cancellation",
+          message: `Your booking for "${cancelled.eventType}" at ${cancelled.venue.venue} on ${eventDateKey} has been cancelled.`,
+          email: {
+            subject: `Booking Cancelled: ${cancelled.eventType} - CSASC`,
+            heading: "❌ Booking Cancelled",
+            accent: "#dc2626",
+            intro: "Your booking has been cancelled. Here are the details:",
+            rows: [
+              { label: "Event", value: cancelled.eventType },
+              { label: "Venue", value: cancelled.venue.venue },
+              { label: "Event date", value: eventDateKey },
+            ],
+            note: "If you believe this is a mistake, please contact our office.",
+          },
+          sms: `CSASC: Your booking for "${cancelled.eventType}" at ${cancelled.venue.venue} on ${eventDateKey} has been cancelled.`,
+        });
+      }
 
       return NextResponse.json({ success: true, message: "Booking cancelled." });
     }

@@ -6,6 +6,7 @@ import { venueAcronym } from "@/lib/venues";
 import { formatDbDate, formatLocalDateKey } from "@/lib/utils";
 import { getBookingStatusId, BOOKING_STATUS } from "@/lib/booking-status";
 import { removeUnpaidReservationsDueSoon } from "@/lib/reservation-unpaid-cleanup";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -148,6 +149,7 @@ export async function POST(request) {
         reservation: {
           include: {
             client: { select: { firstName: true, lastName: true } },
+            venue: { select: { venue: true } },
           },
         },
         payments: true,
@@ -205,6 +207,37 @@ export async function POST(request) {
           : `Booking #${bookingId} for ${clientName} has been cancelled. Payments are eligible for refund.`,
       },
     });
+
+    // Notify the client on all channels (in-app + email + SMS).
+    const cancelledReservation = booking.reservation;
+    if (cancelledReservation?.clientId) {
+      const eventDateKey = cancelledReservation.eventDate
+        ? formatDbDate(cancelledReservation.eventDate)
+        : "N/A";
+      const eventType = cancelledReservation.eventType || "Scheduled event";
+      const venueName = cancelledReservation.venue?.venue || "the venue";
+      const outcome = isForfeiture
+        ? "As the cancellation was made less than 30 days before the event, payments are forfeited."
+        : "Since the cancellation was made at least 30 days before the event, payments are eligible for refund.";
+      await notifyClientEvent({
+        clientId: cancelledReservation.clientId,
+        type: "cancellation",
+        message: `Your reservation for "${eventType}" at ${venueName} on ${eventDateKey} has been CANCELLED. ${outcome}`,
+        email: {
+          subject: `Reservation Cancelled: ${eventType} - CSASC`,
+          heading: "❌ Reservation Cancelled",
+          accent: "#dc2626",
+          intro: "Your reservation has been cancelled.",
+          rows: [
+            { label: "Event", value: eventType },
+            { label: "Venue", value: venueName },
+            { label: "Event date", value: eventDateKey },
+          ],
+          note: outcome,
+        },
+        sms: `CSASC: Your reservation for "${eventType}" on ${eventDateKey} at ${venueName} has been CANCELLED.`,
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,9 @@ import prisma from "@/lib/prisma";
 import { formatDbDate, formatLocalDateKey, roundMoney } from "@/lib/utils";
 import { SYSTEM_NOTIFICATION_STAFF_ID } from "@/lib/coordinator-notifications";
 import { sendUnpaidReservationReminderEmail } from "@/lib/email";
+import { sendNotificationSms } from "@/lib/sms";
+import { toE164Ph } from "@/lib/phone";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { parseWalkInClient, walkInDisplayName } from "@/lib/walk-in";
 
 /**
@@ -92,7 +95,7 @@ const CANDIDATE_SELECT = {
   reservationStatus: true,
   notes: true,
   clientId: true,
-  client: { select: { firstName: true, lastName: true, email: true } },
+  client: { select: { firstName: true, lastName: true, email: true, contactNumber: true } },
   venue: { select: { venue: true } },
   bookings: { select: { bookingId: true, payments: { select: { amountPaid: true } } } },
 };
@@ -202,6 +205,20 @@ export async function sendUnpaidReminderNotifications({ now = new Date() } = {})
       });
     }
 
+    // SMS to the client (registered account, or walk-in contact on file).
+    const phone = toE164Ph(
+      reservation.client?.contactNumber ||
+        parseWalkInClient(reservation.notes).contact
+    );
+    if (phone) {
+      await sendNotificationSms(
+        phone,
+        `CSASC ${marker}: Your reservation for "${eventType}" on ${eventDateKey} ` +
+          `still has no payment. Settle the 50% down payment + 10% deposit before ` +
+          `${removalDateKey}, or the reservation will be cancelled.`
+      );
+    }
+
     remindedIds.push(reservation.reservationId);
   }
 
@@ -294,6 +311,34 @@ export async function removeUnpaidReservationsDueSoon({ now = new Date() } = {})
       });
     }
   });
+
+  // Tell the affected clients their reservation was removed.
+  for (const r of candidates) {
+    if (r.clientId == null) continue;
+    const eventDateKey = formatDbDate(r.eventDate);
+    const venueName = r.venue?.venue || "the venue";
+    await notifyClientEvent({
+      clientId: r.clientId,
+      type: "cancellation",
+      message: `Your reservation for "${r.eventType}" at ${venueName} on ${eventDateKey} was cancelled and removed because no payment was recorded before the deadline (2 days before the event).`,
+      email: {
+        subject: `Reservation Cancelled (Unpaid): RES-${r.reservationId} - CSASC`,
+        heading: "❌ Reservation Cancelled",
+        accent: "#dc2626",
+        intro:
+          "Your reservation was automatically cancelled because no payment was recorded before the deadline.",
+        rows: [
+          { label: "Reference", value: `RES-${r.reservationId}` },
+          { label: "Event", value: r.eventType },
+          { label: "Venue", value: venueName },
+          { label: "Event date", value: eventDateKey },
+        ],
+        note:
+          "If you believe this is a mistake, please contact the Provincial Treasurer's Office.",
+      },
+      sms: `CSASC: Your reservation for "${r.eventType}" on ${eventDateKey} was cancelled because no payment was recorded before the deadline.`,
+    });
+  }
 
   return { removedIds: reservationIds, removedCount: reservationIds.length };
 }

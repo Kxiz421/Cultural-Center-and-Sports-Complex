@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { createClientNotification } from "@/lib/coordinator-notifications";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { walkInDisplayName } from "@/lib/walk-in";
 import {
   CANCELLATION_LATE_CUTOFF_DAYS,
@@ -160,11 +160,29 @@ export async function POST(request) {
       ? "As the cancellation was made less than 30 days before the event, the 50% down payment, 10% deposit and remaining balance are forfeited in favor of the Provincial Government."
       : "Since the cancellation was made at least 30 days before the event, any payments made are eligible for refund.";
 
-    // Send notification to the client
-    await createClientNotification({
+    // Notify the client on all channels.
+    const eventDateKey = eventDate
+      ? eventDate.toISOString().split("T")[0]
+      : "N/A";
+    const cancelledEventType = reservation.eventType || "Scheduled event";
+    await notifyClientEvent({
       clientId: reservation.client?.clientId,
       type: "cancellation",
-      message: "Your reservation for \"" + (reservation.eventType || "Scheduled event") + "\" at " + reservation.venue.venue + " on " + (eventDate ? eventDate.toISOString().split("T")[0] : "N/A") + " has been CANCELLED. Reason: " + (reason || "No reason provided") + ". " + clientOutcome,
+      message: `Your reservation for "${cancelledEventType}" at ${reservation.venue.venue} on ${eventDateKey} has been CANCELLED. Reason: ${reason || "No reason provided"}. ${clientOutcome}`,
+      email: {
+        subject: `Reservation Cancelled: ${cancelledEventType} - CSASC`,
+        heading: "❌ Reservation Cancelled",
+        accent: "#dc2626",
+        intro: "Your reservation has been cancelled.",
+        rows: [
+          { label: "Event", value: cancelledEventType },
+          { label: "Venue", value: reservation.venue.venue },
+          { label: "Event date", value: eventDateKey },
+          { label: "Reason", value: reason || "No reason provided" },
+        ],
+        note: clientOutcome,
+      },
+      sms: `CSASC: Your reservation for "${cancelledEventType}" on ${eventDateKey} at ${reservation.venue.venue} has been CANCELLED. Reason: ${reason || "No reason provided"}.`,
     });
 
     return NextResponse.json({

@@ -14,6 +14,7 @@ import {
 import { noCacheJson } from "@/lib/api-cache-control";
 
 import { requireApiAuth, ownClientId } from "@/lib/api-auth";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 const DOC_TYPE = {
   CONTRACT_OF_LEASE: 2,
   CERTIFICATION: 3,
@@ -254,23 +255,6 @@ async function notifyDocumentRecipients({
       message: `New ${message}`,
       link: coordinatorLink,
     });
-  }
-}
-
-async function notifyClient({ clientId, message, type }) {
-  if (!clientId || !message) return;
-  try {
-    await prisma.notification.create({
-      data: {
-        clientId,
-        staffId: 1,
-        message,
-        type: type || "document",
-        sentAt: new Date(),
-      },
-    });
-  } catch (err) {
-    console.error("Failed to create document notification:", err);
   }
 }
 
@@ -842,20 +826,51 @@ export async function PATCH(request) {
       .join(" · ");
 
     if (status === "Declined" && clientId) {
-      await notifyClient({
+      await notifyClientEvent({
         clientId,
         type: "document",
         message: `Your ${docTypeName} requires resubmission${
           eventBits ? ` (${eventBits})` : ""
         }: ${updateData.remarks}`,
+        email: {
+          subject: `Document Needs Resubmission: ${docTypeName} - CSASC`,
+          heading: "⚠️ Document Needs Resubmission",
+          accent: "#dc2626",
+          intro: `Your ${docTypeName} was reviewed and needs to be resubmitted.`,
+          rows: [
+            { label: "Document", value: docTypeName },
+            { label: "Event", value: eventBits || "—" },
+            { label: "Reason", value: updateData.remarks },
+          ],
+          note: "Please upload a corrected copy from the Documents page.",
+        },
+        sms:
+          `CSASC: Your ${docTypeName} was declined and needs resubmission. ` +
+          `Reason: ${updateData.remarks}${
+            eventBits ? ` (${eventBits})` : ""
+          }. Upload a corrected copy from the Documents page.`,
       });
     }
 
     if (status === "Verified" && clientId) {
-      await notifyClient({
+      await notifyClientEvent({
         clientId,
         type: "document",
         message: `Your ${docTypeName} has been approved${
+          eventBits ? ` for ${eventBits}` : ""
+        }.`,
+        email: {
+          subject: `Document Approved: ${docTypeName} - CSASC`,
+          heading: "✅ Document Approved",
+          accent: "#059669",
+          intro: `Your ${docTypeName} has been reviewed and approved.`,
+          rows: [
+            { label: "Document", value: docTypeName },
+            { label: "Event", value: eventBits || "—" },
+          ],
+          note: "No action needed. You'll be notified when the next step is complete.",
+        },
+        sms: `CSASC: Your ${docTypeName} has been approved${
           eventBits ? ` for ${eventBits}` : ""
         }.`,
       });

@@ -24,6 +24,7 @@ import {
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
 import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
+import { processBalanceDeadlineReminders } from "@/lib/reservation-deadline-reminders";
 
 import { requireApiAuth, resolveClientScope, ownClientId } from "@/lib/api-auth";
 function parsePackageId(value) {
@@ -139,6 +140,13 @@ export async function GET(request) {
       await processUnpaidReservationRule();
     } catch (cleanupError) {
       console.error("Unpaid reservation rule failed:", cleanupError);
+    }
+
+    // Full-payment deadline reminders (7 / 3 / 2 days before the event).
+    try {
+      await processBalanceDeadlineReminders();
+    } catch (reminderError) {
+      console.error("Balance deadline reminders failed:", reminderError);
     }
 
     const { searchParams } = new URL(request.url);

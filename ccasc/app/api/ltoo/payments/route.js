@@ -20,7 +20,7 @@ import {
   recordDepositPayment,
   mapDepositSnapshot,
 } from "@/lib/deposit-utils";
-import { createClientNotification } from "@/lib/coordinator-notifications";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { getPackageBillingRate } from "@/lib/reservation-package-select";
 import { getBasketballPrice } from "@/lib/particular-options";
 import { noCacheJson } from "@/lib/api-cache-control";
@@ -863,12 +863,47 @@ export async function POST(request) {
         .filter(Boolean)
         .join(" ");
 
-      await createClientNotification({
+      const fullyPaid = statusToUse === "Fully Paid";
+      const message = isDiscountOnly
+        ? `A discount of ${formatPhp(discountAmount)} has been applied to your reservation${reservationBits ? ` ${reservationBits}` : ""}.`
+        : `A payment of ₱${formattedAmount} was recorded for your reservation${reservationBits ? ` ${reservationBits}` : ""}. Payment type: ${paymentTypeLabel}.${
+            fullyPaid ? " Your reservation is now fully paid." : ""
+          }`;
+
+      await notifyClientEvent({
         clientId: notifyClientId,
         type: isDiscountOnly ? "discount" : "payment",
-        message: isDiscountOnly
-          ? `A discount of ${formatPhp(discountAmount)} has been applied to your reservation${reservationBits ? ` ${reservationBits}` : ""}.`
-          : `A payment of ₱${formattedAmount} was recorded for your reservation${reservationBits ? ` ${reservationBits}` : ""}. Payment type: ${paymentTypeLabel}.`,
+        message,
+        email: {
+          subject: isDiscountOnly
+            ? "Discount Applied - CSASC"
+            : `Payment Received${fullyPaid ? " — Fully Paid" : ""} - CSASC`,
+          heading: isDiscountOnly
+            ? "🏷️ Discount Applied"
+            : fullyPaid
+              ? "✅ Payment Received — Fully Paid"
+              : "💳 Payment Received",
+          accent: fullyPaid ? "#059669" : "#2563eb",
+          intro: isDiscountOnly
+            ? "A discount has been applied to your reservation."
+            : "We have recorded your payment.",
+          rows: [
+            {
+              label: isDiscountOnly ? "Discount" : "Amount",
+              value: isDiscountOnly ? formatPhp(discountAmount) : `₱${formattedAmount}`,
+            },
+            { label: "Payment type", value: isDiscountOnly ? "Discount" : paymentTypeLabel },
+            ...(notifyEventType ? [{ label: "Event", value: notifyEventType }] : []),
+            ...(notifyEventDate ? [{ label: "Event date", value: notifyEventDate }] : []),
+            ...(notifyVenue ? [{ label: "Venue", value: notifyVenue }] : []),
+            ...(reservationId ? [{ label: "Reference", value: `RES-${reservationId}` }] : []),
+            { label: "Status", value: statusToUse },
+          ],
+          note: fullyPaid
+            ? "Your reservation is fully paid. No further payment is required."
+            : undefined,
+        },
+        sms: message,
       });
     }
 

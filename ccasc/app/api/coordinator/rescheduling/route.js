@@ -10,7 +10,7 @@ import {
   formatScopeChange,
   scopeChangeFromJson,
 } from "@/lib/reschedule-scope";
-import { createClientNotification } from "@/lib/coordinator-notifications";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { formatPhp } from "@/lib/utils";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
@@ -218,10 +218,30 @@ export async function PATCH(request) {
         }
       }
 
-      await createClientNotification({
+      await notifyClientEvent({
         clientId: rescheduleReq.reservation.client?.clientId,
         type: "reschedule",
         message: `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been APPROVED. ${messageParts.join(" ")}`.trim(),
+        email: {
+          subject: "Reschedule Request Approved - CSASC",
+          heading: "✅ Reschedule Approved",
+          accent: "#059669",
+          intro: "Your reschedule request has been approved.",
+          rows: [
+            { label: "Event", value: rescheduleReq.reservation.eventType },
+            { label: "Venue", value: rescheduleReq.reservation.venue.venue },
+            ...(pairs ? [{ label: "Date change(s)", value: pairs }] : []),
+            ...(result.scopeChange?.description
+              ? [{ label: "Updated", value: result.scopeChange.description }]
+              : []),
+            ...(result.scopeChange?.total > 0
+              ? [{ label: "New amount", value: formatPhp(result.scopeChange.total) }]
+              : []),
+          ],
+        },
+        sms: `CSASC: Your reschedule request for "${rescheduleReq.reservation.eventType}" has been APPROVED.${
+          pairs ? ` New date(s): ${pairs}.` : ""
+        }`,
       });
 
       return NextResponse.json({
@@ -261,10 +281,24 @@ export async function PATCH(request) {
       const declineMsg = declineReason
         ? `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.\n\nReason: ${declineReason}`
         : `Your reschedule request for "${rescheduleReq.reservation.eventType}" at ${rescheduleReq.reservation.venue.venue} has been DECLINED.`;
-      await createClientNotification({
+      await notifyClientEvent({
         clientId: rescheduleReq.reservation.client?.clientId,
         type: "reschedule",
         message: declineMsg,
+        email: {
+          subject: "Reschedule Request Declined - CSASC",
+          heading: "❌ Reschedule Declined",
+          accent: "#dc2626",
+          intro: "Your reschedule request has been declined.",
+          rows: [
+            { label: "Event", value: rescheduleReq.reservation.eventType },
+            { label: "Venue", value: rescheduleReq.reservation.venue.venue },
+            ...(declineReason ? [{ label: "Reason", value: declineReason }] : []),
+          ],
+        },
+        sms: `CSASC: Your reschedule request for "${rescheduleReq.reservation.eventType}" has been DECLINED.${
+          declineReason ? ` Reason: ${declineReason}` : ""
+        }`,
       });
 
       return NextResponse.json({ success: true, message: "Reschedule declined" });
