@@ -135,20 +135,24 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
   // turn this step green.
   const bookingConfirmedDone = reservationStatus === "Confirmed";
   const finalBalanceDone =
+    // Sports Complex: the coordinator's confirmation settles the payment, so
+    // confirming turns both the balance and the confirmation steps green.
+    (isSportsComplex && bookingConfirmedDone) ||
     nothingToPay ||
     paymentStatus === "BalanceSettled" ||
     (totalPayable > 0 && amountPaid >= totalPayable);
 
   // Venue-specific process order. Cultural Center settles the full balance
   // before uploading the Certification & Contract of Lease; Sports Complex
-  // submits the Official Receipt first, then settles the balance last.
+  // submits the Official Receipt first, then the balance, and confirmation is
+  // always the final step.
   const steps = isSportsComplex
     ? [
         { key: "submitted", title: "Reservation Submitted", done: true },
         { key: "order-of-payment", title: "Order of Payment", done: orderOfPaymentDone },
         { key: "documents", title: "Submit Documents", done: documentsDone },
+        { key: "final-balance", title: "Financial Balance Settled", done: finalBalanceDone },
         { key: "booking-confirmed", title: "Booking Confirmed", done: bookingConfirmedDone },
-        { key: "final-balance", title: "Final Balance Settled", done: finalBalanceDone },
       ]
     : [
         { key: "submitted", title: "Reservation Submitted", done: true },

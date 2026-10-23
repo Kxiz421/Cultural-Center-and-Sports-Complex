@@ -3,11 +3,13 @@ import { extractChargeBreakdownFromNotes } from "@/lib/reservation-charge-breakd
 
 const ACTIVE_STATUSES = ["Pending", "Confirmed"];
 
-function addFacility(map, dateKey, facilityId) {
-  if (!dateKey || !facilityId) return;
-  const id = String(facilityId);
-  if (!map[dateKey]) map[dateKey] = new Set();
-  map[dateKey].add(id);
+/**
+ * Sports Complex facilities carry a "Quantity" (stored in `capacity`). A blank
+ * or zero value means the facility is a single bookable unit.
+ */
+export function facilityQuantity(facility) {
+  const capacity = Number(facility?.capacity);
+  return Number.isFinite(capacity) && capacity > 0 ? Math.floor(capacity) : 1;
 }
 
 function reservationDateKeys(reservation) {
@@ -20,12 +22,22 @@ function reservationDateKeys(reservation) {
 }
 
 /**
- * Build date → Set(facilityId) of facilities already reserved by active reservations.
- * Prefer charge-line facilityId (+ optional date) when present; otherwise use Schedule rows
- * across every date of that reservation.
+ * Build date → facilityId → reserved quantity of facilities already taken by
+ * active reservations. Prefers charge-line quantities (which carry the booked
+ * amount); falls back to one unit per Schedule row for older records.
+ *
+ * @returns {Record<string, Record<string, number>>}
  */
-export function buildReservedFacilitiesByDate(reservations) {
+export function buildReservedFacilityQuantitiesByDate(reservations) {
   const map = {};
+
+  const add = (dateKey, facilityId, quantity) => {
+    if (!dateKey || !facilityId) return;
+    const id = String(facilityId);
+    const count = Math.max(1, Number(quantity) || 1);
+    if (!map[dateKey]) map[dateKey] = {};
+    map[dateKey][id] = (map[dateKey][id] || 0) + count;
+  };
 
   for (const reservation of reservations || []) {
     const dateKeys = reservationDateKeys(reservation);
@@ -36,26 +48,36 @@ export function buildReservedFacilitiesByDate(reservations) {
 
     if (facilityLines.length > 0) {
       for (const line of facilityLines) {
-        const facilityId = line.facilityId;
         if (line.date) {
-          addFacility(map, String(line.date), facilityId);
+          add(String(line.date), line.facilityId, line.quantity);
         } else {
-          for (const dateKey of dateKeys) addFacility(map, dateKey, facilityId);
+          for (const dateKey of dateKeys) {
+            add(dateKey, line.facilityId, line.quantity);
+          }
         }
       }
       continue;
     }
 
     for (const schedule of reservation.schedules || []) {
-      for (const dateKey of dateKeys) {
-        addFacility(map, dateKey, schedule.facilityId);
-      }
+      for (const dateKey of dateKeys) add(dateKey, schedule.facilityId, 1);
     }
   }
 
-  return Object.fromEntries(
-    Object.entries(map).map(([date, set]) => [date, [...set]])
-  );
+  return map;
+}
+
+/**
+ * Date → facility ids that have any reservation (kept for callers that only
+ * need to know whether a facility is in use at all).
+ */
+export function buildReservedFacilitiesByDate(reservations) {
+  const quantities = buildReservedFacilityQuantitiesByDate(reservations);
+  const out = {};
+  for (const [date, facilities] of Object.entries(quantities)) {
+    out[date] = Object.keys(facilities);
+  }
+  return out;
 }
 
 /** Flatten date → facilityIds into a Set of facility ids reserved on any of the given dates. */
@@ -68,8 +90,53 @@ export function collectReservedFacilityIds(reservedByDate, dates) {
 }
 
 /**
- * Validate proposed facility assignments against existing reservations.
- * assignments: { [dateKey]: string[] facilityIds }
+ * Quantity-aware conflict check.
+ *
+ * A request only conflicts when the units asked for exceed what is still free
+ * on that date (`reserved + requested > capacity`). Different facilities (or a
+ * partial quantity of one) can share the same day.
+ *
+ * @param {object} input
+ * @param {Record<string, Record<string, number>>} [input.reservedQtyByDate]
+ * @param {Record<string, string[]>} [input.assignments] date → facilityIds
+ * @param {Record<string, number>} [input.quantities] facilityId → requested units
+ * @param {Array<{facilityId: number|string, capacity?: number}>} [input.facilities]
+ * @returns {Array<{date: string, facilityId: string, capacity: number,
+ *                  reserved: number, requested: number, remaining: number}>}
+ */
+export function findFacilityQuantityConflicts({
+  reservedQtyByDate = {},
+  assignments = {},
+  quantities = {},
+  facilities = [],
+} = {}) {
+  const capacityById = new Map(
+    (facilities || []).map((f) => [
+      String(f.facilityId ?? f.id),
+      facilityQuantity(f),
+    ])
+  );
+
+  const conflicts = [];
+  for (const [date, facilityIds] of Object.entries(assignments || {})) {
+    const reservedMap = reservedQtyByDate?.[date] || {};
+    for (const facilityId of facilityIds || []) {
+      const id = String(facilityId);
+      const capacity = capacityById.get(id) ?? 1;
+      const reserved = Number(reservedMap[id]) || 0;
+      const requested = Math.max(1, Number(quantities?.[id]) || 1);
+      const remaining = Math.max(0, capacity - reserved);
+      if (requested > remaining) {
+        conflicts.push({ date, facilityId: id, capacity, reserved, requested, remaining });
+      }
+    }
+  }
+  return conflicts;
+}
+
+/**
+ * Legacy id-based check: any reservation on a facility counts as fully taking
+ * it. Kept for callers that do not carry quantities.
  */
 export function findFacilityConflicts(reservedByDate, assignments) {
   const conflicts = [];

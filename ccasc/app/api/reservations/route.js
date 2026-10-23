@@ -18,8 +18,8 @@ import {
 } from "@/lib/reservation-advance-booking";
 import {
   ACTIVE_STATUSES,
-  buildReservedFacilitiesByDate,
-  findFacilityConflicts,
+  buildReservedFacilityQuantitiesByDate,
+  findFacilityQuantityConflicts,
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
@@ -403,27 +403,39 @@ export async function POST(request) {
         );
       }
 
-      const reservedByDate = buildReservedFacilitiesByDate(conflictingReservations);
-      const facilityConflicts = findFacilityConflicts(reservedByDate, facilityAssignments);
+      // Quantity-aware: a facility can be shared across reservations until its
+      // configured quantity for that date is used up.
+      const venueFacilities = await prisma.facility.findMany({
+        where: { venueId: parsedVenueId },
+        select: { facilityId: true, facilityName: true, capacity: true },
+      });
+      const reservedQtyByDate =
+        buildReservedFacilityQuantitiesByDate(conflictingReservations);
+      const facilityConflicts = findFacilityQuantityConflicts({
+        reservedQtyByDate,
+        assignments: facilityAssignments,
+        quantities: body.facilityQuantities || {},
+        facilities: venueFacilities,
+      });
       if (facilityConflicts.length > 0) {
-        const conflictFacilities = await prisma.facility.findMany({
-          where: {
-            facilityId: {
-              in: [...new Set(facilityConflicts.map((c) => parseInt(c.facilityId, 10)))],
-            },
-          },
-          select: { facilityId: true, facilityName: true },
-        });
         const nameById = Object.fromEntries(
-          conflictFacilities.map((f) => [String(f.facilityId), f.facilityName])
+          venueFacilities.map((f) => [String(f.facilityId), f.facilityName])
         );
         const detail = facilityConflicts
-          .map((c) => `${nameById[c.facilityId] || `facility #${c.facilityId}`} on ${c.date}`)
+          .map(
+            (c) =>
+              `${nameById[c.facilityId] || `facility #${c.facilityId}`} on ${c.date} (${
+                c.remaining > 0 ? `only ${c.remaining} left` : "fully reserved"
+              })`
+          )
           .join(", ");
-        return NextResponse.json({
-          error: `One or more selected facilities are already reserved: ${detail}`,
-          facilityConflicts,
-        }, { status: 409 });
+        return NextResponse.json(
+          {
+            error: `Not enough remaining quantity: ${detail}.`,
+            facilityConflicts,
+          },
+          { status: 409 }
+        );
       }
     } else {
       const conflictDates = new Set();

@@ -4,6 +4,7 @@ import { parseSqlDate } from "@/lib/utils";
 import {
   ACTIVE_STATUSES,
   buildReservedFacilitiesByDate,
+  buildReservedFacilityQuantitiesByDate,
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 
@@ -66,16 +67,21 @@ export async function GET(request) {
     });
 
     const reservedByDate = buildReservedFacilitiesByDate(reservations);
+    const reservedQuantitiesByDate =
+      buildReservedFacilityQuantitiesByDate(reservations);
 
     // Only return keys for requested dates
     const filtered = {};
+    const filteredQuantities = {};
     for (const date of dateKeys) {
       filtered[date] = reservedByDate[date] || [];
+      filteredQuantities[date] = reservedQuantitiesByDate[date] || {};
     }
 
     return noCacheJson({
       dates: dateKeys,
       reservedByDate: filtered,
+      reservedQuantitiesByDate: filteredQuantities,
     });
   } catch (error) {
     console.error("Facility availability fetch error:", error);

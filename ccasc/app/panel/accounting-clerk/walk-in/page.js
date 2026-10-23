@@ -185,6 +185,8 @@ export default function WalkInReservationPage() {
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(false);
   /** dateKey → facilityId[] already reserved by other reservations */
   const [reservedByDate, setReservedByDate] = React.useState({});
+  /** dateKey → { facilityId: reservedQuantity } */
+  const [reservedQuantitiesByDate, setReservedQuantitiesByDate] = React.useState({});
   const [facilityAvailLoading, setFacilityAvailLoading] = React.useState(false);
 
   // Per-date customization for multi-day
@@ -207,6 +209,25 @@ export default function WalkInReservationPage() {
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
   const submitLockRef = React.useRef(false);
+
+  // Sports Complex facilities have a configurable quantity ("capacity"); a
+  // blank/zero means a single unit. Remaining = capacity minus what is already
+  // taken on the strictest selected date.
+  const remainingForFacility = React.useCallback(
+    (facility) => {
+      if (!facility) return 0;
+      const id = String(facility.facilityId);
+      const capacity =
+        Number(facility.capacity) > 0 ? Number(facility.capacity) : 1;
+      let remaining = capacity;
+      for (const date of selectedDates) {
+        const used = Number(reservedQuantitiesByDate?.[date]?.[id]) || 0;
+        remaining = Math.min(remaining, capacity - used);
+      }
+      return Math.max(0, remaining);
+    },
+    [selectedDates, reservedQuantitiesByDate]
+  );
 
   // Load packages and particulars on mount
   React.useEffect(() => {
@@ -282,11 +303,13 @@ export default function WalkInReservationPage() {
   React.useEffect(() => {
     if (venueId !== "2") {
       setReservedByDate({});
+      setReservedQuantitiesByDate({});
       return;
     }
     const dates = [...selectedDates].sort();
     if (dates.length === 0) {
       setReservedByDate({});
+      setReservedQuantitiesByDate({});
       return;
     }
     let cancelled = false;
@@ -298,10 +321,14 @@ export default function WalkInReservationPage() {
       .then((data) => {
         if (cancelled) return;
         setReservedByDate(data.reservedByDate || {});
+        setReservedQuantitiesByDate(data.reservedQuantitiesByDate || {});
       })
       .catch((err) => {
         console.error("Failed to load facility availability:", err);
-        if (!cancelled) setReservedByDate({});
+        if (!cancelled) {
+          setReservedByDate({});
+          setReservedQuantitiesByDate({});
+        }
       })
       .finally(() => {
         if (!cancelled) setFacilityAvailLoading(false);
@@ -309,19 +336,41 @@ export default function WalkInReservationPage() {
     return () => { cancelled = true; };
   }, [venueId, selectedDates]);
 
-  // Drop facility selections that conflict with newly loaded reserved facilities
+  // Drop/clamp facility selections once their remaining quantity runs out.
   React.useEffect(() => {
-    if (Object.keys(reservedByDate).length === 0) return;
     if (!venueId || venueId !== "2") return;
-    const reservedOnAny = new Set();
-    for (const date of selectedDates) {
-      for (const id of reservedByDate[date] || []) reservedOnAny.add(String(id));
-    }
+    if (Object.keys(reservedQuantitiesByDate).length === 0) return;
+
+    const remainingById = new Map(
+      facilities.map((f) => [String(f.facilityId), remainingForFacility(f)])
+    );
+
     setSelectedFacilityIds((prev) => {
-      const next = prev.filter((id) => !reservedOnAny.has(String(id)));
+      const next = prev.filter((id) => (remainingById.get(String(id)) ?? 0) > 0);
       return next.length === prev.length ? prev : next;
     });
-  }, [reservedByDate, selectedDates, venueId]);
+    setFacilityQuantities((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const remaining = remainingById.get(String(id)) ?? 0;
+        if (remaining <= 0) {
+          delete next[id];
+          changed = true;
+        } else if (Number(next[id]) > remaining) {
+          next[id] = remaining;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [
+    reservedQuantitiesByDate,
+    selectedDates,
+    venueId,
+    facilities,
+    remainingForFacility,
+  ]);
 
   // Initialize date customizations when customize mode is turned on or dates change
   React.useEffect(() => {
@@ -551,18 +600,13 @@ export default function WalkInReservationPage() {
     setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
   };
 
-  const reservedFacilityIdsGlobal = React.useMemo(() => {
-    const reserved = new Set();
-    for (const date of selectedDates) {
-      for (const id of reservedByDate[date] || []) reserved.add(String(id));
-    }
-    return reserved;
-  }, [reservedByDate, selectedDates]);
-
   const toggleFacilitySelection = (facilityId) => {
     const id = String(facilityId);
-    if (reservedFacilityIdsGlobal.has(id)) {
-      toast.error("This facility is already reserved on one of the selected dates.");
+    const facility = facilities.find((f) => String(f.facilityId) === id);
+    if (!facility || remainingForFacility(facility) <= 0) {
+      toast.error(
+        "This facility is already fully reserved on one of the selected dates."
+      );
       return;
     }
     setSelectedFacilityIds((prev) => {
@@ -573,12 +617,9 @@ export default function WalkInReservationPage() {
           return next;
         });
         return prev.filter((x) => x !== id);
-      } else {
-        const facility = facilities.find((f) => String(f.facilityId) === id);
-        const maxQty = facility ? (facility.capacity > 0 ? facility.capacity : 99) : 99;
-        setFacilityQuantities((qPrev) => ({ ...qPrev, [id]: 1 }));
-        return [...prev, id];
       }
+      setFacilityQuantities((qPrev) => ({ ...qPrev, [id]: 1 }));
+      return [...prev, id];
     });
   };
 
@@ -1835,7 +1876,7 @@ const renderPerDateFacilities = (date, cust) => {
                     {/* Select All */}
                     {(() => {
                       const availableFacilities = facilities.filter(
-                        (f) => !reservedFacilityIdsGlobal.has(String(f.facilityId))
+                        (f) => remainingForFacility(f) > 0
                       );
                       const availableIds = availableFacilities.map((f) => String(f.facilityId));
                       const selectedAvailable = availableIds.filter((id) =>
@@ -1900,11 +1941,14 @@ const renderPerDateFacilities = (date, cust) => {
                     })()}
                     {facilities.map((f) => {
                       const id = String(f.facilityId);
-                      const reserved = reservedFacilityIdsGlobal.has(id);
+                      const remaining = remainingForFacility(f);
+                      const capacity =
+                        Number(f.capacity) > 0 ? Number(f.capacity) : 1;
+                      const fullyReserved = remaining <= 0;
                       const checked = selectedFacilityIds.includes(id);
                       const rate = getFacilityRateBySlot(f, timeSlotId);
-                      const disabled = reserved || selectedDates.size === 0;
-                      const maxQty = f.capacity > 0 ? f.capacity : 99;
+                      const disabled = fullyReserved || selectedDates.size === 0;
+                      const maxQty = Math.max(1, remaining);
                       const currentQty = facilityQuantities[id] || 0;
                       return (
                         <label
@@ -1919,11 +1963,12 @@ const renderPerDateFacilities = (date, cust) => {
                             disabled={disabled}
                           />
                           <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
-                          {reserved ? (
-                            <span className="shrink-0 text-xs text-destructive">Reserved</span>
+                          {fullyReserved ? (
+                            <span className="shrink-0 text-xs text-destructive">Fully reserved</span>
                           ) : (
                             <span className="shrink-0 tabular-nums text-muted-foreground">
                               ₱{rate.toLocaleString()}/day
+                              {capacity > 1 ? ` · ${remaining} remaining` : ""}
                             </span>
                           )}
                           {checked && (

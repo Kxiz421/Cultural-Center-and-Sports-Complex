@@ -3,8 +3,8 @@ import { formatDbDate, parseSqlDate } from "@/lib/utils";
 import { validateAdvanceBookingDates } from "@/lib/reservation-advance-booking";
 import {
   ACTIVE_STATUSES,
-  buildReservedFacilitiesByDate,
-  findFacilityConflicts,
+  buildReservedFacilityQuantitiesByDate,
+  findFacilityQuantityConflicts,
 } from "@/lib/facility-reservation-availability";
 import {
   findVenueDateConflicts,
@@ -115,38 +115,61 @@ export async function validateRescheduleFacilityAvailability(
   scope,
   dateKeys
 ) {
+  const requestedFacilities = (scope?.facilities || [])
+    .map((f) => ({
+      facilityId: Number(f.facilityId),
+      quantity: Math.max(1, Number(f.quantity) || 1),
+    }))
+    .filter((f) => Number.isInteger(f.facilityId));
+  if (requestedFacilities.length === 0) return { ok: true };
+
   const requestedIds = [
-    ...new Set((scope?.facilities || []).map((f) => Number(f.facilityId))),
-  ].filter((id) => Number.isInteger(id));
-  if (requestedIds.length === 0) return { ok: true };
+    ...new Set(requestedFacilities.map((f) => String(f.facilityId))),
+  ];
+  const requestedQuantities = {};
+  for (const f of requestedFacilities) {
+    requestedQuantities[f.facilityId] =
+      (requestedQuantities[f.facilityId] || 0) + f.quantity;
+  }
 
   const uniqueKeys = [...new Set((dateKeys || []).filter(Boolean))];
   if (uniqueKeys.length === 0) return { ok: true };
 
   const dateObjects = uniqueKeys.map((d) => new Date(`${d}T00:00:00.000Z`));
-  const others = await prisma.reservation.findMany({
-    where: {
-      venueId: reservation.venueId,
-      reservationId: { not: reservation.reservationId },
-      reservationStatus: { in: ACTIVE_STATUSES },
-      OR: [
-        { eventDate: { in: dateObjects } },
-        { additionalDates: { some: { eventDate: { in: dateObjects } } } },
-      ],
-    },
-    select: {
-      notes: true,
-      eventDate: true,
-      additionalDates: { select: { eventDate: true } },
-      schedules: { select: { facilityId: true } },
-    },
-  });
+  const [others, venueFacilities] = await Promise.all([
+    prisma.reservation.findMany({
+      where: {
+        venueId: reservation.venueId,
+        reservationId: { not: reservation.reservationId },
+        reservationStatus: { in: ACTIVE_STATUSES },
+        OR: [
+          { eventDate: { in: dateObjects } },
+          { additionalDates: { some: { eventDate: { in: dateObjects } } } },
+        ],
+      },
+      select: {
+        notes: true,
+        eventDate: true,
+        additionalDates: { select: { eventDate: true } },
+        schedules: { select: { facilityId: true } },
+      },
+    }),
+    prisma.facility.findMany({
+      where: { venueId: reservation.venueId },
+      select: { facilityId: true, capacity: true },
+    }),
+  ]);
 
-  const reservedByDate = buildReservedFacilitiesByDate(others);
+  const reservedQtyByDate = buildReservedFacilityQuantitiesByDate(others);
   const assignments = {};
   for (const key of uniqueKeys) assignments[key] = requestedIds;
 
-  const conflicts = findFacilityConflicts(reservedByDate, assignments);
+  const conflicts = findFacilityQuantityConflicts({
+    reservedQtyByDate,
+    assignments,
+    quantities: requestedQuantities,
+    facilities: venueFacilities,
+  });
   if (conflicts.length === 0) return { ok: true };
 
   const conflictDates = [...new Set(conflicts.map((c) => c.date))].sort();

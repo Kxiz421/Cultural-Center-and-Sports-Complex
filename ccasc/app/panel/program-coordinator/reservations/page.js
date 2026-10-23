@@ -248,6 +248,8 @@ export default function CoordinatorReservationsPage() {
   const [facilitiesLoading, setFacilitiesLoading] = React.useState(true);
   /** dateKey → facilityId[] already reserved by other reservations */
   const [reservedByDate, setReservedByDate] = React.useState({});
+  /** dateKey → { facilityId: reservedQuantity } */
+  const [reservedQuantitiesByDate, setReservedQuantitiesByDate] = React.useState({});
   const [facilityAvailLoading, setFacilityAvailLoading] = React.useState(false);
 
   // Particulars
@@ -266,6 +268,25 @@ export default function CoordinatorReservationsPage() {
   const [eventDates, setEventDates] = React.useState([]);
   const [selectedDates, setSelectedDates] = React.useState(new Set());
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
+
+  // Sports Complex facilities have a configurable quantity ("capacity"); a
+  // blank/zero means a single unit. Remaining = capacity minus what is already
+  // taken on the strictest selected date.
+  const remainingForFacility = React.useCallback(
+    (facility) => {
+      if (!facility) return 0;
+      const id = String(facility.facilityId);
+      const capacity =
+        Number(facility.capacity) > 0 ? Number(facility.capacity) : 1;
+      let remaining = capacity;
+      for (const date of selectedDates) {
+        const used = Number(reservedQuantitiesByDate?.[date]?.[id]) || 0;
+        remaining = Math.min(remaining, capacity - used);
+      }
+      return Math.max(0, remaining);
+    },
+    [selectedDates, reservedQuantitiesByDate]
+  );
   const [availability, setAvailability] = React.useState({});
   const [availLoading, setAvailLoading] = React.useState(false);
 
@@ -379,6 +400,7 @@ export default function CoordinatorReservationsPage() {
     const dates = [...selectedDates].sort();
     if (dates.length === 0) {
       setReservedByDate({});
+      setReservedQuantitiesByDate({});
       return;
     }
 
@@ -391,10 +413,14 @@ export default function CoordinatorReservationsPage() {
       .then((data) => {
         if (cancelled) return;
         setReservedByDate(data.reservedByDate || {});
+        setReservedQuantitiesByDate(data.reservedQuantitiesByDate || {});
       })
       .catch((err) => {
         console.error("Failed to load facility availability:", err);
-        if (!cancelled) setReservedByDate({});
+        if (!cancelled) {
+          setReservedByDate({});
+          setReservedQuantitiesByDate({});
+        }
       })
       .finally(() => {
         if (!cancelled) setFacilityAvailLoading(false);
@@ -405,21 +431,24 @@ export default function CoordinatorReservationsPage() {
     };
   }, [venueId, selectedDates]);
 
-  // Drop selections that conflict with newly loaded reserved facilities
+  // Drop/clamp selections once their remaining quantity runs out.
   React.useEffect(() => {
-    if (Object.keys(reservedByDate).length === 0) return;
+    if (Object.keys(reservedQuantitiesByDate).length === 0) return;
 
     if (!customizePerDate) {
-      const reservedOnAny = new Set();
-      for (const date of selectedDates) {
-        for (const id of reservedByDate[date] || []) reservedOnAny.add(String(id));
-      }
+      const remainingById = new Map(
+        facilities.map((f) => [String(f.facilityId), remainingForFacility(f)])
+      );
       setFacilityQuantities((prev) => {
         let changed = false;
         const next = { ...prev };
-        for (const id of reservedOnAny) {
-          if (next[id] !== undefined) {
+        for (const id of Object.keys(next)) {
+          const remaining = remainingById.get(String(id)) ?? 0;
+          if (remaining <= 0) {
             delete next[id];
+            changed = true;
+          } else if (Number(next[id]) > remaining) {
+            next[id] = remaining;
             changed = true;
           }
         }
@@ -449,7 +478,14 @@ export default function CoordinatorReservationsPage() {
       }
       return changed ? updated : prev;
     });
-  }, [reservedByDate, selectedDates, customizePerDate]);
+  }, [
+    reservedQuantitiesByDate,
+    reservedByDate,
+    selectedDates,
+    customizePerDate,
+    facilities,
+    remainingForFacility,
+  ]);
 
   // Initialize date customizations when customize mode is turned on or dates change
   React.useEffect(() => {
@@ -625,25 +661,19 @@ export default function CoordinatorReservationsPage() {
     }));
   };
 
-  const reservedFacilityIdsGlobal = React.useMemo(() => {
-    const reserved = new Set();
-    for (const date of selectedDates) {
-      for (const id of reservedByDate[date] || []) reserved.add(String(id));
-    }
-    return reserved;
-  }, [reservedByDate, selectedDates]);
-
-  /** Set the quantity for a facility (0 = deselect). */
+  /** Set the quantity for a facility (0 = deselect), capped at what is left. */
   const setFacilityQuantity = (facilityId, quantity) => {
     const id = String(facilityId);
-    if (reservedFacilityIdsGlobal.has(id)) {
-      toast.error("This facility is already reserved on one of the selected dates.");
+    const facility = facilities.find((f) => String(f.facilityId) === id);
+    const remaining = remainingForFacility(facility);
+    if (!facility || remaining <= 0) {
+      toast.error(
+        "This facility is already fully reserved on one of the selected dates."
+      );
       return;
     }
     setFacilityQuantities((prev) => {
-      const facility = facilities.find((f) => String(f.facilityId) === id);
-      const maxQty = getFacilityMaxQuantity(facility);
-      const qty = Math.max(0, Math.min(Number(quantity) || 0, maxQty));
+      const qty = Math.max(0, Math.min(Number(quantity) || 0, remaining));
       if (qty <= 0) {
         const next = { ...prev };
         delete next[id];
@@ -1576,7 +1606,7 @@ export default function CoordinatorReservationsPage() {
                   {/* Select All */}
                   {(() => {
                     const availableFacilities = facilities.filter(
-                      (f) => !reservedFacilityIdsGlobal.has(String(f.facilityId))
+                      (f) => remainingForFacility(f) > 0
                     );
                     const availableIds = availableFacilities.map((f) => String(f.facilityId));
                     const selectedAvailable = availableIds.filter((id) => Number(facilityQuantities[id] || 0) > 0);
@@ -1631,11 +1661,14 @@ export default function CoordinatorReservationsPage() {
                   })()}
                   {facilities.map((f) => {
                     const id = String(f.facilityId);
-                    const reserved = reservedFacilityIdsGlobal.has(id);
+                    const remaining = remainingForFacility(f);
+                    const capacity =
+                      Number(f.capacity) > 0 ? Number(f.capacity) : 1;
+                    const fullyReserved = remaining <= 0;
                     const qty = facilityQuantities[id] || 0;
                     const rate = getFacilityRateBySlot(f, timeSlotId);
-                    const maxQty = getFacilityMaxQuantity(f);
-                    const disabled = reserved || selectedDates.size === 0;
+                    const maxQty = Math.max(1, remaining);
+                    const disabled = fullyReserved || selectedDates.size === 0;
                     return (
                       <div
                         key={id}
@@ -1674,11 +1707,12 @@ export default function CoordinatorReservationsPage() {
                           </div>
                         )}
                         <FacilityNameButton facility={f} onOpen={setFacilityDetails} />
-                        {reserved ? (
-                          <span className="shrink-0 text-xs text-destructive">Reserved</span>
+                        {fullyReserved ? (
+                          <span className="shrink-0 text-xs text-destructive">Fully reserved</span>
                         ) : (
                           <span className="shrink-0 tabular-nums text-muted-foreground">
                             ₱{rate.toLocaleString()}/day
+                            {capacity > 1 ? ` · ${remaining} remaining` : ""}
                           </span>
                         )}
                       </div>

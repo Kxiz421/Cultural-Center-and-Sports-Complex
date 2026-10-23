@@ -9,7 +9,8 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import { requireApiAuth } from "@/lib/api-auth";
 import {
   ACTIVE_STATUSES,
-  buildReservedFacilitiesByDate,
+  buildReservedFacilityQuantitiesByDate,
+  facilityQuantity,
 } from "@/lib/facility-reservation-availability";
 
 /** Shown when every Sports Complex facility is already taken on a date. */
@@ -85,7 +86,7 @@ export async function GET(request) {
       const [venueFacilities, facilityReservations] = await Promise.all([
         prisma.facility.findMany({
           where: { venueId: parsedVenueId },
-          select: { facilityId: true },
+          select: { facilityId: true, capacity: true },
         }),
         prisma.reservation.findMany({
           where: {
@@ -110,14 +111,18 @@ export async function GET(request) {
         }),
       ]);
 
-      const facilityIds = venueFacilities.map((f) => String(f.facilityId));
-      if (facilityIds.length > 0) {
-        const reservedByDate = buildReservedFacilitiesByDate(facilityReservations);
-        for (const [dateKey, reservedIds] of Object.entries(reservedByDate)) {
-          const reserved = new Set((reservedIds || []).map(String));
-          if (facilityIds.every((id) => reserved.has(id))) {
-            fullyReservedDates.add(dateKey);
-          }
+      const capacityById = new Map(
+        venueFacilities.map((f) => [String(f.facilityId), facilityQuantity(f)])
+      );
+      if (capacityById.size > 0) {
+        const reservedQtyByDate =
+          buildReservedFacilityQuantitiesByDate(facilityReservations);
+        for (const [dateKey, reservedMap] of Object.entries(reservedQtyByDate)) {
+          // Fully reserved only when every facility has used up its quantity.
+          const allFull = [...capacityById.entries()].every(
+            ([id, capacity]) => (Number(reservedMap[id]) || 0) >= capacity
+          );
+          if (allFull) fullyReservedDates.add(dateKey);
         }
       }
     }
