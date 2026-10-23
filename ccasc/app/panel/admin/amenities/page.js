@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/dialog";
 import { Search, X } from "lucide-react";
 
+/** Items at or below this on-hand quantity are flagged as low stock. */
+const LOW_STOCK_THRESHOLD = 10;
+
 function formatPeso(value) {
   return `₱${(Number(value) || 0).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
@@ -74,7 +77,6 @@ function startOfTodayPHT() {
 
 export default function AmenitiesPage() {
   const [particulars, setParticulars] = React.useState([]);
-  const [movements, setMovements] = React.useState({ restocked: 0, damaged: 0 });
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -86,18 +88,10 @@ export default function AmenitiesPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [particularsRes, movementsRes] = await Promise.all([
-          fetch("/api/particulars", { cache: "no-store" }),
-          fetch("/api/particulars?movementSummary=day", { cache: "no-store" }),
-        ]);
+        const particularsRes = await fetch("/api/particulars", { cache: "no-store" });
         const particularsData = await particularsRes.json();
-        const movementsData = await movementsRes.json();
         if (cancelled) return;
         setParticulars(Array.isArray(particularsData) ? particularsData : []);
-        setMovements({
-          restocked: Number(movementsData?.restocked) || 0,
-          damaged: Number(movementsData?.damaged) || 0,
-        });
       } catch (err) {
         console.error("Failed to load amenities data:", err);
       } finally {
@@ -110,8 +104,32 @@ export default function AmenitiesPage() {
     };
   }, []);
 
-  const totalUnits = particulars.reduce(
-    (sum, p) => sum + (Number(p.totalQuantity) || 0),
+  // The overview prioritises what needs action: items running low and items
+  // that have damage recorded.
+  const lowStockItems = React.useMemo(
+    () =>
+      particulars
+        .filter((p) => (Number(p.totalQuantity) || 0) <= LOW_STOCK_THRESHOLD)
+        .sort(
+          (a, b) =>
+            (Number(a.totalQuantity) || 0) - (Number(b.totalQuantity) || 0)
+        ),
+    [particulars]
+  );
+
+  const damagedItems = React.useMemo(
+    () =>
+      particulars
+        .filter((p) => (Number(p.damagedQuantity) || 0) > 0)
+        .sort(
+          (a, b) =>
+            (Number(b.damagedQuantity) || 0) - (Number(a.damagedQuantity) || 0)
+        ),
+    [particulars]
+  );
+
+  const damagedUnits = damagedItems.reduce(
+    (sum, p) => sum + (Number(p.damagedQuantity) || 0),
     0
   );
 
@@ -176,43 +194,105 @@ export default function AmenitiesPage() {
           Amenities overview
         </h2>
         <p className="text-muted-foreground text-sm">
-          Live Cultural Center particulars — search them, see on-hand
-          quantities and current status, and open any row for its details.
+          What needs attention — items running low on stock and items reported
+          damaged. Search the full list below and open any row for its details.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total units on hand</CardDescription>
-            <CardTitle className="text-3xl tabular-nums">
-              {loading ? "—" : totalUnits}
+            <CardDescription>Low stock items</CardDescription>
+            <CardTitle className="text-3xl tabular-nums text-amber-600">
+              {loading ? "—" : lowStockItems.length}
             </CardTitle>
+            <CardDescription>
+              At or below {LOW_STOCK_THRESHOLD} units on hand.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Sum of on-hand quantities.
+          <CardContent className="text-sm">
+            {loading ? (
+              <p className="text-muted-foreground text-xs">Loading…</p>
+            ) : lowStockItems.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                Everything is above the low-stock threshold.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {lowStockItems.slice(0, 6).map((p) => (
+                  <li
+                    key={p.particularId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openDetails(p)}
+                      className="truncate text-left hover:underline"
+                      title={p.particularName}
+                    >
+                      {p.particularName}
+                    </button>
+                    <span className="shrink-0 font-medium tabular-nums text-amber-700">
+                      {Number(p.totalQuantity) || 0} left
+                    </span>
+                  </li>
+                ))}
+                {lowStockItems.length > 6 && (
+                  <li className="text-muted-foreground text-xs">
+                    +{lowStockItems.length - 6} more
+                  </li>
+                )}
+              </ul>
+            )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Restocked today</CardDescription>
-            <CardTitle className="text-3xl tabular-nums text-green-600">
-              {loading ? "—" : movements.restocked}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Units added today.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Damaged today</CardDescription>
+            <CardDescription>Damaged items</CardDescription>
             <CardTitle className="text-3xl tabular-nums text-red-600">
-              {loading ? "—" : movements.damaged}
+              {loading ? "—" : damagedItems.length}
             </CardTitle>
+            <CardDescription>
+              {loading
+                ? "Units reported damaged."
+                : `${damagedUnits} unit(s) reported damaged across these items.`}
+            </CardDescription>
           </CardHeader>
-          <CardContent className="text-muted-foreground text-xs">
-            Units reported damaged today.
+          <CardContent className="text-sm">
+            {loading ? (
+              <p className="text-muted-foreground text-xs">Loading…</p>
+            ) : damagedItems.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                No damaged items recorded.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {damagedItems.slice(0, 6).map((p) => (
+                  <li
+                    key={p.particularId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openDetails(p)}
+                      className="truncate text-left hover:underline"
+                      title={p.particularName}
+                    >
+                      {p.particularName}
+                    </button>
+                    <span className="shrink-0 font-medium tabular-nums text-red-600">
+                      {Number(p.damagedQuantity) || 0} damaged
+                    </span>
+                  </li>
+                ))}
+                {damagedItems.length > 6 && (
+                  <li className="text-muted-foreground text-xs">
+                    +{damagedItems.length - 6} more
+                  </li>
+                )}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>

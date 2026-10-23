@@ -104,6 +104,20 @@ export async function GET(request) {
       orderBy: { particularId: "asc" },
     });
 
+    // Total units ever reported damaged per particular — the amenities overview
+    // highlights damaged items, not just today's count.
+    const damageRows = await prisma.particularTransaction.groupBy({
+      by: ["particularId"],
+      where: { transactionType: "DAMAGE" },
+      _sum: { quantity: true },
+    });
+    const damagedById = new Map(
+      damageRows.map((row) => [
+        row.particularId,
+        Number(row._sum.quantity) || 0,
+      ])
+    );
+
     const formatted = items.map((item) => ({
       id: item.particularId,
       particularId: item.particularId,
@@ -111,6 +125,7 @@ export async function GET(request) {
       description: item.description || "",
       category: item.category || "",
       totalQuantity: item.inventory?.quantityAvailable ?? 0,
+      damagedQuantity: damagedById.get(item.particularId) || 0,
       unitCost: item.inventory?.unitCost ? Number(item.inventory.unitCost) : 0,
       inventoryName: item.inventory?.itemName || "",
       statusId: item.statusId,

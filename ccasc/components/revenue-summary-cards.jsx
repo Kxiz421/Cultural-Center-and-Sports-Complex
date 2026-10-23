@@ -41,7 +41,7 @@ export function RevenueSummaryCards({ revenue, note, className }) {
         <Card key={window.key}>
           <CardHeader className="pb-2">
             <CardDescription>{window.label}</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
+            <CardTitle className="text-3xl leading-tight tracking-tight tabular-nums">
               {formatPhp(values[window.key])}
             </CardTitle>
           </CardHeader>

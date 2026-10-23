@@ -73,6 +73,7 @@ import {
   BALANCE_PAYMENT_MINIMUM,
 } from "@/lib/payment-utils";
 import { isDepositRecordMet, sanitizeDeductionReason, isEventEnded } from "@/lib/deposit-utils";
+import { WizardSteps, WizardNav } from "@/components/reservation-wizard";
 
 const PAYMENT_RADIO_OPTIONS = [
   { value: "downpayment", title: "50% Down Payment" },
@@ -274,6 +275,7 @@ export default function LTOOPaymentsPage() {
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyViewOnly, setHistoryViewOnly] = React.useState(false);
   const [selectedTransaction, setSelectedTransaction] = React.useState(null);
+  const [step, setStep] = React.useState(0);
 
   const historyBreakdown = React.useMemo(
     () => breakdownFromReservation(historyReservation),
@@ -520,8 +522,7 @@ export default function LTOOPaymentsPage() {
     setConsumeAmount("");
     setConsumeReason("");
     setDepositPanelOpen(false);
-
-    // Pre-fill discount if one already exists on this reservation
+    setStep(0);
     const hasExistingDiscount = reservation.totalDiscount > 0;
     if (hasExistingDiscount) {
       // Don't open the discount section by default — just set up the discount
@@ -638,10 +639,10 @@ export default function LTOOPaymentsPage() {
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "0.00");
   };
 
-  const handleRecordPayment = async (isUpdateDiscount = false) => {
+  const handleRecordPayment = async (isUpdateDiscount = false, forceDiscountOnly = false) => {
     if (!selectedReservation) return;
 
-    const isDiscountOnly = discountOnlySubmission;
+    const isDiscountOnly = forceDiscountOnly || discountOnlySubmission;
 
     // Payment with cash — validate and close after saving
     if (!isDiscountOnly && !isUpdateDiscount) {
@@ -935,8 +936,40 @@ export default function LTOOPaymentsPage() {
       : <XCircle className="size-4 text-red-400 inline" />;
   };
 
+  const closeRecord = () => {
+    setRecordOpen(false);
+    setSelectedReservation(null);
+    setAmountError("");
+    setDiscountOnlySubmission(false);
+    setStep(0);
+  };
+
+  // Stepper layout for recording a payment. The optional discount step only
+  // appears before the first payment; once any payment exists it disappears.
+  const noPaymentYet = ["No Payment", "Pending"].includes(
+    selectedReservation?.computedStatus
+  );
+  const RECORD_STEPS = noPaymentYet
+    ? ["Discount", "Record payment", "Review & save"]
+    : ["Record payment", "Review & save"];
+  const STEP_DISCOUNT = noPaymentYet ? 0 : -1;
+  const STEP_RECORD = noPaymentYet ? 1 : 0;
+  const STEP_REVIEW = noPaymentYet ? 2 : 1;
+  const RECORD_STEP_HINTS = noPaymentYet
+    ? [
+        "Optional — apply a discount before any payment is recorded. Skip this if none applies.",
+        "Choose what to record and how much is being paid.",
+        "Check the details, then confirm and save the payment.",
+      ]
+    : [
+        "Choose what to record and how much is being paid.",
+        "Check the details, then confirm and save the payment.",
+      ];
+
   return (
     <div className="flex flex-col gap-6">
+      {!recordOpen && (
+      <>
       <div>
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">Payment Recording</h2>
         <p className="text-foreground/80 text-sm leading-relaxed">
@@ -1085,26 +1118,36 @@ export default function LTOOPaymentsPage() {
           />
         </CardContent>
       </Card>
+      </>
+      )}
 
-      {/* Record Payment Dialog */}
-      <Dialog open={recordOpen} onOpenChange={(open) => {
-        setRecordOpen(open);
-        if (!open) {
-          setSelectedReservation(null);
-          setAmountError("");
-        }
-      }}>
-        <DialogContent className="sm:max-w-lg max-h-[min(90vh,680px)] flex flex-col gap-0 p-0 overflow-hidden">
-          <DialogHeader className="shrink-0 px-6 pt-6 pb-2 border-b border-border/60">
-            <DialogTitle>Record Payment</DialogTitle>
-            <DialogDescription>
-              Recording payment for <strong>{selectedReservation?.clientName}</strong>
-            </DialogDescription>
-          </DialogHeader>
+      {/* Record Payment — full-page stepper */}
+      {recordOpen && selectedReservation && currentBreakdown && (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight">Record Payment</h2>
+              <p className="text-base text-muted-foreground">
+                {selectedReservation.clientName} — {selectedReservation.eventType}
+              </p>
+            </div>
+            <Button variant="outline" onClick={closeRecord}>
+              Back to reservations
+            </Button>
+          </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
-            {selectedReservation && currentBreakdown && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-3">
+          <WizardSteps steps={RECORD_STEPS} current={step} onSelect={setStep} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">{RECORD_STEPS[step]}</CardTitle>
+              <CardDescription className="text-base">
+                {RECORD_STEP_HINTS[step]}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5 text-base">
+            {step === STEP_REVIEW && selectedReservation && currentBreakdown && (
+              <div className="rounded-lg border border-border bg-muted/40 p-4 text-base space-y-3">
                 <div>
                   <p className="font-medium text-foreground leading-snug">
                     {selectedReservation.clientName} — {selectedReservation.eventType}
@@ -1192,7 +1235,7 @@ export default function LTOOPaymentsPage() {
               </div>
             )}
 
-            {["No Payment", "Pending"].includes(selectedReservation?.computedStatus) && (
+            {step === STEP_DISCOUNT && selectedReservation && (
             <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -1399,15 +1442,11 @@ export default function LTOOPaymentsPage() {
                         type="button"
                         size="sm"
                         variant="default"
-                        onClick={() => {
+                        onClick={async () => {
                           const isUpdate = selectedReservation.totalDiscount > 0;
-                          if (isUpdate) {
-                            setConfirmOpen(true);
-                            setDiscountOnlySubmission(true);
-                          } else {
-                            setDiscountOnlySubmission(true);
-                            setConfirmOpen(true);
-                          }
+                          setDiscountOnlySubmission(false);
+                          await handleRecordPayment(isUpdate, true);
+                          setStep(STEP_RECORD);
                         }}
                         disabled={saving || !discountCheck.ok}
                       >
@@ -1420,9 +1459,10 @@ export default function LTOOPaymentsPage() {
             </div>
             )}
 
+            {step === STEP_RECORD && (
             <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
               <fieldset className="space-y-2" disabled={(discountEnabled && pendingDiscount > 0) || (currentBreakdown?.balanceSettled && !discountSettlesRemaining)}>
-                <legend className="text-sm font-medium">Record What?</legend>
+                <legend className="text-lg font-semibold">Record What?</legend>
                 <div className="space-y-2">
                   {PAYMENT_RADIO_OPTIONS.map((option) => {
                     const allowed = currentBreakdown
@@ -1436,7 +1476,7 @@ export default function LTOOPaymentsPage() {
                       <label
                         key={option.value}
                         className={cn(
-                          "flex items-start gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors",
+                          "flex items-start gap-3 rounded-md border px-3 py-2.5 text-base transition-colors",
                           selected && allowed && !(discountEnabled && pendingDiscount > 0) && "border-primary bg-primary/5",
                           allowed && !selected && !(discountEnabled && pendingDiscount > 0) && "hover:bg-muted/50 cursor-pointer",
                           (!allowed || (discountEnabled && pendingDiscount > 0)) && "opacity-60 cursor-not-allowed bg-muted/20"
@@ -1595,54 +1635,37 @@ export default function LTOOPaymentsPage() {
                 </div>
               </div>
             </div>
-          </div>
+            )}
+            </CardContent>
+          </Card>
 
-          <DialogFooter className="shrink-0 mx-0 mb-0 rounded-none border-t bg-muted/50 px-6 py-4 gap-2 sm:justify-between">
-            <div className="flex gap-2">
-              {selectedReservation && hasPaymentHistory(
-                computePaymentBreakdown(
-                  selectedReservation.totalAmount,
-                  selectedReservation.totalPaid
-                ).status
-              ) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openPaymentHistory(selectedReservation, false)}
-                >
-                  <History className="size-4 mr-1" />
-                  History
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setRecordOpen(false); setSelectedReservation(null); }}>Cancel</Button>
+          <WizardNav
+            onBack={step > 0 ? () => setStep(step - 1) : undefined}
+            onNext={() => setStep((s) => Math.min(s + 1, RECORD_STEPS.length - 1))}
+            nextLabel="Next"
+            hideNext={step === RECORD_STEPS.length - 1}
+          />
+
+          {step === STEP_REVIEW && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-5 py-4">
+              <div className="text-base">
+                <span className="text-muted-foreground">Recording: </span>
+                <span className="font-medium">
+                  {getPaymentTypeLabel(paymentType)} — {formatPhp(paymentAmount || 0)}
+                </span>
+              </div>
               <Button
-                size="sm"
-                onClick={() => {
-                  setDiscountOnlySubmission(false);
-                  const check = validatePaymentAmount(
-                    currentBreakdown,
-                    paymentType || "full",
-                    roundMoney(paymentAmount || 0),
-                    { discountSettlesRemaining }
-                  );
-                  if (!check.ok) {
-                    setAmountError(check.error);
-                    toast.error(check.error);
-                    return;
-                  }
-                  setConfirmOpen(true);
-                }}
-                disabled={saving || !canSubmitPayment}
+                type="button"
+                size="lg"
+                onClick={() => handleRecordPayment(false)}
+                disabled={saving}
               >
-                {saving ? "Saving..." : "Save Payment"}
+                {saving ? "Saving…" : "Confirm & Save Payment"}
               </Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
+      )}
 
       {/* Payment History Dialog */}
       <Dialog
