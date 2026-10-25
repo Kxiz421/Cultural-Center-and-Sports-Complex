@@ -1,23 +1,108 @@
 /**
  * SMS delivery.
  *
- * Primary provider: **Infobip** (`INFOBIP_BASE_URL` + `INFOBIP_API_KEY`, and
- * optionally `INFOBIP_SENDER` for the displayed sender).
+ * Primary provider: **iProgSMS** (`IPROGSMS_API_TOKEN`, optional
+ * `IPROGSMS_BASE_URL`; defaults to https://www.iprogsms.com/api/v1).
  *
- * The previous SMSGate gateway is kept as a fallback so a deployment can switch
- * over gradually: Infobip is used whenever it is configured, otherwise SMSGate
- * (if set). With neither configured, every send is a no-op and the SMS option
- * on the sign-in screen stays hidden.
+ * Infobip (`INFOBIP_*`) and the legacy SMSGate gateway are kept as fallbacks
+ * when configured. With none configured, every send is a no-op and the SMS
+ * option on the sign-in screen stays hidden.
  */
+
+/* ---------------------------------------------------------------- iProgSMS */
+
+function iprogToken() {
+  return String(
+    process.env.IPROGSMS_API_TOKEN ?? process.env.IPROGSMS_API_KEY ?? "",
+  ).trim();
+}
+
+function iprogBase() {
+  const raw = String(process.env.IPROGSMS_BASE_URL ?? "").trim();
+  return (raw || "https://www.iprogsms.com/api/v1").replace(/\/+$/, "");
+}
+
+export function isIprogSmsEnabled() {
+  return Boolean(iprogToken());
+}
+
+async function sendViaIprogSms(toE164, text) {
+  try {
+    // iProgSMS accepts 09XXXXXXXXX / 639XXXXXXXXX / +639XXXXXXXXX.
+    const phoneNumber = String(toE164).replace(/^\+/, "");
+
+    const res = await fetch(`${iprogBase()}/sms_messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        api_token: iprogToken(),
+        phone_number: phoneNumber,
+        message: text,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const raw = await res.text().catch(() => "");
+
+    if (!res.ok) {
+      console.error(
+        `iProgSMS rejected the send (HTTP ${res.status}): ${raw.slice(0, 300)}`,
+      );
+      if (res.status === 401 || res.status === 403) {
+        console.error("iProgSMS auth failed - check IPROGSMS_API_TOKEN.");
+      }
+      return false;
+    }
+
+    let parsed = null;
+    try {
+      parsed = raw ? JSON.parse(raw) : null;
+    } catch {
+      // A 2xx with a non-JSON body still counts as queued.
+    }
+    const status = parsed?.status;
+    if (typeof status === "number" && status >= 400) {
+      console.error(
+        `iProgSMS could not send the SMS: ${parsed?.message || status}`,
+      );
+      return false;
+    }
+    if (typeof status === "string" && status.toLowerCase() === "error") {
+      console.error(
+        `iProgSMS could not send the SMS: ${parsed?.message || "error"}`,
+      );
+      return false;
+    }
+
+    console.log(
+      `SMS queued via iProgSMS to ${toE164}${
+        parsed?.message_id ? ` (${parsed.message_id})` : ""
+      }`,
+    );
+    return true;
+  } catch (error) {
+    console.error("Failed to send SMS via iProgSMS:", error.message);
+    return false;
+  }
+}
 
 /* ------------------------------------------------------------------ Infobip */
 
 function infobipBase() {
   const raw = String(process.env.INFOBIP_BASE_URL ?? "").trim();
   if (!raw) return "";
-  // Accept "xxxxx.api.infobip.com" or a full URL.
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  return withScheme.replace(/\/+$/, "");
+  try {
+    // Keep only the origin, so pasting the full endpoint URL still works
+    // (e.g. "https://xxxxx.api.infobip.com/sms/2/text/advanced").
+    const url = new URL(withScheme);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return withScheme.replace(/\/+$/, "");
+  }
 }
 
 function infobipApiKey() {
@@ -65,8 +150,17 @@ async function sendViaInfobip(toE164, text) {
 
     if (!res.ok) {
       console.error(
-        `Infobip rejected the send (HTTP ${res.status}): ${raw.slice(0, 300)}`,
+        `Infobip rejected the send via ${infobipBase()} (HTTP ${res.status}): ${raw.slice(0, 300)}`,
       );
+      if (res.status === 401 || res.status === 403) {
+        console.error(
+          "Infobip auth failed - check INFOBIP_API_KEY (and that INFOBIP_BASE_URL is your account host).",
+        );
+      } else if (res.status === 400) {
+        console.error(
+          "Infobip rejected the message - check INFOBIP_SENDER is an approved sender and the destination number is valid.",
+        );
+      }
       return false;
     }
 
@@ -155,13 +249,23 @@ async function sendViaSmsGate(toE164, text) {
 
 /** True when any SMS provider is configured. */
 export function isSmsEnabled() {
-  return isInfobipEnabled() || isSmsGateEnabled();
+  return isIprogSmsEnabled() || isInfobipEnabled() || isSmsGateEnabled();
 }
 
 /** Send one plain text message using the configured provider. */
 async function postMessage(toE164, text) {
   if (!toE164 || !text) return false;
-  if (isInfobipEnabled()) return sendViaInfobip(toE164, text);
+
+  if (isIprogSmsEnabled()) {
+    if (await sendViaIprogSms(toE164, text)) return true;
+    console.warn("iProgSMS send failed - trying the next SMS provider.");
+  }
+
+  if (isInfobipEnabled()) {
+    if (await sendViaInfobip(toE164, text)) return true;
+    console.warn("Infobip send failed - trying the next SMS provider.");
+  }
+
   if (isSmsGateEnabled()) return sendViaSmsGate(toE164, text);
   return false;
 }
