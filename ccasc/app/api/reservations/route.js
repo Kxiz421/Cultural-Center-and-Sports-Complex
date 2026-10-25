@@ -191,7 +191,16 @@ export async function GET(request) {
     ];
     const clients = await prisma.client.findMany({
       where: { clientId: { in: distinctClientIds } },
-      select: { clientId: true, firstName: true, lastName: true, contactNumber: true },
+      select: {
+        clientId: true,
+        firstName: true,
+        lastName: true,
+        contactNumber: true,
+        addressLine: true,
+        barangay: true,
+        city: true,
+        province: true,
+      },
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c]));
 
@@ -259,6 +268,12 @@ export async function GET(request) {
             : walkInDisplayName(r.notes),
           // Printed on the Order of Payment's "Telephone No. /Cellphone #" line.
           contactNumber: client?.contactNumber || "",
+          clientAddress: client
+            ? [client.addressLine, client.barangay, client.city, client.province]
+                .map((part) => String(part || "").trim())
+                .filter(Boolean)
+                .join(", ")
+            : "",
           venueId: r.venueId,
           venue: r.venue.venue,
           eventType: r.eventType,

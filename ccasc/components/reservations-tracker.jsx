@@ -218,9 +218,11 @@ function ReservationDetail({ reservation, orderOfPaymentHref, documentsHref }) {
     };
   }, [reservation?.id]);
 
-  // Only trust the loaded phase once it matches the reservation on screen.
-  const documentsPhase =
-    docState.id === reservation?.id ? docState.phase : null;
+  // The document phase arrives a moment after the reservation itself. Until it
+  // matches the reservation on screen we don't know the Documents step's state,
+  // so the progress bar is held back rather than flashing it as "current".
+  const docsLoaded = docState.id === reservation?.id;
+  const documentsPhase = docsLoaded ? docState.phase : null;
   const progress = computeReservationProgress({ reservation, documentsPhase });
   const { totals } = progress;
   const banner = TONE_BANNER[progress.tone];
@@ -277,23 +279,32 @@ function ReservationDetail({ reservation, orderOfPaymentHref, documentsHref }) {
           </div>
         )}
 
-        <ProgressBar progress={progress} />
+        {docsLoaded ? (
+          <>
+            <ProgressBar progress={progress} />
 
-        <div className={cn("rounded-lg border p-4", banner.wrap)}>
-          <div className="flex items-center gap-2">
-            <BannerIcon className="size-5 shrink-0" />
-            <p className="font-semibold">{progress.headline}</p>
-            <Badge variant="outline" className="ml-auto border-current">
-              {banner.label}
-            </Badge>
-          </div>
-          {progress.instruction && (
-            <p className="mt-1.5 text-sm opacity-90">{progress.instruction}</p>
-          )}
-          {progress.urgency && (
-            <p className="mt-1.5 text-sm font-medium">{progress.urgency}</p>
-          )}
-        </div>
+            <div className={cn("rounded-lg border p-4", banner.wrap)}>
+              <div className="flex items-center gap-2">
+                <BannerIcon className="size-5 shrink-0" />
+                <p className="font-semibold">{progress.headline}</p>
+                <Badge variant="outline" className="ml-auto border-current">
+                  {banner.label}
+                </Badge>
+              </div>
+              {progress.instruction && (
+                <p className="mt-1.5 text-sm opacity-90">{progress.instruction}</p>
+              )}
+              {progress.urgency && (
+                <p className="mt-1.5 text-sm font-medium">{progress.urgency}</p>
+              )}
+            </div>
+          </>
+        ) : (
+          <div
+            className="h-7 animate-pulse rounded-full bg-muted"
+            aria-label="Checking reservation progress"
+          />
+        )}
 
         {/* Quick facts */}
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">

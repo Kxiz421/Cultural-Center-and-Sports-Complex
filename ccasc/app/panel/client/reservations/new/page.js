@@ -191,7 +191,29 @@ export default function ClientNewReservationPage() {
     const name = localStorage.getItem("userName") || localStorage.getItem("name") || "";
     const email = localStorage.getItem("userEmail") || localStorage.getItem("email") || "";
     setClientInfo({ name, email });
+
+    // Pull the full profile so the Order of Payment can print the client's
+    // complete name, address and contact number on their lines.
+    let cancelled = false;
+    fetch("/api/clients/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setClientInfo((prev) => ({
+          name: data.fullName || prev.name || "",
+          email: data.email || prev.email || "",
+          contactNumber: data.contactNumber || "",
+          address: data.address || "",
+        }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Confirmation shown before the reservation is created / the OoP generated.
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = React.useState(false);
 
   // Per-date customization state
   const [customizePerDate, setCustomizePerDate] = React.useState(false);
@@ -929,7 +951,7 @@ export default function ClientNewReservationPage() {
   const total = sumReservationSummaryLines(summaryLines);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (submitting || submitLockRef.current) return;
     submitLockRef.current = true;
 
@@ -1189,7 +1211,8 @@ export default function ClientNewReservationPage() {
       setSavedOrder({
         controlNumber: data.id,
         clientName: clientInfo.name || "Client",
-        contactNumber: "",
+        contactNumber: clientInfo.contactNumber || "",
+        address: clientInfo.address || "",
         activityName: form.eventType,
         activityDate: sortedDates
           .map((d) =>
@@ -1894,7 +1917,7 @@ const renderPerDateFacilities = (date, cust) => {
               className="w-full"
               size="lg"
               disabled={submitting || !form.venueId || !form.eventType || selectedDates.size === 0}
-              onClick={handleSubmit}
+              onClick={() => setConfirmSubmitOpen(true)}
             >
               {submitting ? "Submitting..." : "Generate Order of Payment"}
             </Button>
@@ -2010,6 +2033,59 @@ const renderPerDateFacilities = (date, cust) => {
         </DialogContent>
       </Dialog>
 
+      {/* Confirmation before creating the reservation / generating the OoP */}
+      <Dialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Generate Order of Payment?</DialogTitle>
+            <DialogDescription>
+              Please review the reservation below. Generating the Order of Payment
+              also creates this reservation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-base">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Client</span>
+              <span className="text-right font-medium">{clientInfo.name || "Client"}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Venue</span>
+              <span className="text-right font-medium">
+                {form.venueId === "1" ? "Cultural Center" : "Sports Complex"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Event</span>
+              <span className="text-right font-medium">{form.eventType || "—"}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Date(s)</span>
+              <span className="text-right font-medium">
+                {selectedDates.size > 0 ? [...selectedDates].sort().join(", ") : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3 border-t pt-2">
+              <span className="text-muted-foreground">Total</span>
+              <span className="font-bold tabular-nums">₱{total.toLocaleString()}</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmSubmitOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmSubmitOpen(false);
+                handleSubmit();
+              }}
+              disabled={submitting}
+            >
+              {submitting ? "Generating..." : "Confirm & Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Order of Payment — shown first; closing it returns to My Reservations */}
       <Dialog
         open={!!savedOrder}
@@ -2039,8 +2115,8 @@ const renderPerDateFacilities = (date, cust) => {
                 year: "numeric",
               })}
               clientName={savedOrder.clientName}
-              address=""
-              contactNumber={savedOrder.contactNumber}
+              address={savedOrder.address || ""}
+              contactNumber={savedOrder.contactNumber || ""}
               activityName={savedOrder.activityName}
               activityDate={savedOrder.activityDate}
               participants=""

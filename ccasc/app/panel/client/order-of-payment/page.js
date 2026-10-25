@@ -102,7 +102,7 @@ function OrderOfPaymentContent() {
           year: "numeric",
         })}
         clientName={data.clientName}
-        address=""
+        address={data.clientAddress || ""}
         contactNumber={data.contactNumber || ""}
         activityName={data.eventType}
         activityDate={dateList.map(formatActivityDate).join(", ")}

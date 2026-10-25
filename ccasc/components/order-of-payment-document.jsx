@@ -430,9 +430,11 @@ function groupByDate(lines) {
 
 function Field({ label, value }) {
   return (
-    <div className="flex gap-2">
+    <div className="flex items-end gap-2">
       <dt className="w-[150px] shrink-0 uppercase">{label}</dt>
-      <dd className="font-semibold">{value || ""}</dd>
+      <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5 font-semibold">
+        {value || "\u00A0"}
+      </dd>
     </div>
   );
 }
@@ -638,35 +640,47 @@ function SportsComplexOrderOfPayment({
       {/* Client / activity fields on the left, ruled reference block on the right */}
       <div className="mt-4 flex items-start justify-between gap-8">
         <dl className="space-y-0.5 text-[11px]">
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 font-semibold uppercase">
               Client/Company:
             </dt>
-            <dd>{clientName || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {clientName || "\u00A0"}
+            </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 uppercase">Address:</dt>
-            <dd>{address || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {address || "\u00A0"}
+            </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 uppercase">Activity:</dt>
-            <dd>{activityName || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {activityName || "\u00A0"}
+            </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 uppercase">Time/Date:</dt>
-            <dd>{activityDate || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {activityDate || "\u00A0"}
+            </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 uppercase">
               Telephone No. /Cellphone #:
             </dt>
-            <dd>{contactNumber || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {contactNumber || "\u00A0"}
+            </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <dt className="w-[135px] shrink-0 uppercase">
               Participants/ attendees:
             </dt>
-            <dd>{participants || "\u00A0"}</dd>
+            <dd className="min-w-0 flex-1 border-b border-black/70 pb-0.5">
+              {participants || "\u00A0"}
+            </dd>
           </div>
         </dl>
 
