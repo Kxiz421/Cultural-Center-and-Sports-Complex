@@ -1574,14 +1574,28 @@ export default function UserManagementPage() {
                   <TableRow key={u.id}>
                     <TableCell>
                       <button
-                        className="flex flex-col text-left hover:underline"
+                        className="flex items-center gap-3 text-left hover:underline"
                         onClick={() => handleOpenProfile(u)}
                       >
-                        <span className="font-medium">
-                          {u.firstName} {u.middleName ?? ""} {u.lastName}
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                          {u.email}
+                        <Avatar className="size-9 shrink-0">
+                          {u.profilePhoto ? (
+                            <AvatarImage
+                              src={u.profilePhoto}
+                              alt={`${u.firstName} ${u.lastName}`}
+                            />
+                          ) : null}
+                          <AvatarFallback className="text-xs">
+                            {(u.firstName?.[0] ?? "").toUpperCase()}
+                            {(u.lastName?.[0] ?? "").toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="min-w-0">
+                          <span className="block font-medium">
+                            {u.firstName} {u.middleName ?? ""} {u.lastName}
+                          </span>
+                          <span className="block text-muted-foreground text-xs">
+                            {u.email}
+                          </span>
                         </span>
                       </button>
                     </TableCell>

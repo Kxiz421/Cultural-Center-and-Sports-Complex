@@ -121,6 +121,8 @@ export const API_RULES = [
   { prefix: "/api/dashboard/admin", types: [USER_TYPE.ADMIN] },
   { prefix: "/api/facilities/rates", types: [USER_TYPE.ADMIN] },
   { prefix: "/api/calendar/blocks", types: [USER_TYPE.ADMIN] },
+  // Profile photos: any signed-in user (client or staff) may upload their own.
+  { prefix: "/api/upload/profile", types: ALL_AUTHENTICATED_TYPES },
   { prefix: "/api/upload", types: STAFF_TYPES },
 
   // ---- Role-specific portals -------------------------------------------

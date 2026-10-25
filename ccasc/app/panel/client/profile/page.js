@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   ShieldCheck,
   Loader2,
+  Camera,
 } from "lucide-react";
 
 import {
@@ -25,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/ui/field-error";
 import { cn, formatPhp, roundMoney } from "@/lib/utils";
+import { uploadProfilePhoto } from "@/lib/upload-profile-photo";
 
 function passwordProblem(password) {
   if (password.length < 8) return "Password must be at least 8 characters long.";
@@ -81,6 +83,10 @@ export default function ClientProfilePage() {
   });
   const [pwErrors, setPwErrors] = React.useState({});
   const [savingPw, setSavingPw] = React.useState(false);
+
+  const [photoError, setPhotoError] = React.useState("");
+  const [photoUploading, setPhotoUploading] = React.useState(false);
+  const photoInputRef = React.useRef(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -197,6 +203,58 @@ export default function ClientProfilePage() {
     }
   };
 
+  const uploadPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file (JPEG, PNG, GIF, or WebP).");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setPhotoError("Image must be 50MB or smaller.");
+      return;
+    }
+    setPhotoError("");
+    setPhotoUploading(true);
+    try {
+      const url = await uploadProfilePhoto(file);
+      const res = await fetch("/api/clients/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profilePhoto: url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save your photo");
+      setProfile(data.profile);
+      toast.success("Profile photo updated");
+    } catch (err) {
+      toast.error(err.message || "Failed to upload your photo");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const removePhoto = async () => {
+    setPhotoError("");
+    setPhotoUploading(true);
+    try {
+      const res = await fetch("/api/clients/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profilePhoto: "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove your photo");
+      setProfile(data.profile);
+      toast.success("Profile photo removed");
+    } catch (err) {
+      toast.error(err.message || "Failed to remove your photo");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -242,11 +300,19 @@ export default function ClientProfilePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                {initialsOf(profile)}
-              </div>
-              <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-4">
+              {profile.profilePhoto ? (
+                <img
+                  src={profile.profilePhoto}
+                  alt={profile.fullName}
+                  className="size-16 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+                  {initialsOf(profile)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-semibold">
                   {profile.fullName}
                 </p>
@@ -254,6 +320,41 @@ export default function ClientProfilePage() {
                   {profile.roleName || "Client"}
                   {profile.organization ? ` · ${profile.organization}` : ""}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={uploadPhoto}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={photoUploading}
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    {photoUploading ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Camera className="mr-2 size-4" />
+                    )}
+                    {profile.profilePhoto ? "Change photo" : "Upload photo"}
+                  </Button>
+                  {profile.profilePhoto && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={photoUploading}
+                      onClick={removePhoto}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <FieldError>{photoError}</FieldError>
               </div>
             </div>
 

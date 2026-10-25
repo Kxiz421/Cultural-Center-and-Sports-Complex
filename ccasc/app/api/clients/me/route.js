@@ -232,6 +232,33 @@ export async function PATCH(request) {
       }
     }
 
+    if (body.profilePhoto !== undefined) {
+      const raw = String(body.profilePhoto ?? "").trim();
+      if (raw) {
+        const validUrl =
+          /^https?:\/\//i.test(raw) || raw.startsWith("/uploads/");
+        if (!validUrl) {
+          return NextResponse.json(
+            { error: "Invalid profile photo URL." },
+            { status: 400 }
+          );
+        }
+        if (raw.length > 255) {
+          return NextResponse.json(
+            { error: "Profile photo URL is too long." },
+            { status: 400 }
+          );
+        }
+        if (raw !== existing.profilePhoto) {
+          data.profilePhoto = raw;
+          changedLabels.push("profile photo");
+        }
+      } else if (existing.profilePhoto) {
+        data.profilePhoto = null;
+        changedLabels.push("profile photo");
+      }
+    }
+
     if (body.newPassword) {
       const currentPassword = String(body.currentPassword ?? "");
       if (!currentPassword) {
