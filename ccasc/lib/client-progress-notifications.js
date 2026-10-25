@@ -10,7 +10,7 @@ import { SYSTEM_NOTIFICATION_STAFF_ID } from "@/lib/coordinator-notifications";
  *
  *   1. the in-app inbox (Notification row),
  *   2. email to the address on file,
- *   3. SMS to the mobile number on file (SMSGate).
+ *   3. SMS to the mobile number on file (Infobip, or SMSGate fallback).
  *
  * Every channel is best-effort: a failed email/SMS is logged and never fails the
  * calling request.

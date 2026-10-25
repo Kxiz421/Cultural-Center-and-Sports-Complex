@@ -29,7 +29,7 @@ function maskedTarget(channel, target) {
 
 /**
  * Send (or resend) a registration verification code to an email/phone.
- * Shared by email and SMS; SMS only works when SMSGate is configured.
+ * Shared by email and SMS; SMS only works when an SMS provider is configured.
  */
 async function handleSend(channel, rawTarget) {
   if (channel === REGISTER_CHANNEL.EMAIL && !isValidEmailFormat(rawTarget)) {
@@ -98,7 +98,7 @@ async function handleSend(channel, rawTarget) {
         expiresInMinutes: OTP_TTL_MS / 60000,
       });
     } else if (process.env.NODE_ENV !== "production") {
-      // SMSGate is not configured locally. Still enforce the step, but surface
+      // No SMS provider is configured locally. Still enforce the step, but surface
       // the code in the server log so the flow can be tested end to end.
       console.warn(
         `[register-otp] SMS disabled - development code for ${target}: ${otp}`,
