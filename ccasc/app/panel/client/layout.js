@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, CalendarRange, FileText, History, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
+import { Calendar, CalendarRange, FileText, History, LogOut, Menu, X, ClipboardEdit, UserRound } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   // `wrap` lets this longer label break onto a second line instead of running
   // past the fixed-width rail and overlapping the page content.
   { href: "/panel/client/history", label: "Booking & Reservation History", icon: History, wrap: true },
+  { href: "/panel/client/profile", label: "Profile", icon: UserRound },
 ];
 
 export default function ClientLayout({ children }) {
