@@ -1,9 +1,9 @@
 /**
  * Registration contact verification.
  *
- * A registrant must prove they own BOTH the email address and the mobile
- * number they register with, before the Client row is created - which is what
- * keeps unverified contacts (and therefore unusable login accounts) out of the
+ * A registrant chooses ONE contact channel (email or SMS) and proves it with a
+ * one-time code before the Client row is created, which is what keeps an
+ * unverified contact (and therefore an unusable login account) out of the
  * database. The one-time codes live in the `RegistrationOtp` table, keyed by
  * the normalised target, so this state survives across serverless instances
  * (an in-memory map would not).

@@ -38,6 +38,7 @@ export async function POST(request) {
       province,
       city,
       barangay,
+      verifiedChannel,
     } = await request.json();
 
     // Validate required fields
@@ -160,18 +161,27 @@ export async function POST(request) {
       }
     }
 
-    // Both the email and the mobile number must have been verified with a
-    // one-time code before the account can be created (and therefore before
-    // the registrant can ever sign in).
-    const [emailVerified, phoneVerified] = await Promise.all([
-      isRegistrationTargetVerified(REGISTER_CHANNEL.EMAIL, email),
-      isRegistrationTargetVerified(REGISTER_CHANNEL.SMS, contactNumber),
-    ]);
-    if (!emailVerified || !phoneVerified) {
+    // The registrant chooses ONE contact channel (email or SMS) and proves it
+    // with a one-time code; that chosen contact must be verified before the
+    // account can be created.
+    const channel = verifiedChannel === REGISTER_CHANNEL.SMS ? REGISTER_CHANNEL.SMS : verifiedChannel === REGISTER_CHANNEL.EMAIL ? REGISTER_CHANNEL.EMAIL : null;
+    if (!channel) {
+      return NextResponse.json(
+        { error: "Choose whether to verify by email or mobile number." },
+        { status: 400 }
+      );
+    }
+    const verified = await isRegistrationTargetVerified(
+      channel,
+      channel === REGISTER_CHANNEL.SMS ? contactNumber : email
+    );
+    if (!verified) {
       return NextResponse.json(
         {
           error:
-            "Please verify both your email address and mobile number before registering.",
+            channel === REGISTER_CHANNEL.SMS
+              ? "Please verify your mobile number before registering."
+              : "Please verify your email address before registering.",
         },
         { status: 400 }
       );
