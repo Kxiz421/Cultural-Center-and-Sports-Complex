@@ -28,7 +28,6 @@ const NAV_ITEMS = [
   // `wrap` lets this longer label break onto a second line instead of running
   // past the fixed-width rail and overlapping the page content.
   { href: "/panel/client/history", label: "Booking & Reservation History", icon: History, wrap: true },
-  { href: "/panel/client/profile", label: "Profile", icon: UserRound },
 ];
 
 export default function ClientLayout({ children }) {
@@ -46,6 +45,21 @@ export default function ClientLayout({ children }) {
       .filter(Boolean)
       .join(" ")
       .trim() || "Client";
+
+  const [profilePhoto, setProfilePhoto] = React.useState(null);
+
+  React.useEffect(() => {
+    let active = true;
+    fetch("/api/clients/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data) setProfilePhoto(data.profilePhoto || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   const confirmLogout = async () => {
     localStorage.clear();
@@ -74,14 +88,35 @@ export default function ClientLayout({ children }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex h-16 items-center gap-2 border-b border-white/20 px-4">
-          <img src={PAGE_LOGO} alt="" className="size-8 shrink-0" />
+        <div className="flex h-16 items-center gap-3 border-b border-white/20 px-4">
+          <img src={PAGE_LOGO} alt="" className="size-12 shrink-0" />
           <span
             className="min-w-0 flex-1 truncate text-sm font-semibold"
             title={displayName}
           >
             {displayName}
           </span>
+          <button
+            type="button"
+            title="View my profile"
+            onClick={() => {
+              router.push("/panel/client/profile");
+              setSidebarOpen(false);
+            }}
+            className="shrink-0 rounded-full transition-transform hover:scale-105"
+          >
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt=""
+                className="size-12 rounded-full object-cover ring-2 ring-white/30"
+              />
+            ) : (
+              <span className="flex size-12 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/30">
+                <UserRound className="size-7" />
+              </span>
+            )}
+          </button>
           <Button
             variant="ghost"
             size="icon"

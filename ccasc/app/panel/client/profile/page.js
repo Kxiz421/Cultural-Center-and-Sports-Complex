@@ -49,12 +49,6 @@ function formatDateOnly(value) {
   });
 }
 
-function initialsOf(profile) {
-  const a = String(profile.firstName || "").trim().charAt(0);
-  const b = String(profile.lastName || "").trim().charAt(0);
-  return `${a}${b}`.toUpperCase() || "?";
-}
-
 function DetailRow({ label, value }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border/60 py-2 last:border-b-0">
@@ -305,11 +299,11 @@ export default function ClientProfilePage() {
                 <img
                   src={profile.profilePhoto}
                   alt={profile.fullName}
-                  className="size-16 shrink-0 rounded-full object-cover"
+                  className="size-28 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                  {initialsOf(profile)}
+                <div className="flex size-28 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <UserRound className="size-14" />
                 </div>
               )}
               <div className="min-w-0 flex-1">

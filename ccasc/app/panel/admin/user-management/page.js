@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
-import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, User, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
+import { Plus, Search, ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Archive, RotateCcw, FileText, ShieldCheck, User, UserRound, Mail, Phone, Building2, Shield, CheckCircle2, XCircle, Camera, History } from "lucide-react";
 import {
   Avatar,
   AvatarImage,
@@ -1149,8 +1149,8 @@ export default function UserManagementPage() {
                   {selectedUser.profilePhoto ? (
                     <AvatarImage src={selectedUser.profilePhoto} alt={`${selectedUser.firstName} ${selectedUser.lastName}`} />
                   ) : null}
-                  <AvatarFallback className="text-2xl font-bold">
-                    {(selectedUser.firstName?.[0] || "").toUpperCase()}{(selectedUser.lastName?.[0] || "").toUpperCase()}
+                  <AvatarFallback className="text-muted-foreground">
+                    <UserRound className="size-10" />
                   </AvatarFallback>
                 </Avatar>
                 <div className="text-center">
@@ -1584,9 +1584,8 @@ export default function UserManagementPage() {
                               alt={`${u.firstName} ${u.lastName}`}
                             />
                           ) : null}
-                          <AvatarFallback className="text-xs">
-                            {(u.firstName?.[0] ?? "").toUpperCase()}
-                            {(u.lastName?.[0] ?? "").toUpperCase()}
+                          <AvatarFallback>
+                            <UserRound className="size-5" />
                           </AvatarFallback>
                         </Avatar>
                         <span className="min-w-0">
