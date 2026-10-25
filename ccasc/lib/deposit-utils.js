@@ -1,4 +1,4 @@
-import { roundMoney } from "@/lib/utils";
+import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 
 /** Status names that mean the deposit obligation is satisfied (no longer unpaid). */
 export const DEPOSIT_SATISFIED_STATUSES = [
@@ -23,16 +23,16 @@ export const DEPOSIT_PULLOUT_STATUSES = ["Held", "Deducted"];
 export function isEventEnded(eventDate, additionalDates, eventStatus) {
   if (eventStatus === "Completed") return true;
 
-  if (!eventDate) return false;
-  const dates = [eventDate];
+  const candidates = [eventDate];
   if (Array.isArray(additionalDates)) {
     for (const ad of additionalDates) {
-      const d = typeof ad === "string" ? ad : ad?.eventDate;
-      if (d) dates.push(d);
+      candidates.push(typeof ad === "string" ? ad : ad?.eventDate);
     }
   }
+  const dates = candidates.map(formatDbDate).filter(Boolean);
+  if (dates.length === 0) return false;
+
   const latestStr = dates.sort().at(-1);
-  if (!latestStr) return false;
 
   // Compare against end of the event day (23:59 UTC+8, i.e. 15:59 UTC)
   const latestEvent = new Date(`${latestStr}T15:59:59.000Z`);
@@ -76,6 +76,16 @@ export function getDepositRemaining(deposit) {
   return roundMoney(deposit.requiredAmount || deposit.amountPaid || 0);
 }
 
+/**
+ * Amount the client still owes from a deposit that was over-consumed
+ * (damages/overtime beyond the 10% held). Stored as a negative
+ * amountAfterDeductions; the outstanding balance is its magnitude.
+ */
+export function getDepositOutstanding(deposit) {
+  if (!deposit || deposit.amountAfterDeductions == null) return 0;
+  return roundMoney(Math.max(0, -roundMoney(deposit.amountAfterDeductions)));
+}
+
 export function mapDepositSnapshot(deposit) {
   if (!deposit) return null;
   const deductions = (deposit.deductions || []).map((row) => ({
@@ -90,6 +100,7 @@ export function mapDepositSnapshot(deposit) {
     requiredAmount: roundMoney(deposit.requiredAmount),
     amountPaid: roundMoney(deposit.amountPaid),
     amountAfterDeductions: remaining,
+    outstandingBalance: getDepositOutstanding(deposit),
     status: deposit.status?.status || deposit.statusName || null,
     notes: deposit.notes || null,
     pulledOutAt: deposit.pulledOutAt || null,
@@ -209,8 +220,8 @@ export function validateDepositConsume(deposit, amount) {
   if (!Number.isFinite(deduction) || deduction <= 0) {
     return { ok: false, error: "Enter a deduction amount greater than zero." };
   }
-  // Deductions are allowed to exceed the remaining deposit (e.g. damages that
-  // go beyond the amount held); the excess simply floors the deposit at zero.
+  // Deductions may exceed the remaining deposit (damages/overtime beyond the
+  // amount held); the excess becomes a negative balance the client owes.
   return { ok: true, remaining, deduction };
 }
 
@@ -233,7 +244,7 @@ export async function consumeDeposit(prisma, {
     return { ok: false, error: reasonCheck.error };
   }
 
-  const nextRemaining = roundMoney(Math.max(0, check.remaining - check.deduction));
+  const nextRemaining = roundMoney(check.remaining - check.deduction);
   const nextStatusName = nextRemaining <= 0 ? "Fully Deducted" : "Deducted";
   const nextStatus = await getOrCreateDepositStatus(prisma, nextStatusName);
 
@@ -332,4 +343,74 @@ export async function pulloutDeposit(prisma, {
   });
 
   return { ok: true, deposit: updated, releaseAmount: check.releaseAmount };
+}
+
+export function validateDepositSettlement(deposit, amount) {
+  if (!deposit) {
+    return { ok: false, error: "No deposit has been recorded yet." };
+  }
+  const outstanding = getDepositOutstanding(deposit);
+  if (outstanding <= 0) {
+    return { ok: false, error: "This client has no outstanding deposit balance." };
+  }
+  const settle =
+    amount == null || amount === "" ? outstanding : roundMoney(amount);
+  if (!Number.isFinite(settle) || settle <= 0) {
+    return { ok: false, error: "Enter an amount greater than zero." };
+  }
+  if (settle > outstanding) {
+    return {
+      ok: false,
+      error: `Amount cannot exceed the outstanding balance of ${formatPhp(outstanding)}.`,
+    };
+  }
+  return { ok: true, outstanding, settle };
+}
+
+export async function settleDepositBalance(prisma, {
+  bookingId,
+  amount = null,
+  recordedBy = "LTOO",
+  staffId = null,
+}) {
+  const deposit = await prisma.deposit.findUnique({
+    where: { bookingId },
+    include: { status: true, deductions: true },
+  });
+  const check = validateDepositSettlement(deposit, amount);
+  if (!check.ok) {
+    return { ok: false, error: check.error };
+  }
+
+  const remaining = getDepositRemaining(deposit);
+  const nextRemaining = roundMoney(Math.min(0, remaining + check.settle));
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.deposit.update({
+      where: { depositId: deposit.depositId },
+      data: {
+        amountAfterDeductions: nextRemaining,
+        staffId: staffId ?? deposit.staffId,
+      },
+    }),
+    prisma.transaction.create({
+      data: {
+        receiptNumber: "",
+        paymentDate: now,
+        recordedBy,
+        paymentId: null,
+        depositId: deposit.depositId,
+        entryType: "deposit_settlement",
+        releaseAmount: check.settle,
+      },
+    }),
+  ]);
+
+  const updated = await prisma.deposit.findUnique({
+    where: { depositId: deposit.depositId },
+    include: { status: true, deductions: { orderBy: { recordedAt: "desc" } } },
+  });
+
+  return { ok: true, deposit: updated, settledAmount: check.settle };
 }

@@ -349,6 +349,7 @@ export async function GET(request) {
           client?.clientRoleId === "PROV" ? "provincial" : "client";
         const deposit = mapDepositSnapshot(t.deposit);
         const isRelease = t.entryType === "deposit_release";
+        const isSettlement = t.entryType === "deposit_settlement";
 
         return {
           transactionId: t.transactionId,
@@ -358,12 +359,14 @@ export async function GET(request) {
           reservationId: reservation?.reservationId ?? null,
           orNumber: t.receiptNumber || null,
           entryType: t.entryType || "payment",
-          amountPaid: isRelease
+          amountPaid: isRelease || isSettlement
             ? roundMoney(t.releaseAmount ?? 0)
             : roundMoney(t.payment?.amountPaid ?? 0),
           paymentStatus: isRelease
             ? "Pulled Out"
-            : (t.payment?.status?.status || "Partially Paid"),
+            : isSettlement
+              ? "Settled"
+              : (t.payment?.status?.status || "Partially Paid"),
           baseAmount: t.payment?.baseAmount != null ? roundMoney(t.payment.baseAmount) : null,
           discountAmount: t.payment ? roundMoney(t.payment.discountAmount || 0) : 0,
           discountPercent: t.payment?.discountPercent != null

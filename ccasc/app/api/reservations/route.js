@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { formatDbDate, parseSqlDate } from "@/lib/utils";
+import { formatDbDate, formatPhp, parseSqlDate, roundMoney } from "@/lib/utils";
 import { BASKETBALL_NAME, getBasketballPrice } from "@/lib/particular-options";
 import { canManageReservationScope } from "@/lib/reschedule-scope";
 import { getTimeSlotLabel, isWholeDaySlot, WHOLE_DAY_SLOT } from "@/lib/time-slots";
@@ -345,6 +345,31 @@ export async function POST(request) {
         { error: "Missing required fields: venueId, eventType, eventDate, timeSlotId, clientId" },
         { status: 400 }
       );
+    }
+
+    // A registered client with an unpaid balance left over from a previous
+    // event (damages/overtime beyond the 10% deposit) must settle it with the
+    // Local Treasury Operations Officer before reserving again.
+    const requesterClientId = clientId ? parseInt(clientId, 10) : null;
+    if (Number.isFinite(requesterClientId) && requesterClientId > 0) {
+      const overdueDeposit = await prisma.deposit.findFirst({
+        where: {
+          amountAfterDeductions: { lt: 0 },
+          booking: { reservation: { clientId: requesterClientId } },
+        },
+        select: { amountAfterDeductions: true },
+        orderBy: { depositId: "desc" },
+      });
+      if (overdueDeposit) {
+        const owed = roundMoney(Math.abs(Number(overdueDeposit.amountAfterDeductions)));
+        return NextResponse.json(
+          {
+            error: `This client has an outstanding balance of ${formatPhp(owed)} from a previous event (damages/overtime beyond the 10% deposit). Please settle it with the Local Treasury Operations Officer before making a new reservation.`,
+            outstandingBalance: owed,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const advanceCheck = validateAdvanceBookingDates(

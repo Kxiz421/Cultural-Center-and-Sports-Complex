@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { formatDbDate, formatPhp } from "@/lib/utils";
+import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 import {
   consumeDeposit,
   mapDepositSnapshot,
   pulloutDeposit,
+  settleDepositBalance,
 } from "@/lib/deposit-utils";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
@@ -128,6 +129,38 @@ export async function POST(request) {
         success: true,
         deposit: mapDepositSnapshot(result.deposit),
         releaseAmount: result.releaseAmount,
+      });
+    }
+
+    if (action === "settle") {
+      const result = await settleDepositBalance(prisma, {
+        bookingId: booking.bookingId,
+        amount:
+          amount === undefined || amount === null || amount === ""
+            ? null
+            : roundMoney(amount),
+        recordedBy,
+        staffId,
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          action: "DEPOSIT_BALANCE_SETTLED",
+          targetUserId: `DEP-${result.deposit.depositId}`,
+          targetName: booking.reservation?.eventType || "Deposit",
+          performedById: acting.performedBy,
+          performedByName: recordedBy,
+          details: `Settled outstanding deposit balance of ${formatPhp(result.settledAmount)}.`,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        deposit: mapDepositSnapshot(result.deposit),
+        settledAmount: result.settledAmount,
       });
     }
 
