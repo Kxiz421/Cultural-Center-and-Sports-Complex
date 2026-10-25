@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -294,6 +295,20 @@ export default function CalendarPage() {
   const [blocksPage, setBlocksPage] = useState(1);
   const [blockTypeFilter, setBlockTypeFilter] = useState("all");
   const [addingBlock, setAddingBlock] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   useEffect(() => {
     async function loadData() {
@@ -342,27 +357,36 @@ export default function CalendarPage() {
       venueId: null,
       notes: "",
     });
+    setErrors({});
   };
 
   const handleAddBlock = async () => {
     if (addingBlock) return;
     const { title, blockDate, blockType, venueId, notes } = blockForm;
 
-    if (!title || !blockDate || !blockType || !venueId) {
-      toast.error("Please fill in all required fields");
+    const next = {};
+    if (!title) next.title = "Title is required.";
+    if (!blockDate) {
+      next.blockDate = "Please select a date.";
+    } else {
+      // Validate date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDate = new Date(blockDate);
+      selectedDate.setHours(0, 0, 0, 0);
+
+      if (selectedDate < today) {
+        next.blockDate = "Cannot set a block on a date that has already passed";
+      }
+    }
+    if (!blockType) next.blockType = "Please select a type.";
+    if (!venueId) next.venueId = "Please select a venue.";
+
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
-
-    // Validate date is not in the past
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedDate = new Date(blockDate);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    if (selectedDate < today) {
-      toast.error("Cannot set a block on a date that has already passed");
-      return;
-    }
+    setErrors({});
 
     setAddingBlock(true);
     try {
@@ -465,8 +489,13 @@ export default function CalendarPage() {
                   id="block-title"
                   placeholder="e.g. Independence Day"
                   value={blockForm.title}
-                  onChange={(e) => setBlockForm((f) => ({ ...f, title: e.target.value }))}
+                  onChange={(e) => {
+                    clearError("title");
+                    setBlockForm((f) => ({ ...f, title: e.target.value }));
+                  }}
+                  aria-invalid={Boolean(errors.title)}
                 />
+                <FieldError>{errors.title}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="block-date">Date</Label>
@@ -475,16 +504,24 @@ export default function CalendarPage() {
                   type="date"
                   value={blockForm.blockDate}
                   min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => setBlockForm((f) => ({ ...f, blockDate: e.target.value }))}
+                  onChange={(e) => {
+                    clearError("blockDate");
+                    setBlockForm((f) => ({ ...f, blockDate: e.target.value }));
+                  }}
+                  aria-invalid={Boolean(errors.blockDate)}
                 />
+                <FieldError>{errors.blockDate}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="block-type">Type</Label>
                 <Select
                   value={blockForm.blockType}
-                  onValueChange={(value) => setBlockForm((f) => ({ ...f, blockType: value }))}
+                  onValueChange={(value) => {
+                    clearError("blockType");
+                    setBlockForm((f) => ({ ...f, blockType: value }));
+                  }}
                 >
-                  <SelectTrigger id="block-type">
+                  <SelectTrigger id="block-type" aria-invalid={Boolean(errors.blockType)}>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -492,14 +529,18 @@ export default function CalendarPage() {
                     <SelectItem value="Maintenance">Maintenance</SelectItem>
                   </SelectContent>
                 </Select>
+                <FieldError>{errors.blockType}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="block-venue">Venue</Label>
                 <Select
                   value={blockForm.venueId}
-                  onValueChange={(value) => setBlockForm((f) => ({ ...f, venueId: value }))}
+                  onValueChange={(value) => {
+                    clearError("venueId");
+                    setBlockForm((f) => ({ ...f, venueId: value }));
+                  }}
                 >
-                  <SelectTrigger id="block-venue">
+                  <SelectTrigger id="block-venue" aria-invalid={Boolean(errors.venueId)}>
                     <SelectValue placeholder="Select venue" />
                   </SelectTrigger>
                   <SelectContent>
@@ -508,6 +549,7 @@ export default function CalendarPage() {
                     <SelectItem value="3">Both</SelectItem>
                   </SelectContent>
                 </Select>
+                <FieldError>{errors.venueId}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="block-notes">Notes (optional)</Label>

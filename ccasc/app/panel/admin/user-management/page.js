@@ -45,6 +45,7 @@ import {
   AvatarImage,
   AvatarFallback,
 } from "@/components/ui/avatar";
+import { FieldError } from "@/components/ui/field-error";
 
 const ROLE_LABELS = {
   "coord-cc": "Program Coordinator – Cultural Center",
@@ -286,8 +287,37 @@ export default function UserManagementPage() {
     city: "",
     barangay: "",
   });
+  const [errors, setErrors] = React.useState({});
+  const [profileErrors, setProfileErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+  const clearProfileError = (...names) =>
+    setProfileErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const resetForm = () => {
+    setErrors({});
     setForm({
       firstName: "",
       middleName: "",
@@ -312,62 +342,48 @@ export default function UserManagementPage() {
     const ln = form.lastName.trim();
     const email = form.email.trim();
 
-    if (!fn || !ln) {
-      toast.error("First name and last name are required.");
-      return;
-    }
-    if (!form.role) {
-      toast.error("Please select a role.");
-      return;
-    }
+    const next = {};
+    if (!fn) next.firstName = "First name is required.";
+    if (!ln) next.lastName = "Last name is required.";
+    if (!form.role) next.role = "Please select a role.";
 
     // Validate contact number if provided
     if (form.contact && form.contact.length !== 11) {
-      toast.error("Contact number must be exactly 11 digits.");
-      return;
+      next.contact = "Contact number must be exactly 11 digits.";
     }
 
     // Password is optional - a blank one issues the default "12345".
     if (form.password || form.confirmPassword) {
       if (form.password !== form.confirmPassword) {
-        toast.error("Passwords must match.");
-        return;
+        next.confirmPassword = "Passwords must match.";
+      } else if (form.password.length < 8) {
+        next.password = "Password must be at least 8 characters long.";
+      } else if (!/[A-Z]/.test(form.password)) {
+        next.password = "Password must contain at least one uppercase letter.";
+      } else if (!/[a-z]/.test(form.password)) {
+        next.password = "Password must contain at least one lowercase letter.";
+      } else if (!/[0-9]/.test(form.password)) {
+        next.password = "Password must contain at least one number.";
+      } else if (!/[^A-Za-z0-9]/.test(form.password)) {
+        next.password = "Password must contain at least one special character (e.g., @, #, $, etc.).";
       }
-      if (form.password.length < 8) {
-        toast.error("Password must be at least 8 characters long.");
-        return;
-      }
-      if (!/[A-Z]/.test(form.password)) {
-        toast.error("Password must contain at least one uppercase letter.");
-        return;
-      }
-      if (!/[a-z]/.test(form.password)) {
-        toast.error("Password must contain at least one lowercase letter.");
-        return;
-      }
-      if (!/[0-9]/.test(form.password)) {
-        toast.error("Password must contain at least one number.");
-        return;
-      }
-      if (!/[^A-Za-z0-9]/.test(form.password)) {
-        toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
-        return;
-      }
-    }
-
-    if (!email) {
-      toast.error("Email is required.");
-      return;
     }
 
     // Check for existing email
     const emailExists = users.some(
-      (u) => u.email?.toLowerCase() === form.email.trim().toLowerCase()
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
-    if (emailExists) {
-      toast.error("A user with this email already exists.");
+    if (!email) {
+      next.email = "Email is required.";
+    } else if (emailExists) {
+      next.email = "A user with this email already exists.";
+    }
+
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
 
     try {
       const response = await fetch('/api/users', {
@@ -440,6 +456,7 @@ export default function UserManagementPage() {
       city: user.city || "",
       barangay: user.barangay || "",
     });
+    setProfileErrors({});
     setShowNewPassword(false);
     setShowConfirmNewPassword(false);
     setProfileOpen(true);
@@ -452,24 +469,22 @@ export default function UserManagementPage() {
     // Legacy rows may hold "N/A" or other free text - keep digits only.
     const contact = String(editForm.contact || "").replace(/\D/g, "").slice(0, 11);
 
+    const next = {};
     if (!email) {
-      toast.error("Email is required.");
-      return;
+      next.email = "Email is required.";
     }
 
     // Contact number is optional, but must be 11 digits when provided.
     if (contact && contact.length !== 11) {
-      toast.error("Contact number must be exactly 11 digits.");
-      return;
+      next.contact = "Contact number must be exactly 11 digits.";
     }
 
     // Email must stay unique across the other accounts.
     const emailTaken = users.some(
       (u) => u.id !== selectedUser.id && u.email?.toLowerCase() === email.toLowerCase()
     );
-    if (emailTaken) {
-      toast.error("A user with this email already exists.");
-      return;
+    if (email && emailTaken) {
+      next.email = "A user with this email already exists.";
     }
 
     // Validate password if provided
@@ -477,30 +492,25 @@ export default function UserManagementPage() {
     const confirmPassword = editForm.confirmPassword;
     if (password || confirmPassword) {
       if (password !== confirmPassword) {
-        toast.error("Passwords must match.");
-        return;
-      }
-      if (password.length < 8) {
-        toast.error("Password must be at least 8 characters long.");
-        return;
-      }
-      if (!/[A-Z]/.test(password)) {
-        toast.error("Password must contain at least one uppercase letter.");
-        return;
-      }
-      if (!/[a-z]/.test(password)) {
-        toast.error("Password must contain at least one lowercase letter.");
-        return;
-      }
-      if (!/[0-9]/.test(password)) {
-        toast.error("Password must contain at least one number.");
-        return;
-      }
-      if (!/[^A-Za-z0-9]/.test(password)) {
-        toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
-        return;
+        next.confirmPassword = "Passwords must match.";
+      } else if (password.length < 8) {
+        next.password = "Password must be at least 8 characters long.";
+      } else if (!/[A-Z]/.test(password)) {
+        next.password = "Password must contain at least one uppercase letter.";
+      } else if (!/[a-z]/.test(password)) {
+        next.password = "Password must contain at least one lowercase letter.";
+      } else if (!/[0-9]/.test(password)) {
+        next.password = "Password must contain at least one number.";
+      } else if (!/[^A-Za-z0-9]/.test(password)) {
+        next.password = "Password must contain at least one special character (e.g., @, #, $, etc.).";
       }
     }
+
+    if (Object.keys(next).length > 0) {
+      setProfileErrors(next);
+      return;
+    }
+    setProfileErrors({});
 
     setSaving(true);
     try {
@@ -695,11 +705,12 @@ export default function UserManagementPage() {
                     <Label>Role</Label>
                     <Select
                       value={form.role}
-                      onValueChange={(value) =>
-                        setForm((f) => ({ ...f, role: value }))
-                      }
+                      onValueChange={(value) => {
+                        clearError("role");
+                        setForm((f) => ({ ...f, role: value }));
+                      }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={Boolean(errors.role)}>
                         <SelectValue placeholder="Choose role" />
                       </SelectTrigger>
                       <SelectContent>
@@ -721,6 +732,7 @@ export default function UserManagementPage() {
                         <SelectItem value="client">Client</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FieldError>{errors.role}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label>Username</Label>
@@ -745,10 +757,16 @@ export default function UserManagementPage() {
                     <Input
                       placeholder="Given name"
                       value={form.firstName}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, firstName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
-                      }
+                      onChange={(e) => {
+                        clearError("firstName");
+                        setForm((f) => ({
+                          ...f,
+                          firstName: e.target.value.replace(/[^a-zA-Z\s]/g, ""),
+                        }));
+                      }}
+                      aria-invalid={Boolean(errors.firstName)}
                     />
+                    <FieldError>{errors.firstName}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label>Middle name</Label>
@@ -765,10 +783,16 @@ export default function UserManagementPage() {
                     <Input
                       placeholder="Surname"
                       value={form.lastName}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, lastName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
-                      }
+                      onChange={(e) => {
+                        clearError("lastName");
+                        setForm((f) => ({
+                          ...f,
+                          lastName: e.target.value.replace(/[^a-zA-Z\s]/g, ""),
+                        }));
+                      }}
+                      aria-invalid={Boolean(errors.lastName)}
                     />
+                    <FieldError>{errors.lastName}</FieldError>
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -816,10 +840,13 @@ export default function UserManagementPage() {
                       type="email"
                       placeholder="name@example.com"
                       value={form.email}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, email: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        clearError("email");
+                        setForm((f) => ({ ...f, email: e.target.value }));
+                      }}
+                      aria-invalid={Boolean(errors.email)}
                     />
+                    <FieldError>{errors.email}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label>Contact number</Label>
@@ -827,10 +854,16 @@ export default function UserManagementPage() {
                       placeholder="09123456789"
                       value={form.contact}
                       maxLength={11}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))
-                      }
+                      onChange={(e) => {
+                        clearError("contact");
+                        setForm((f) => ({
+                          ...f,
+                          contact: e.target.value.replace(/\D/g, "").slice(0, 11),
+                        }));
+                      }}
+                      aria-invalid={Boolean(errors.contact)}
                     />
+                    <FieldError>{errors.contact}</FieldError>
                   </div>
                 </div>
               </section>
@@ -864,10 +897,12 @@ export default function UserManagementPage() {
                         type={showPassword ? "text" : "password"}
                         placeholder="Leave blank for the default 12345"
                         value={form.password}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, password: e.target.value }))
-                        }
+                        onChange={(e) => {
+                          clearError("password");
+                          setForm((f) => ({ ...f, password: e.target.value }));
+                        }}
                         className="pr-10"
+                        aria-invalid={Boolean(errors.password)}
                       />
                       <Button
                         type="button"
@@ -885,6 +920,7 @@ export default function UserManagementPage() {
                         )}
                       </Button>
                     </div>
+                    <FieldError>{errors.password}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label>Confirm password</Label>
@@ -893,13 +929,15 @@ export default function UserManagementPage() {
                         type={showConfirmPassword ? "text" : "password"}
                         placeholder="Re-enter the password"
                         value={form.confirmPassword}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          clearError("confirmPassword");
                           setForm((f) => ({
                             ...f,
                             confirmPassword: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
                         className="pr-10"
+                        aria-invalid={Boolean(errors.confirmPassword)}
                       />
                       <Button
                         type="button"
@@ -917,6 +955,7 @@ export default function UserManagementPage() {
                         )}
                       </Button>
                     </div>
+                    <FieldError>{errors.confirmPassword}</FieldError>
                   </div>
                 </div>
                 <p className="text-muted-foreground text-xs">
@@ -939,18 +978,22 @@ export default function UserManagementPage() {
               <Button type="button" onClick={() => {
                 const fn = form.firstName.trim();
                 const ln = form.lastName.trim();
-                if (!fn || !ln) { toast.error("First name and last name are required."); return; }
-                if (!form.email.trim()) { toast.error("Email is required."); return; }
-                if (!form.role) { toast.error("Please select a role."); return; }
+                const next = {};
+                if (!fn) next.firstName = "First name is required.";
+                if (!ln) next.lastName = "Last name is required.";
+                if (!form.email.trim()) next.email = "Email is required.";
+                if (!form.role) next.role = "Please select a role.";
                 // Password is optional: blank means the default 12345.
                 if (form.password || form.confirmPassword) {
-                  if (form.password !== form.confirmPassword) { toast.error("Passwords must match."); return; }
-                  if (form.password.length < 8) { toast.error("Password must be at least 8 characters long."); return; }
-                  if (!/[A-Z]/.test(form.password)) { toast.error("Password must contain at least one uppercase letter."); return; }
-                  if (!/[a-z]/.test(form.password)) { toast.error("Password must contain at least one lowercase letter."); return; }
-                  if (!/[0-9]/.test(form.password)) { toast.error("Password must contain at least one number."); return; }
-                  if (!/[^A-Za-z0-9]/.test(form.password)) { toast.error("Password must contain at least one special character."); return; }
+                  if (form.password !== form.confirmPassword) { next.confirmPassword = "Passwords must match."; }
+                  else if (form.password.length < 8) { next.password = "Password must be at least 8 characters long."; }
+                  else if (!/[A-Z]/.test(form.password)) { next.password = "Password must contain at least one uppercase letter."; }
+                  else if (!/[a-z]/.test(form.password)) { next.password = "Password must contain at least one lowercase letter."; }
+                  else if (!/[0-9]/.test(form.password)) { next.password = "Password must contain at least one number."; }
+                  else if (!/[^A-Za-z0-9]/.test(form.password)) { next.password = "Password must contain at least one special character."; }
                 }
+                if (Object.keys(next).length > 0) { setErrors(next); return; }
+                setErrors({});
                 setConfirmSaveOpen(true);
               }}>
                 Save
@@ -1086,7 +1129,7 @@ export default function UserManagementPage() {
       </Dialog>
 
       {/* User Profile Dialog */}
-      <Dialog open={profileOpen} onOpenChange={(open) => { setProfileOpen(open); if (!open) setSelectedUser(null); }}>
+      <Dialog open={profileOpen} onOpenChange={(open) => { setProfileOpen(open); if (!open) { setSelectedUser(null); setProfileErrors({}); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1178,9 +1221,14 @@ export default function UserManagementPage() {
                     <Input
                       className="pl-8"
                       value={editForm.email}
-                      onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                      onChange={(e) => {
+                        clearProfileError("email");
+                        setEditForm((f) => ({ ...f, email: e.target.value }));
+                      }}
+                      aria-invalid={Boolean(profileErrors.email)}
                     />
                   </div>
+                  <FieldError>{profileErrors.email}</FieldError>
                 </div>
                 <div className="space-y-2">
                   <Label>Contact number</Label>
@@ -1190,9 +1238,17 @@ export default function UserManagementPage() {
                       className="pl-8"
                       value={editForm.contact}
                       maxLength={11}
-                      onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value.replace(/\D/g, "").slice(0, 11) }))}
+                      onChange={(e) => {
+                        clearProfileError("contact");
+                        setEditForm((f) => ({
+                          ...f,
+                          contact: e.target.value.replace(/\D/g, "").slice(0, 11),
+                        }));
+                      }}
+                      aria-invalid={Boolean(profileErrors.contact)}
                     />
                   </div>
+                  <FieldError>{profileErrors.contact}</FieldError>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -1279,8 +1335,12 @@ export default function UserManagementPage() {
                         type={showNewPassword ? "text" : "password"}
                         placeholder="Leave blank to keep current"
                         value={editForm.password}
-                        onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                        onChange={(e) => {
+                          clearProfileError("password");
+                          setEditForm((f) => ({ ...f, password: e.target.value }));
+                        }}
                         className="pr-10"
+                        aria-invalid={Boolean(profileErrors.password)}
                       />
                       <Button
                         type="button"
@@ -1292,6 +1352,7 @@ export default function UserManagementPage() {
                         {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                       </Button>
                     </div>
+                    <FieldError>{profileErrors.password}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label>Confirm new password</Label>
@@ -1300,8 +1361,12 @@ export default function UserManagementPage() {
                         type={showConfirmNewPassword ? "text" : "password"}
                         placeholder="Re-enter new password"
                         value={editForm.confirmPassword}
-                        onChange={(e) => setEditForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                        onChange={(e) => {
+                          clearProfileError("confirmPassword");
+                          setEditForm((f) => ({ ...f, confirmPassword: e.target.value }));
+                        }}
                         className="pr-10"
+                        aria-invalid={Boolean(profileErrors.confirmPassword)}
                       />
                       <Button
                         type="button"
@@ -1313,6 +1378,7 @@ export default function UserManagementPage() {
                         {showConfirmNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                       </Button>
                     </div>
+                    <FieldError>{profileErrors.confirmPassword}</FieldError>
                   </div>
                 </div>
               </div>
@@ -1320,7 +1386,7 @@ export default function UserManagementPage() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setProfileOpen(false); setSelectedUser(null); }}>
+            <Button variant="outline" onClick={() => { setProfileOpen(false); setSelectedUser(null); setProfileErrors({}); }}>
               Cancel
             </Button>
             <Button onClick={() => setSaveConfirmOpen(true)} disabled={saving}>

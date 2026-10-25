@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -267,6 +268,7 @@ export default function LTOOPaymentsPage() {
   const [discountOnlySubmission, setDiscountOnlySubmission] = React.useState(false);
   const [consumeAmount, setConsumeAmount] = React.useState("");
   const [consumeReason, setConsumeReason] = React.useState("");
+  const [settleAmount, setSettleAmount] = React.useState("");
   const [depositSaving, setDepositSaving] = React.useState(false);
   const [depositPanelOpen, setDepositPanelOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -276,6 +278,20 @@ export default function LTOOPaymentsPage() {
   const [historyViewOnly, setHistoryViewOnly] = React.useState(false);
   const [selectedTransaction, setSelectedTransaction] = React.useState(null);
   const [step, setStep] = React.useState(0);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const historyBreakdown = React.useMemo(
     () => breakdownFromReservation(historyReservation),
@@ -518,9 +534,11 @@ export default function LTOOPaymentsPage() {
     setSelectedReservation(reservation);
     setPaymentType(next.paymentType);
     setAmountError("");
+    setErrors({});
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
     setConsumeAmount("");
     setConsumeReason("");
+    setSettleAmount("");
     setDepositPanelOpen(false);
     setStep(0);
     const hasExistingDiscount = reservation.totalDiscount > 0;
@@ -568,6 +586,7 @@ export default function LTOOPaymentsPage() {
     setHistoryTransactions([]);
     setConsumeAmount("");
     setConsumeReason("");
+    setSettleAmount("");
     setDepositPanelOpen(false);
     try {
       await loadHistoryTransactions(reservation.reservationId);
@@ -621,7 +640,6 @@ export default function LTOOPaymentsPage() {
       } else if (numeric > paymentTypeMax) {
         setPaymentAmount(formatMoneyInput(paymentTypeMax));
       }
-      toast.error(check.error);
       return;
     }
     setAmountError("");
@@ -648,9 +666,10 @@ export default function LTOOPaymentsPage() {
     if (!isDiscountOnly && !isUpdateDiscount) {
       let amount = roundMoney(paymentAmount || 0);
       if (discountEnabled && pendingDiscount > 0 && !discountCheck.ok) {
-        toast.error(discountCheck.error || "Enter a valid discount.");
+        setErrors({ discount: discountCheck.error || "Enter a valid discount." });
         return;
       }
+      clearError("discount");
 
       // When a pending discount is active, ensure the amount reflects the
       // projected (discounted) breakdown so stale pre-discount values don't
@@ -678,12 +697,11 @@ export default function LTOOPaymentsPage() {
       });
       if (!check.ok) {
         setAmountError(check.error);
-        toast.error(check.error);
         return;
       }
 
       if (amount > current.remainingBalance) {
-        toast.error(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
+        setAmountError(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
         return;
       }
 
@@ -796,6 +814,7 @@ export default function LTOOPaymentsPage() {
       setDiscountPeso("");
       setDiscountPercent("");
       setAmountError("");
+      clearError("discount");
       // Sync the payment amount to the new discounted breakdown
       if (updated) {
         syncAmountToBreakdown(updated, 0, paymentType);
@@ -849,6 +868,7 @@ export default function LTOOPaymentsPage() {
       toast.success("Deposit deduction recorded");
       setConsumeAmount("");
       setConsumeReason("");
+      setSettleAmount("");
       applyDepositSnapshot(reservation.reservationId, data.deposit);
       setDepositPanelOpen(true);
       await refreshSelectedReservation();
@@ -898,6 +918,49 @@ export default function LTOOPaymentsPage() {
     }
   };
 
+  const handleSettleDeposit = async () => {
+    const reservation = (historyOpen && historyReservation) || selectedReservation;
+    if (!reservation) return;
+    const outstanding = roundMoney(reservation.deposit?.outstandingBalance || 0);
+    const amount = roundMoney(settleAmount || outstanding);
+    if (outstanding <= 0 || amount <= 0) return;
+    setDepositSaving(true);
+    try {
+      const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
+      const performedByName = typeof window !== "undefined" ? localStorage.getItem("user_name") || "" : "";
+      const res = await fetch("/api/ltoo/deposits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "settle",
+          reservationId: reservation.reservationId,
+          amount,
+          performedBy,
+          performedByName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to settle the outstanding balance");
+      toast.success(`Settled ${formatPhp(data.settledAmount)}`);
+      setSettleAmount("");
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
+      setDepositPanelOpen(true);
+      await refreshSelectedReservation();
+      applyDepositSnapshot(reservation.reservationId, data.deposit);
+      if (historyOpen) {
+        try {
+          await loadHistoryTransactions(reservation.reservationId);
+        } catch (err) {
+          toast.error(err.message || "Failed to refresh payment history");
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to settle the outstanding balance");
+    } finally {
+      setDepositSaving(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const s = (status || "").toLowerCase();
     if (s === "fully paid") {
@@ -927,6 +990,9 @@ export default function LTOOPaymentsPage() {
     if (s === "pulled out") {
       return <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">Pulled Out</Badge>;
     }
+    if (s === "settled") {
+      return <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">Settled</Badge>;
+    }
     return <Badge variant="outline">{status}</Badge>;
   };
 
@@ -940,6 +1006,7 @@ export default function LTOOPaymentsPage() {
     setRecordOpen(false);
     setSelectedReservation(null);
     setAmountError("");
+    setErrors({});
     setDiscountOnlySubmission(false);
     setStep(0);
   };
@@ -1067,7 +1134,20 @@ export default function LTOOPaymentsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center">{getPaymentCheckIcon(r.downPaymentMet)}</TableCell>
-                    <TableCell className="text-center">{getPaymentCheckIcon(r.depositMet)}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {getPaymentCheckIcon(r.depositMet)}
+                        {roundMoney(r.deposit?.outstandingBalance) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-destructive border-destructive/40 bg-destructive/5 text-[10px] px-1 py-0 h-4 font-normal"
+                            title="Outstanding deposit balance to settle"
+                          >
+                            Owed
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center">{getPaymentCheckIcon(r.balanceSettled)}</TableCell>
                     <TableCell>{getStatusBadge(r.computedStatus)}</TableCell>
                     <TableCell className="text-right">
@@ -1253,6 +1333,7 @@ export default function LTOOPaymentsPage() {
                   onClick={() => {
                     const next = !discountEnabled;
                     setDiscountEnabled(next);
+                    clearError("discount");
                     if (!next) {
                       // Closing the discount section
                       if (!(selectedReservation?.totalDiscount > 0)) {
@@ -1309,6 +1390,7 @@ export default function LTOOPaymentsPage() {
                           setDiscountMode("peso");
                           setDiscountPercent("");
                           setDiscountPeso("");
+                          clearError("discount");
                           syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
@@ -1323,6 +1405,7 @@ export default function LTOOPaymentsPage() {
                           setDiscountMode("percent");
                           setDiscountPeso("");
                           setDiscountPercent("");
+                          clearError("discount");
                           syncAmountToBreakdown(selectedReservation, 0, paymentType);
                         }}
                       />
@@ -1339,6 +1422,7 @@ export default function LTOOPaymentsPage() {
                           setDiscountPercent("100");
                           setPaymentType("full");
                           setPaymentAmount("0.00");
+                          clearError("discount");
                           const current = breakdownFromReservation(selectedReservation, 0);
                           syncAmountToBreakdown(selectedReservation, current?.remainingBalance || 0, "full");
                         }}
@@ -1358,8 +1442,10 @@ export default function LTOOPaymentsPage() {
                           : 0;
                         const next = sanitizeMoneyInput(e.target.value, max);
                         setDiscountPeso(next);
+                        clearError("discount");
                         syncAmountToBreakdown(selectedReservation, roundMoney(next || 0), paymentType);
                       }}
+                      aria-invalid={Boolean(errors.discount)}
                       className="tabular-nums"
                     />
                   )}
@@ -1372,10 +1458,12 @@ export default function LTOOPaymentsPage() {
                         const raw = String(e.target.value).replace(/[^\d.]/g, "");
                         const value = Math.min(100, Number(raw) || 0);
                         setDiscountPercent(raw === "" ? "" : String(value));
+                        clearError("discount");
                         const current = breakdownFromReservation(selectedReservation, 0);
                         const peso = computeDiscountPeso(current?.totalPayable || 0, { mode: "percent", percent: value });
                         syncAmountToBreakdown(selectedReservation, peso, paymentType);
                       }}
+                      aria-invalid={Boolean(errors.discount)}
                       className="tabular-nums"
                     />
                   )}
@@ -1406,9 +1494,7 @@ export default function LTOOPaymentsPage() {
                       </div>
                     </div>
                   )}
-                  {discountCheck.error && (
-                    <p className="text-xs text-destructive">{discountCheck.error}</p>
-                  )}
+                  <FieldError>{discountCheck.error || errors.discount}</FieldError>
                   {pendingDiscount > 0 && discountCheck.ok && discountMode !== "full" && (
                     <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-xs">
                       <p className="font-medium text-foreground">
@@ -1788,13 +1874,25 @@ export default function LTOOPaymentsPage() {
               {depositPanelOpen && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    {getStatusBadge(historyReservation.deposit.status)}
+                    {roundMoney(historyReservation.deposit.outstandingBalance) > 0 ? (
+                      <Badge variant="outline" className="text-destructive border-destructive/40 bg-destructive/5">Outstanding Balance</Badge>
+                    ) : (
+                      getStatusBadge(historyReservation.deposit.status)
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                     <span className="text-muted-foreground">Original 10%</span>
                     <span className="tabular-nums text-right">{formatPhp(historyReservation.deposit.requiredAmount)}</span>
                     <span className="text-muted-foreground">After deductions</span>
-                    <span className="tabular-nums text-right">{formatPhp(historyReservation.deposit.amountAfterDeductions)}</span>
+                    <span className="tabular-nums text-right">{formatPhp(Math.max(0, roundMoney(historyReservation.deposit.amountAfterDeductions)))}</span>
+                    {roundMoney(historyReservation.deposit.outstandingBalance) > 0 && (
+                      <>
+                        <span className="text-muted-foreground">Outstanding balance</span>
+                        <span className="tabular-nums text-right font-medium text-destructive">
+                          {formatPhp(historyReservation.deposit.outstandingBalance)}
+                        </span>
+                      </>
+                    )}
                     <span className="text-muted-foreground">Pullout</span>
                     <span className="text-right">
                       {historyReservation.deposit.pulledOutAt
@@ -1849,6 +1947,30 @@ export default function LTOOPaymentsPage() {
                       </div>
                     </div>
                   )}
+                  {roundMoney(historyReservation.deposit.outstandingBalance) > 0 && (
+                    <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                      <Label className="text-destructive">Settle outstanding balance</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Collected by the Local Treasury Operations Officer. The client cannot reserve a new event until this balance is settled.
+                      </p>
+                      <Input
+                        inputMode="decimal"
+                        placeholder={formatPhp(historyReservation.deposit.outstandingBalance)}
+                        value={settleAmount}
+                        onChange={(e) => setSettleAmount(sanitizeMoneyInput(e.target.value))}
+                        className="tabular-nums"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={depositSaving}
+                        onClick={handleSettleDeposit}
+                      >
+                        <PhilippinePeso className="size-4 mr-1" />
+                        Settle {formatPhp(roundMoney(settleAmount || historyReservation.deposit.outstandingBalance))}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1880,7 +2002,11 @@ export default function LTOOPaymentsPage() {
                         {formatDateTime(t.paymentDate)}
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
-                        {t.entryType === "deposit_release" ? `Released ${formatPhp(t.amountPaid)}` : formatPhp(t.amountPaid)}
+                        {t.entryType === "deposit_release"
+                          ? `Released ${formatPhp(t.amountPaid)}`
+                          : t.entryType === "deposit_settlement"
+                            ? `Settled ${formatPhp(t.amountPaid)}`
+                            : formatPhp(t.amountPaid)}
                         {t.discountAmount > 0 && (
                           <span className="block text-xs text-emerald-700">-{formatPhp(t.discountAmount)} discount</span>
                         )}
@@ -1931,7 +2057,11 @@ export default function LTOOPaymentsPage() {
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">
-                  {selectedTransaction.entryType === "deposit_release" ? "Amount released" : "Amount paid"}
+                  {selectedTransaction.entryType === "deposit_release"
+                    ? "Amount released"
+                    : selectedTransaction.entryType === "deposit_settlement"
+                      ? "Amount settled"
+                      : "Amount paid"}
                 </span>
                 <span className="font-semibold tabular-nums">
                   {formatPhp(selectedTransaction.amountPaid)}
@@ -1972,7 +2102,11 @@ export default function LTOOPaymentsPage() {
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">
-                  {selectedTransaction.entryType === "deposit_release" ? "Entry" : "Payment status"}
+                  {selectedTransaction.entryType === "deposit_release"
+                    ? "Entry"
+                    : selectedTransaction.entryType === "deposit_settlement"
+                      ? "Entry"
+                      : "Payment status"}
                 </span>
                 <span>{getStatusBadge(selectedTransaction.paymentStatus)}</span>
               </div>
@@ -2002,7 +2136,7 @@ export default function LTOOPaymentsPage() {
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">After deductions</span>
                       <span className="font-medium tabular-nums">
-                        {formatPhp(selectedTransaction.depositAmountAfterDeductions)}
+                        {formatPhp(Math.max(0, roundMoney(selectedTransaction.depositAmountAfterDeductions)))}
                       </span>
                     </div>
                   )}

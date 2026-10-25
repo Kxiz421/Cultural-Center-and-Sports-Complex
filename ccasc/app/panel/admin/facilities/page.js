@@ -65,6 +65,7 @@ import {
   isDisplayableImage,
 } from "@/components/facility-details-dialog";
 import { uploadFacilityImage } from "@/lib/upload-facility-image";
+import { FieldError } from "@/components/ui/field-error";
 
 const STATUS_OPTIONS = [
   { id: 1, name: "Available" },
@@ -115,7 +116,35 @@ export default function FacilitiesPage() {
   });
   const [uploading, setUploading] = React.useState(false);
   const [facilityDetails, setFacilityDetails] = React.useState(null);
+  const [errors, setErrors] = React.useState({});
+  const [editErrors, setEditErrors] = React.useState({});
   const editFormRef = React.useRef(editForm);
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+  const clearEditError = (...names) =>
+    setEditErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   
   // Keep ref in sync with state
   React.useEffect(() => {
@@ -125,6 +154,7 @@ export default function FacilitiesPage() {
   const router = useRouter();
 
   const resetAddForm = () => {
+    setErrors({});
     setAddForm({
       name: "",
       description: "",
@@ -194,6 +224,7 @@ export default function FacilitiesPage() {
       statusId: String(facility.statusId || ""),
       images: (facility.images || []).filter(isDisplayableImage),
     });
+    setEditErrors({});
     setEditOpen(true);
   };
 
@@ -306,16 +337,22 @@ export default function FacilitiesPage() {
   };
 
   const handleAddFacility = async () => {
-    if (!addForm.name || !addForm.venueId) {
-      toast.error("Facility name and venue are required");
+    const next = {};
+    if (!addForm.name) next.name = "Facility name is required";
+    if (!addForm.venueId) next.venueId = "Venue is required";
+    if (
+      addForm.name &&
+      addForm.venueId &&
+      findDuplicateFacility(addForm.name, addForm.venueId)
+    ) {
+      next.name =
+        "A facility with this name already exists in the selected venue.";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
-    if (findDuplicateFacility(addForm.name, addForm.venueId)) {
-      toast.error(
-        "A facility with this name already exists in the selected venue."
-      );
-      return;
-    }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -593,10 +630,13 @@ export default function FacilitiesPage() {
                   id="add-name"
                   placeholder="e.g. Main Gymnasium"
                   value={addForm.name}
-                  onChange={(e) =>
-                    setAddForm((f) => ({ ...f, name: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    clearError("name");
+                    setAddForm((f) => ({ ...f, name: e.target.value }));
+                  }}
+                  aria-invalid={Boolean(errors.name)}
                 />
+                <FieldError>{errors.name}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-desc">Description</Label>
@@ -631,11 +671,15 @@ export default function FacilitiesPage() {
                   <Label htmlFor="add-venue">Venue *</Label>
                   <Select
                     value={addForm.venueId}
-                    onValueChange={(v) =>
-                      setAddForm((f) => ({ ...f, venueId: v }))
-                    }
+                    onValueChange={(v) => {
+                      clearError("venueId");
+                      setAddForm((f) => ({ ...f, venueId: v }));
+                    }}
                   >
-                    <SelectTrigger id="add-venue">
+                    <SelectTrigger
+                      id="add-venue"
+                      aria-invalid={Boolean(errors.venueId)}
+                    >
                       <SelectValue placeholder="Select venue" />
                     </SelectTrigger>
                     <SelectContent>
@@ -646,6 +690,7 @@ export default function FacilitiesPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError>{errors.venueId}</FieldError>
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -765,16 +810,22 @@ export default function FacilitiesPage() {
               </Button>
               <Button
                 onClick={() => {
-                  if (!addForm.name || !addForm.venueId) {
-                    toast.error("Facility name and venue are required");
+                  const next = {};
+                  if (!addForm.name) next.name = "Facility name is required";
+                  if (!addForm.venueId) next.venueId = "Venue is required";
+                  if (
+                    addForm.name &&
+                    addForm.venueId &&
+                    findDuplicateFacility(addForm.name, addForm.venueId)
+                  ) {
+                    next.name =
+                      "A facility with this name already exists in the selected venue.";
+                  }
+                  if (Object.keys(next).length > 0) {
+                    setErrors(next);
                     return;
                   }
-                  if (findDuplicateFacility(addForm.name, addForm.venueId)) {
-                    toast.error(
-                      "A facility with this name already exists in the selected venue."
-                    );
-                    return;
-                  }
+                  setErrors({});
                   setConfirmAction({ type: "add" });
                   setConfirmOpen(true);
                 }}
@@ -854,7 +905,7 @@ export default function FacilitiesPage() {
       )}
 
       {/* Edit Facility Dialog */}
-      <Dialog key={editFacility?.facilityId || 'no-edit'} open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog key={editFacility?.facilityId || 'no-edit'} open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditErrors({}); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -903,10 +954,13 @@ export default function FacilitiesPage() {
                 <Input
                   id="edit-name"
                   value={editForm.name}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, name: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    clearEditError("name");
+                    setEditForm((f) => ({ ...f, name: e.target.value }));
+                  }}
+                  aria-invalid={Boolean(editErrors.name)}
                 />
+                <FieldError>{editErrors.name}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-desc">Description</Label>
@@ -1020,32 +1074,38 @@ export default function FacilitiesPage() {
               onClick={() => {
                 setEditOpen(false);
                 setEditFacility(null);
+                setEditErrors({});
               }}
             >
               Cancel
             </Button>
             <Button
               onClick={() => {
-                if (!String(editForm.name || "").trim()) {
-                  toast.error("Facility name is required");
+                const next = {};
+                const trimmedName = String(editForm.name || "").trim();
+                if (!trimmedName) {
+                  next.name = "Facility name is required";
+                } else {
+                  const nameChanged =
+                    trimmedName.toLowerCase() !==
+                    String(editFacility?.name || "").trim().toLowerCase();
+                  if (
+                    nameChanged &&
+                    findDuplicateFacility(
+                      editForm.name,
+                      editFacility?.venueId,
+                      editFacility?.facilityId
+                    )
+                  ) {
+                    next.name =
+                      "A facility with this name already exists in the selected venue.";
+                  }
+                }
+                if (Object.keys(next).length > 0) {
+                  setEditErrors(next);
                   return;
                 }
-                const nameChanged =
-                  String(editForm.name || "").trim().toLowerCase() !==
-                  String(editFacility?.name || "").trim().toLowerCase();
-                if (
-                  nameChanged &&
-                  findDuplicateFacility(
-                    editForm.name,
-                    editFacility?.venueId,
-                    editFacility?.facilityId
-                  )
-                ) {
-                  toast.error(
-                    "A facility with this name already exists in the selected venue."
-                  );
-                  return;
-                }
+                setEditErrors({});
                 // Capture a snapshot of editForm at this moment
                 setConfirmAction({ 
                   type: "save", 

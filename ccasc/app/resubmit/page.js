@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,20 @@ export default function ResubmitPage() {
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [selectedIsOther, setSelectedIsOther] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const [formData, setFormData] = useState({
     organizationId: "",
@@ -86,17 +101,24 @@ export default function ResubmitPage() {
 
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"];
     if (!validTypes.includes(file.type)) {
-      toast.error("Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.");
+      setErrors((prev) => ({
+        ...prev,
+        idProof: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.",
+      }));
       e.target.value = "";
       return;
     }
 
     if (file.size > 50 * 1024 * 1024) {
-      toast.error("File size too large. Maximum is 50MB.");
+      setErrors((prev) => ({
+        ...prev,
+        idProof: "File size too large. Maximum is 50MB.",
+      }));
       e.target.value = "";
       return;
     }
 
+    clearError("idProof");
     setIdProofFile(file);
     setIdProofPreview(URL.createObjectURL(file));
     setUploading(true);
@@ -117,14 +139,18 @@ export default function ResubmitPage() {
   };
 
   const handleConfirm = () => {
+    const next = {};
     if (!formData.organizationId && !formData.otherOrganization) {
-      toast.error("Please select or enter your organization.");
-      return;
+      next.organization = "Please select or enter your organization.";
     }
     if (!idProofData) {
-      toast.error("Please upload your Certificate of Employment.");
+      next.idProof = "Please upload your Certificate of Employment.";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
     setConfirmOpen(true);
   };
 
@@ -219,6 +245,7 @@ export default function ResubmitPage() {
                 <Select
                   value={formData.organizationId}
                   onValueChange={(value) => {
+                    clearError("organization");
                     if (value === "other") {
                       setSelectedIsOther(true);
                       setFormData((prev) => ({ ...prev, organizationId: "other", otherOrganization: "" }));
@@ -228,7 +255,10 @@ export default function ResubmitPage() {
                     }
                   }}
                 >
-                  <SelectTrigger className="text-foreground">
+                  <SelectTrigger
+                    className="text-foreground"
+                    aria-invalid={Boolean(errors.organization)}
+                  >
                     <SelectValue placeholder="Select your organization" />
                   </SelectTrigger>
                   <SelectContent>
@@ -245,10 +275,15 @@ export default function ResubmitPage() {
                 <Input
                   placeholder="Enter your organization name"
                   value={formData.otherOrganization}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, otherOrganization: e.target.value }))}
+                  onChange={(e) => {
+                    clearError("organization");
+                    setFormData((prev) => ({ ...prev, otherOrganization: e.target.value }));
+                  }}
                   className="mt-2 text-foreground placeholder:text-muted-foreground"
+                  aria-invalid={Boolean(errors.organization)}
                 />
               )}
+              <FieldError>{errors.organization}</FieldError>
             </div>
 
             {/* ID Proof Upload */}
@@ -263,6 +298,7 @@ export default function ResubmitPage() {
                   className="gap-2"
                   disabled={uploading}
                   onClick={() => document.getElementById("idProof").click()}
+                  aria-invalid={Boolean(errors.idProof)}
                 >
                   {uploading ? (
                     <>
@@ -289,6 +325,7 @@ export default function ResubmitPage() {
                   </span>
                 )}
               </div>
+              <FieldError>{errors.idProof}</FieldError>
               {idProofPreview && (
                 <div className="relative mt-2 h-32 w-48 overflow-hidden rounded-lg border">
                   <Image

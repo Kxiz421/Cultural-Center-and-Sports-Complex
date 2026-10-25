@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -152,6 +153,20 @@ export default function ClientNewReservationPage() {
   const [savedOrder, setSavedOrder] = React.useState(null);
   const [particularsLoading, setParticularsLoading] = React.useState(true);
   const submitLockRef = React.useRef(false);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   // Sports Complex facilities
   const [facilities, setFacilities] = React.useState([]);
@@ -400,6 +415,8 @@ export default function ClientNewReservationPage() {
   }, [customizePerDate, selectedDates]);
 
   const handleChange = (field, value) => {
+    if (field === "venueId" || field === "eventType") clearError("details");
+    if (field === "timeSlotId") clearError("timeSlot");
     setForm(prev => ({ ...prev, [field]: value }));
     // For Sports Complex, default timeSlotId to Day (1)
     if (field === "venueId" && value === "2") {
@@ -413,6 +430,7 @@ export default function ClientNewReservationPage() {
   };
 
   const handleTimeSlotChange = (value) => {
+    clearError("timeSlot");
     setForm((prev) => {
       const isWholeDay = isWholeDaySlot(value);
       const remapped = (currentPkgId) => {
@@ -515,6 +533,7 @@ export default function ClientNewReservationPage() {
   };
 
   const handleVirtualParticularQuantitiesChange = (pq) => {
+    clearError("package");
     setParticularQuantities(pq);
     if (form.packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
       const slot = deriveTimeSlotFromVirtualPackage(
@@ -543,6 +562,7 @@ export default function ClientNewReservationPage() {
       );
       return;
     }
+    clearError("facilities");
     setSelectedFacilityIds((prev) => {
       if (prev.includes(id)) {
         // Remove facility and its quantity
@@ -586,6 +606,7 @@ export default function ClientNewReservationPage() {
   };
 
   const handlePackageSelect = (packageId) => {
+    clearError("package");
     // Cultural Center facility rental selected from the packages dropdown.
     // Priced from the facility's own rate — see buildReservationSummaryLines.
     if (isFacilityPackageId(packageId)) {
@@ -676,6 +697,7 @@ export default function ClientNewReservationPage() {
 
   const toggleDate = (dateStr) => {
     if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
+    clearError("dates", "advance");
     setSelectedDates((prev) => {
       const next = new Set(prev);
       if (next.has(dateStr)) next.delete(dateStr);
@@ -911,19 +933,20 @@ export default function ClientNewReservationPage() {
     ? customizePerDate || selectedFacilityIds.length > 0
     : true;
   stepValid[STEP_REVIEW] = true;
-  const stepError = (s) =>
+  const stepErrors = (s) =>
     s === STEP_DETAILS
-      ? "Please select a venue, event type, and time slot."
+      ? { details: "Please select a venue, event type, and time slot." }
       : s === STEP_DATES
-        ? "Please select at least one date."
+        ? { dates: "Please select at least one date." }
         : isSportsComplex
-          ? "Please select at least one facility."
-          : "Please complete your package selection.";
+          ? { facilities: "Please select at least one facility." }
+          : { package: "Please complete your package selection." };
   const goNext = () => {
     if (!stepValid[step]) {
-      toast.error(stepError(step));
+      setErrors(stepErrors(step));
       return;
     }
+    setErrors({});
     setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
   };
 
@@ -950,35 +973,15 @@ export default function ClientNewReservationPage() {
       });
   const total = sumReservationSummaryLines(summaryLines);
 
-  const handleSubmit = async (e) => {
-    e?.preventDefault();
-    if (submitting || submitLockRef.current) return;
-    submitLockRef.current = true;
-
+  const validateReservation = () => {
+    const next = {};
     const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
-    if (!clientId) {
-      toast.error("Please log in first");
-      submitLockRef.current = false;
-      return;
-    }
-
-    if (!form.venueId || !form.eventType) {
-      toast.error("Please fill in all required fields");
-      submitLockRef.current = false;
-      return;
-    }
-
+    if (!clientId) return { auth: "Please log in first" };
+    if (!form.venueId || !form.eventType) next.details = "Please fill in all required fields";
     if (!form.timeSlotId && !(customizePerDate && Object.keys(dateCustomizations).length > 0)) {
-      toast.error("Please select a time slot");
-      submitLockRef.current = false;
-      return;
+      next.timeSlot = "Please select a time slot";
     }
-
-    if (selectedDates.size === 0) {
-      toast.error("Please select at least one date");
-      submitLockRef.current = false;
-      return;
-    }
+    if (selectedDates.size === 0) next.dates = "Please select at least one date";
 
     // Sports Complex validation: in per-date mode every date needs a facility,
     // otherwise at least one facility has to be selected overall.
@@ -990,14 +993,10 @@ export default function ClientNewReservationPage() {
           (date) => (dateCustomizations[date]?.facilityIds || []).length > 0
         );
         if (!allDatesCovered) {
-          toast.error("Please select at least one facility for every date.");
-          submitLockRef.current = false;
-          return;
+          next.facilities = "Please select at least one facility for every date.";
         }
       } else if (selectedFacilityIds.length === 0) {
-        toast.error("Please select at least one facility.");
-        submitLockRef.current = false;
-        return;
+        next.facilities = "Please select at least one facility.";
       }
     }
 
@@ -1011,12 +1010,49 @@ export default function ClientNewReservationPage() {
         form.venueRentalSlot
       );
       if (!entries.length) {
-        toast.error("Please complete your Basketball Game or Venue Rental selection.");
-        submitLockRef.current = false;
-        return;
+        next.package = "Please complete your Basketball Game or Venue Rental selection.";
       }
     }
 
+    const advanceCheck = validateAdvanceBookingDates([...selectedDates].sort());
+    if (!advanceCheck.valid) next.advance = advanceCheck.error;
+
+    return next;
+  };
+
+  const handleGenerateOrder = () => {
+    const validationErrors = validateReservation();
+    if (validationErrors.auth) {
+      toast.error(validationErrors.auth);
+      return;
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+    setErrors({});
+    setConfirmSubmitOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    if (submitting || submitLockRef.current) return;
+    submitLockRef.current = true;
+
+    const validationErrors = validateReservation();
+    if (validationErrors.auth) {
+      toast.error(validationErrors.auth);
+      submitLockRef.current = false;
+      return;
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      submitLockRef.current = false;
+      return;
+    }
+    setErrors({});
+
+    const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
     const sortedDates = [...selectedDates].sort();
     const primaryDate = sortedDates[0];
 
@@ -1037,13 +1073,6 @@ export default function ClientNewReservationPage() {
     // or the reservation is rejected for a missing time slot.
     if (!payloadTimeSlotId) {
       payloadTimeSlotId = TIME_SLOT.DAY;
-    }
-
-    const advanceCheck = validateAdvanceBookingDates(sortedDates);
-    if (!advanceCheck.valid) {
-      toast.error(advanceCheck.error);
-      submitLockRef.current = false;
-      return;
     }
 
     let selectedParticulars = [];
@@ -1199,7 +1228,11 @@ export default function ClientNewReservationPage() {
       if (!res.ok) {
         const errData = await res.json();
         if (res.status === 409) {
-          toast.error(`Date conflict: ${errData.error}`);
+          if (errData.conflictDates || errData.facilityConflicts) {
+            toast.error(`Date conflict: ${errData.error}`);
+          } else {
+            toast.error(errData.error || "Failed to create reservation");
+          }
           return;
         }
         throw new Error(errData.error || "Failed to create reservation");
@@ -1351,6 +1384,7 @@ const renderPerDateFacilities = (date, cust) => {
                 disabled={selectAllDisabled}
                 onCheckedChange={(checked) => {
                   if (selectAllDisabled) return;
+                  clearError("facilities");
                   if (checked) {
                     setDateCustomizations((prev) => {
                       const existing = new Set((prev[date]?.facilityIds || []).map(String));
@@ -1399,6 +1433,7 @@ const renderPerDateFacilities = (date, cust) => {
                     disabled={dateReserved}
                     onCheckedChange={() => {
                       if (dateReserved) return;
+                      clearError("facilities");
                       setDateCustomizations((prev) => {
                         const existing = prev[date]?.facilityIds || [];
                         const next = existing.includes(id)
@@ -1435,6 +1470,15 @@ const renderPerDateFacilities = (date, cust) => {
 
       <WizardSteps steps={WIZARD_STEPS} current={step} onSelect={setStep} />
 
+      {errors.advance && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {errors.advance}
+        </div>
+      )}
+
       {step <= 2 && (
       <Card>
         <CardHeader>
@@ -1466,7 +1510,7 @@ const renderPerDateFacilities = (date, cust) => {
               <div className="space-y-2">
                 <Label htmlFor="venue">Venue <span className="text-red-500">*</span></Label>
                 <Select value={form.venueId} onValueChange={(v) => handleChange("venueId", v)}>
-                  <SelectTrigger id="venue">
+                  <SelectTrigger id="venue" aria-invalid={Boolean(errors.details)}>
                     <SelectValue placeholder="Select venue" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1474,6 +1518,7 @@ const renderPerDateFacilities = (date, cust) => {
                     <SelectItem value="2">Sports Complex</SelectItem>
                   </SelectContent>
                 </Select>
+                <FieldError>{errors.details}</FieldError>
               </div>
 
               <div className="space-y-2">
@@ -1483,6 +1528,7 @@ const renderPerDateFacilities = (date, cust) => {
                   placeholder="e.g. Seminar, Conference, Sports Event"
                   value={form.eventType}
                   onChange={(e) => handleChange("eventType", e.target.value)}
+                  aria-invalid={Boolean(errors.details)}
                 />
               </div>
 
@@ -1495,6 +1541,7 @@ const renderPerDateFacilities = (date, cust) => {
                       {TIME_SLOT_OPTIONS.find((s) => s.value === form.timeSlotId)?.label || "Day (8:00 AM – 5:00 PM)"}
                     </span>
                   </div>
+                  <FieldError>{errors.timeSlot}</FieldError>
                 </div>
               ) : (
               <div className="space-y-2">
@@ -1504,7 +1551,7 @@ const renderPerDateFacilities = (date, cust) => {
                   onValueChange={handleTimeSlotChange}
                   disabled={customizePerDate}
                 >
-                  <SelectTrigger id="timeslot" className="w-full min-w-0">
+                  <SelectTrigger id="timeslot" className="w-full min-w-0" aria-invalid={Boolean(errors.timeSlot)}>
                     <SelectValue placeholder="Select time slot" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1515,6 +1562,7 @@ const renderPerDateFacilities = (date, cust) => {
                     ))}
                   </SelectContent>
                 </Select>
+                <FieldError>{errors.timeSlot}</FieldError>
                 {customizePerDate && (
                   <p className="text-xs text-muted-foreground">
                     Locked while using per-date settings. Press Using Per-Date Settings to unlock.
@@ -1533,7 +1581,7 @@ const renderPerDateFacilities = (date, cust) => {
                   onValueChange={handlePackageSelect}
                   disabled={customizePerDate}
                 >
-                  <SelectTrigger id="package" className="w-full min-w-0">
+                  <SelectTrigger id="package" className="w-full min-w-0" aria-invalid={Boolean(errors.package)}>
                     <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
                   <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
@@ -1551,7 +1599,7 @@ const renderPerDateFacilities = (date, cust) => {
             </div>
 {/* Date Picker - Calendar Grid */}
             {step === STEP_DATES && (
-            <div className="space-y-2">
+            <div className="space-y-2" aria-invalid={Boolean(errors.dates)}>
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
                 Events must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest date:{" "}
@@ -1560,6 +1608,7 @@ const renderPerDateFacilities = (date, cust) => {
               {form.venueId ? renderCalendar() : (
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
+              <FieldError>{errors.dates}</FieldError>
 
               {/* Customize Per Date - unlocks once at least one date is selected */}
               {selectedDates.size > 0 && !isSportsComplex && (
@@ -1596,7 +1645,7 @@ const renderPerDateFacilities = (date, cust) => {
             {step === STEP_PACKAGE && (
             <>
             {isSportsComplex ? (
-              <div className="space-y-2">
+              <div className="space-y-2" aria-invalid={Boolean(errors.facilities)}>
                 <Label>Facilities</Label>
                 <p className="text-xs text-muted-foreground">
                   Select one or more facilities. Prices shown reflect the selected time slot.
@@ -1640,6 +1689,7 @@ const renderPerDateFacilities = (date, cust) => {
                             checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
                             onCheckedChange={(checked) => {
                               if (selectAllDisabled) return;
+                              clearError("facilities");
                               if (checked) {
                                 setSelectedFacilityIds((prev) => {
                                   const next = new Set(prev.map(String));
@@ -1747,6 +1797,7 @@ const renderPerDateFacilities = (date, cust) => {
                     })}
                   </div>
                 )}
+                <FieldError>{errors.facilities}</FieldError>
                 {Object.keys(facilityQuantities).length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {Object.entries(facilityQuantities).reduce((sum, [, q]) => sum + (Number(q) || 0), 0)} unit(s) selected
@@ -1825,6 +1876,7 @@ const renderPerDateFacilities = (date, cust) => {
                   onChange={setParticularQuantities}
                 />
               ) : null}
+              <FieldError>{errors.package}</FieldError>
             </div>
             )}
             </>
@@ -1917,7 +1969,7 @@ const renderPerDateFacilities = (date, cust) => {
               className="w-full"
               size="lg"
               disabled={submitting || !form.venueId || !form.eventType || selectedDates.size === 0}
-              onClick={() => setConfirmSubmitOpen(true)}
+              onClick={handleGenerateOrder}
             >
               {submitting ? "Submitting..." : "Generate Order of Payment"}
             </Button>

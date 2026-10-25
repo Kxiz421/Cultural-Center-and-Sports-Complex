@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Dialog,
   DialogContent,
@@ -108,6 +109,22 @@ export default function LoginPage() {
   const [pwChangeConfirm, setPwChangeConfirm] = React.useState("");
   const [pwChangeLoading, setPwChangeLoading] = React.useState(false);
   const [showPwChange, setShowPwChange] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+  const [recoverErrors, setRecoverErrors] = React.useState({});
+  const [pwChangeErrors, setPwChangeErrors] = React.useState({});
+
+  const clearError = (setter, ...names) =>
+    setter((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -135,6 +152,7 @@ export default function LoginPage() {
       setShowNewPassword(false);
       setShowConfirmPassword(false);
       setOtpCells(Array.from({ length: OTP_LENGTH }, () => ""));
+      setRecoverErrors({});
     }
   };
 
@@ -146,6 +164,7 @@ export default function LoginPage() {
   const handleOtpChange = (index, e) => {
     const raw = e.target.value.replace(/\D/g, "");
     const digit = raw.slice(-1);
+    clearError(setRecoverErrors, "code");
     setOtpCells((prev) => {
       const next = [...prev];
       next[index] = digit;
@@ -214,6 +233,7 @@ export default function LoginPage() {
         setPwChangeCurrent(passwordValue);
         setPwChangeNew("");
         setPwChangeConfirm("");
+        setPwChangeErrors({});
         setPwChangeOpen(true);
         return false;
       }
@@ -267,10 +287,14 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      toast.error("Please enter your email and password.");
+    const next = {};
+    if (!email.trim()) next.email = "Please enter your email or username.";
+    if (!password.trim()) next.password = "Please enter your password.";
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
 
     setLoginLoading(true);
     try {
@@ -286,19 +310,25 @@ export default function LoginPage() {
   const handleForcedPasswordChange = async () => {
     const next = pwChangeNew.trim();
     const confirm = pwChangeConfirm.trim();
-    if (!next || !confirm) {
-      toast.error("Enter and confirm your new password.");
+    const nextErrors = {};
+    if (!next) nextErrors.newPassword = "Enter and confirm your new password.";
+    if (!confirm) nextErrors.confirmPassword = "Enter and confirm your new password.";
+    if (Object.keys(nextErrors).length > 0) {
+      setPwChangeErrors(nextErrors);
       return;
     }
     if (next !== confirm) {
-      toast.error("Passwords do not match. Check and try again.");
+      setPwChangeErrors({
+        confirmPassword: "Passwords do not match. Check and try again.",
+      });
       return;
     }
     const problem = passwordProblem(next);
     if (problem) {
-      toast.error(problem);
+      setPwChangeErrors({ newPassword: problem });
       return;
     }
+    setPwChangeErrors({});
 
     setPwChangeLoading(true);
     try {
@@ -401,9 +431,12 @@ export default function LoginPage() {
   const handleIdentify = async () => {
     const identifier = recoverIdentifier.trim();
     if (!identifier) {
-      toast.error("Enter your email, username, or mobile number.");
+      setRecoverErrors({
+        identifier: "Enter your email, username, or mobile number.",
+      });
       return;
     }
+    setRecoverErrors({});
 
     const kind = recoveryKind(identifier);
     if (kind === "email") {
@@ -427,9 +460,12 @@ export default function LoginPage() {
   const handleVerifyCode = async () => {
     const code = otpCells.join("");
     if (code.length < OTP_LENGTH) {
-      toast.error(`Enter all ${OTP_LENGTH} digits of the recovery code.`);
+      setRecoverErrors({
+        code: `Enter all ${OTP_LENGTH} digits of the recovery code.`,
+      });
       return;
     }
+    setRecoverErrors({});
     
     setFpLoading(true);
     try {
@@ -461,34 +497,38 @@ export default function LoginPage() {
   const handleCompletePasswordReset = async () => {
     const next = newPassword.trim();
     const confirm = confirmPassword.trim();
-    if (!next || !confirm) {
-      toast.error("Enter your new password in both fields.");
+    const nextErrors = {};
+    if (!next) nextErrors.newPassword = "Enter your new password in both fields.";
+    if (!confirm) {
+      nextErrors.confirmPassword = "Enter your new password in both fields.";
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setRecoverErrors(nextErrors);
       return;
     }
     if (next !== confirm) {
-      toast.error("Passwords do not match. Check and try again.");
+      setRecoverErrors({
+        confirmPassword: "Passwords do not match. Check and try again.",
+      });
       return;
     }
+    let problem = null;
     if (next.length < 8) {
-      toast.error("Password must be at least 8 characters long.");
+      problem = "Password must be at least 8 characters long.";
+    } else if (!/[A-Z]/.test(next)) {
+      problem = "Password must contain at least one uppercase letter.";
+    } else if (!/[a-z]/.test(next)) {
+      problem = "Password must contain at least one lowercase letter.";
+    } else if (!/[0-9]/.test(next)) {
+      problem = "Password must contain at least one number.";
+    } else if (!/[^A-Za-z0-9]/.test(next)) {
+      problem = "Password must contain at least one special character (e.g., @, #, $, etc.).";
+    }
+    if (problem) {
+      setRecoverErrors({ newPassword: problem });
       return;
     }
-    if (!/[A-Z]/.test(next)) {
-      toast.error("Password must contain at least one uppercase letter.");
-      return;
-    }
-    if (!/[a-z]/.test(next)) {
-      toast.error("Password must contain at least one lowercase letter.");
-      return;
-    }
-    if (!/[0-9]/.test(next)) {
-      toast.error("Password must contain at least one number.");
-      return;
-    }
-    if (!/[^A-Za-z0-9]/.test(next)) {
-      toast.error("Password must contain at least one special character (e.g., @, #, $, etc.).");
-      return;
-    }
+    setRecoverErrors({});
     
     setFpLoading(true);
     try {
@@ -580,10 +620,15 @@ export default function LoginPage() {
                 autoComplete="email"
                 type="text"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  clearError(setErrors, "email");
+                  setEmail(e.target.value);
+                }}
                 placeholder="Enter your email or username"
                 className="text-foreground placeholder:text-muted-foreground"
+                aria-invalid={Boolean(errors.email)}
               />
+              <FieldError>{errors.email}</FieldError>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -593,9 +638,13 @@ export default function LoginPage() {
                   type={showLoginPassword ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    clearError(setErrors, "password");
+                    setPassword(e.target.value);
+                  }}
                   placeholder="Enter your password"
                   className="pr-10 text-foreground placeholder:text-muted-foreground"
+                  aria-invalid={Boolean(errors.password)}
                 />
                 <Button
                   type="button"
@@ -615,6 +664,7 @@ export default function LoginPage() {
                   )}
                 </Button>
               </div>
+              <FieldError>{errors.password}</FieldError>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
@@ -680,10 +730,15 @@ export default function LoginPage() {
                         className="text-foreground placeholder:text-muted-foreground"
                         type="text"
                         value={recoverIdentifier}
-                        onChange={(e) => setRecoverIdentifier(e.target.value)}
+                        onChange={(e) => {
+                          clearError(setRecoverErrors, "identifier");
+                          setRecoverIdentifier(e.target.value);
+                        }}
                         placeholder="name@example.com, username, or 09171234567"
                         autoComplete="username"
+                        aria-invalid={Boolean(recoverErrors.identifier)}
                       />
+                      <FieldError>{recoverErrors.identifier}</FieldError>
                     </div>
                   )}
                   {fpStep === "channel" && (
@@ -750,10 +805,12 @@ export default function LoginPage() {
                               value={digit}
                               onChange={(e) => handleOtpChange(i, e)}
                               onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                              aria-invalid={Boolean(recoverErrors.code)}
                               className="border-input focus-visible:ring-ring h-12 w-10 rounded-md border-2 text-center text-lg font-semibold tracking-widest text-foreground tabular-nums shadow-sm sm:h-14 sm:w-11 sm:text-xl"
                             />
                           ))}
                         </div>
+                        <FieldError>{recoverErrors.code}</FieldError>
                       </div>
                       <Button
                         type="button"
@@ -774,9 +831,13 @@ export default function LoginPage() {
                             type={showNewPassword ? "text" : "password"}
                             autoComplete="new-password"
                             value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
+                            onChange={(e) => {
+                              clearError(setRecoverErrors, "newPassword");
+                              setNewPassword(e.target.value);
+                            }}
                             placeholder="Enter a new password"
                             className="pr-10 text-foreground placeholder:text-muted-foreground"
+                            aria-invalid={Boolean(recoverErrors.newPassword)}
                           />
                           <Button
                             type="button"
@@ -798,6 +859,7 @@ export default function LoginPage() {
                             )}
                           </Button>
                         </div>
+                        <FieldError>{recoverErrors.newPassword}</FieldError>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="fp-confirm-password">
@@ -809,11 +871,17 @@ export default function LoginPage() {
                             type={showConfirmPassword ? "text" : "password"}
                             autoComplete="new-password"
                             value={confirmPassword}
-                            onChange={(e) =>
-                              setConfirmPassword(e.target.value)
-                            }
+                            onChange={(e) => {
+                              clearError(
+                                setRecoverErrors,
+                                "confirmPassword",
+                                "newPassword"
+                              );
+                              setConfirmPassword(e.target.value);
+                            }}
                             placeholder="Confirm your new password"
                             className="pr-10 text-foreground placeholder:text-muted-foreground"
+                            aria-invalid={Boolean(recoverErrors.confirmPassword)}
                           />
                           <Button
                             type="button"
@@ -837,6 +905,7 @@ export default function LoginPage() {
                             )}
                           </Button>
                         </div>
+                        <FieldError>{recoverErrors.confirmPassword}</FieldError>
                       </div>
                       <Button
                         type="button"
@@ -923,9 +992,13 @@ export default function LoginPage() {
                     type={showPwChange ? "text" : "password"}
                     autoComplete="new-password"
                     value={pwChangeNew}
-                    onChange={(e) => setPwChangeNew(e.target.value)}
+                    onChange={(e) => {
+                      clearError(setPwChangeErrors, "newPassword");
+                      setPwChangeNew(e.target.value);
+                    }}
                     placeholder="At least 8 characters"
                     className="pr-10 text-foreground placeholder:text-muted-foreground"
+                    aria-invalid={Boolean(pwChangeErrors.newPassword)}
                   />
                   <Button
                     type="button"
@@ -942,6 +1015,7 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </div>
+                <FieldError>{pwChangeErrors.newPassword}</FieldError>
                 <p className="text-muted-foreground text-xs">
                   At least 8 characters with 1 uppercase, 1 lowercase, 1 number,
                   and 1 special character.
@@ -954,10 +1028,15 @@ export default function LoginPage() {
                   type={showPwChange ? "text" : "password"}
                   autoComplete="new-password"
                   value={pwChangeConfirm}
-                  onChange={(e) => setPwChangeConfirm(e.target.value)}
+                  onChange={(e) => {
+                    clearError(setPwChangeErrors, "confirmPassword");
+                    setPwChangeConfirm(e.target.value);
+                  }}
                   placeholder="Re-enter your new password"
                   className="text-foreground placeholder:text-muted-foreground"
+                  aria-invalid={Boolean(pwChangeErrors.confirmPassword)}
                 />
+                <FieldError>{pwChangeErrors.confirmPassword}</FieldError>
               </div>
             </div>
             <DialogFooter className="gap-2 sm:justify-between">

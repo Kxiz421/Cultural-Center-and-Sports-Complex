@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Table,
   TableBody,
@@ -103,6 +104,21 @@ export function CoordinatorParticularsScreen({
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
 
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
   const loadItems = React.useCallback(async () => {
     try {
       setLoading(true);
@@ -124,20 +140,23 @@ export function CoordinatorParticularsScreen({
   const openAction = (type, item) => {
     setAction({ type, item });
     setActionQty("");
+    setErrors({});
   };
 
   const closeAction = () => {
     setAction(null);
     setActionQty("");
+    setErrors({});
   };
 
   const submitAction = async () => {
     if (!action) return;
     const qty = parseInt(actionQty, 10);
     if (!qty || qty <= 0) {
-      toast.error("Please enter a valid quantity");
+      setErrors({ quantity: "Please enter a valid quantity" });
       return;
     }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -414,10 +433,13 @@ export function CoordinatorParticularsScreen({
                 inputMode="numeric"
                 placeholder="e.g. 5"
                 value={actionQty}
-                onChange={(e) =>
-                  setActionQty(e.target.value.replace(/\D/g, "").slice(0, 5))
-                }
+                aria-invalid={Boolean(errors.quantity)}
+                onChange={(e) => {
+                  clearError("quantity");
+                  setActionQty(e.target.value.replace(/\D/g, "").slice(0, 5));
+                }}
               />
+              <FieldError>{errors.quantity}</FieldError>
               {action?.type === "DAMAGE" &&
                 actionQty &&
                 parseInt(actionQty, 10) > currentQty && (

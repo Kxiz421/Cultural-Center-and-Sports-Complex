@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -289,6 +290,20 @@ export default function CoordinatorReservationsPage() {
   );
   const [availability, setAvailability] = React.useState({});
   const [availLoading, setAvailLoading] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const [historyReservations, setHistoryReservations] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(true);
@@ -517,6 +532,7 @@ export default function CoordinatorReservationsPage() {
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
+    clearError("client");
     setSelectedClient(null);
 
     // Clear previous timeout
@@ -550,6 +566,7 @@ export default function CoordinatorReservationsPage() {
 
   const handleSelectClient = (client) => {
     setSelectedClient(client);
+    clearError("client");
     setSearchQuery(client.fullName);
     setShowSearchResults(false);
     setSearchResults([]);
@@ -672,6 +689,7 @@ export default function CoordinatorReservationsPage() {
       );
       return;
     }
+    clearError("facilities");
     setFacilityQuantities((prev) => {
       const qty = Math.max(0, Math.min(Number(quantity) || 0, remaining));
       if (qty <= 0) {
@@ -689,6 +707,7 @@ export default function CoordinatorReservationsPage() {
       toast.error("This facility is already reserved on this date.");
       return;
     }
+    clearError("facilities");
     setDateCustomizations((prev) => {
       const existing = prev[date]?.facilityQuantities || {};
       const currentQty = existing[id] || 0;
@@ -819,6 +838,7 @@ export default function CoordinatorReservationsPage() {
 // Toggle date selection for calendar
   const toggleDate = (dateStr) => {
     if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
+    clearError("dates", "advance");
     setSelectedDates((prev) => {
       const next = new Set(prev);
       if (next.has(dateStr)) next.delete(dateStr);
@@ -866,27 +886,25 @@ export default function CoordinatorReservationsPage() {
         ? Object.values(dateCustomizations).find((c) => c && c.timeSlotId)?.timeSlotId
         : "") ||
       TIME_SLOT.DAY;
-    if (!effectiveEventDate || !effectiveTimeSlotId || !eventType) {
-      toast.error("Please fill in all required fields.");
-      return;
+    const next = {};
+    if (!eventType) next.eventType = "Please enter the event type.";
+    if (!effectiveEventDate || !effectiveTimeSlotId) {
+      next.dates = "Please select at least one date.";
     }
 
     // Validate 7-day advance booking
     const datesToCheck = [effectiveEventDate, ...selectedDates].filter(Boolean);
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
-      toast.error(advanceCheck.error);
-      return;
+      next.advance = advanceCheck.error;
     }
 
     if (isExistingUser && !selectedClient) {
-      toast.error("Please search and select an existing user.");
-      return;
+      next.client = "Please search and select an existing user.";
     }
 
     if (!isExistingUser && !clientName) {
-      toast.error("Please enter the walk-in client's name.");
-      return;
+      next.client = "Please enter the walk-in client's name.";
     }
 
     const hasPerDateFacilities =
@@ -895,14 +913,17 @@ export default function CoordinatorReservationsPage() {
         (c) => hasAnyFacilityQuantity(c?.facilityQuantities || {})
       );
     if (!hasPerDateSettings && !hasAnyFacilityQuantity(facilityQuantities)) {
-      toast.error("Please select at least one facility with a quantity.");
-      return;
+      next.facilities = "Please select at least one facility with a quantity.";
     }
     if (hasPerDateSettings && !hasPerDateFacilities) {
-      toast.error("Please select at least one facility for every customized date.");
-      return;
+      next.facilities = "Please select at least one facility for every customized date.";
     }
 
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      return;
+    }
+    setErrors({});
     setShowOrder(true);
   };
 
@@ -915,7 +936,7 @@ export default function CoordinatorReservationsPage() {
     const datesToCheck = [...sortedDates];
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
-      toast.error(advanceCheck.error);
+      setErrors({ advance: advanceCheck.error });
       return;
     }
 
@@ -1078,6 +1099,7 @@ export default function CoordinatorReservationsPage() {
       setCustomizePerDate(false);
       setDateCustomizations({});
       setEventDates([]);
+      setErrors({});
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -1246,6 +1268,15 @@ export default function CoordinatorReservationsPage() {
           Create reservations on behalf of walk-in clients. Toggle to search for existing users or enter new client details manually.
         </p>
       </div>
+
+      {errors.advance && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {errors.advance}
+        </div>
+      )}
 
       {orderOfPayment && (
         <div className="flex flex-col gap-4">
@@ -1452,6 +1483,7 @@ export default function CoordinatorReservationsPage() {
                       placeholder="Search by name, email, or contact number..."
                       value={searchQuery}
                       onChange={handleSearchChange}
+                      aria-invalid={Boolean(errors.client)}
                       onFocus={() => {
                         if (searchResults.length > 0 && !selectedClient) {
                           setShowSearchResults(true);
@@ -1492,6 +1524,7 @@ export default function CoordinatorReservationsPage() {
                       No users found matching "{searchQuery}"
                     </div>
                   )}
+                  <FieldError>{errors.client}</FieldError>
                 </div>
 
                 {/* Selected Client Details */}
@@ -1529,8 +1562,13 @@ export default function CoordinatorReservationsPage() {
                   <Input
                     placeholder="Juan Dela Cruz"
                     value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
+                    onChange={(e) => {
+                      clearError("client");
+                      setClientName(e.target.value);
+                    }}
+                    aria-invalid={Boolean(errors.client)}
                   />
+                  <FieldError>{errors.client}</FieldError>
                 </div>
                 <div className="space-y-2">
                   <Label>Contact Number</Label>
@@ -1565,10 +1603,15 @@ export default function CoordinatorReservationsPage() {
               <Input
                 placeholder="e.g. Seminar, Conference"
                 value={eventType}
-                onChange={(e) => setEventType(e.target.value)}
+                onChange={(e) => {
+                  clearError("eventType");
+                  setEventType(e.target.value);
+                }}
+                aria-invalid={Boolean(errors.eventType)}
               />
+              <FieldError>{errors.eventType}</FieldError>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" aria-invalid={Boolean(errors.dates)}>
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
                 Events must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest date:{" "}
@@ -1577,6 +1620,7 @@ export default function CoordinatorReservationsPage() {
               {venueId ? renderCalendar() : (
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
+              <FieldError>{errors.dates}</FieldError>
 
             </div>
             <div className="space-y-2">
@@ -1586,7 +1630,7 @@ export default function CoordinatorReservationsPage() {
                 <span className="font-medium">Day (8:00 AM – 5:00 PM)</span>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" aria-invalid={Boolean(errors.facilities)}>
               <Label>Facilities</Label>
               <p className="text-xs text-muted-foreground">
                 Select one or more facilities. Prices shown reflect the selected time slot ({TIME_SLOTS.find(t => String(t.id) === timeSlotId)?.name || "Day"}).
@@ -1629,6 +1673,7 @@ export default function CoordinatorReservationsPage() {
                           disabled={selectAllDisabled}
                           onCheckedChange={(checked) => {
                             if (selectAllDisabled) return;
+                            clearError("facilities");
                             if (checked) {
                               // Select all available: set each to 1 (or keep existing qty if already > 0)
                               setFacilityQuantities((prev) => {
@@ -1720,6 +1765,7 @@ export default function CoordinatorReservationsPage() {
                   })}
                 </div>
               )}
+              <FieldError>{errors.facilities}</FieldError>
               {hasAnyFacilityQuantity(facilityQuantities) && (
                 <p className="text-xs text-muted-foreground">
                   {Object.values(facilityQuantities).reduce((s, q) => s + (Number(q) || 0), 0)} unit(s) selected
@@ -1963,6 +2009,7 @@ export default function CoordinatorReservationsPage() {
                                 disabled={selectAllDisabled}
                                 onCheckedChange={(checked) => {
                                   if (selectAllDisabled) return;
+                                  clearError("facilities");
                                   if (checked) {
                                     setDateCustomizations((prev) => {
                                       const nextQty = { ...(prev[date]?.facilityQuantities || {}) };
@@ -2019,6 +2066,7 @@ export default function CoordinatorReservationsPage() {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      clearError("facilities");
                                       setDateCustomizations((prev) => {
                                         const existing = prev[date]?.facilityQuantities || {};
                                         const nextQty = { ...existing };
@@ -2035,6 +2083,7 @@ export default function CoordinatorReservationsPage() {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      clearError("facilities");
                                       setDateCustomizations((prev) => {
                                         const existing = prev[date]?.facilityQuantities || {};
                                         const nextQty = { ...existing };

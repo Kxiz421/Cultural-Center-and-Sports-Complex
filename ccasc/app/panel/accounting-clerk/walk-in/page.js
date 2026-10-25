@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -205,6 +206,20 @@ export default function WalkInReservationPage() {
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const [availability, setAvailability] = React.useState({});
   const [availLoading, setAvailLoading] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
@@ -411,6 +426,7 @@ export default function WalkInReservationPage() {
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
+    clearError("client");
     setSelectedClient(null);
 
     // Clear previous timeout
@@ -444,6 +460,7 @@ export default function WalkInReservationPage() {
 
   const handleSelectClient = (client) => {
     setSelectedClient(client);
+    clearError("client");
     setSearchQuery(client.fullName);
     setShowSearchResults(false);
     setSearchResults([]);
@@ -529,6 +546,7 @@ export default function WalkInReservationPage() {
   };
 
   const handleVirtualParticularQuantitiesChange = (pq) => {
+    clearError("package");
     setParticularQuantities(pq);
     if (packageId === VIRTUAL_PACKAGE_IDS.BASKETBALL) {
       const slot = deriveTimeSlotFromVirtualPackage(
@@ -584,19 +602,22 @@ export default function WalkInReservationPage() {
   stepValid[STEP_DATES] = selectedDates.size > 0;
   stepValid[STEP_PACKAGE] = true;
   stepValid[STEP_REVIEW] = true;
-  const stepError = (s) =>
+  const stepErrors = (s) =>
     s === STEP_CLIENT
-      ? isExistingUser
-        ? "Please search and select an existing user."
-        : "Please enter the walk-in client's name."
+      ? {
+          client: isExistingUser
+            ? "Please search and select an existing user."
+            : "Please enter the walk-in client's name.",
+        }
       : s === STEP_DETAILS
-        ? "Please select a venue and enter an event type."
-        : "Please select at least one date.";
+        ? { venue: "Please select a venue.", eventType: "Please enter the event type." }
+        : { dates: "Please select at least one date." };
   const goNext = () => {
     if (!stepValid[step]) {
-      toast.error(stepError(step));
+      setErrors(stepErrors(step));
       return;
     }
+    setErrors({});
     setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
   };
 
@@ -609,6 +630,7 @@ export default function WalkInReservationPage() {
       );
       return;
     }
+    clearError("facilities");
     setSelectedFacilityIds((prev) => {
       if (prev.includes(id)) {
         setFacilityQuantities((qPrev) => {
@@ -650,6 +672,7 @@ export default function WalkInReservationPage() {
   };
 
   const handlePackageSelect = (value) => {
+    clearError("package");
     // Cultural Center facility rental selected from the packages dropdown.
     // Priced from the facility's own rate — see buildReservationSummaryLines.
     if (isFacilityPackageId(value)) {
@@ -885,6 +908,7 @@ export default function WalkInReservationPage() {
 // Toggle date selection for calendar
   const toggleDate = (dateStr) => {
     if (!availability[dateStr]?.available || isEventDateTooSoon(dateStr)) return;
+    clearError("dates", "advance");
     setSelectedDates((prev) => {
       const next = new Set(prev);
       if (next.has(dateStr)) next.delete(dateStr);
@@ -943,33 +967,31 @@ export default function WalkInReservationPage() {
         ? Object.values(dateCustomizations).find((c) => c && c.timeSlotId)?.timeSlotId
         : "") ||
       TIME_SLOT.DAY;
-    if (!venueId || !effectiveEventDate || !effectiveTimeSlotId || !eventType) {
-      toast.error("Please fill in all required fields.");
-      return;
+    const next = {};
+    if (!venueId) next.venue = "Please select a venue.";
+    if (!eventType) next.eventType = "Please enter the event type.";
+    if (!effectiveEventDate || !effectiveTimeSlotId) {
+      next.dates = "Please select at least one date.";
     }
 
     // Validate 7-day advance booking
     const datesToCheck = [effectiveEventDate, ...selectedDates].filter(Boolean);
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
-      toast.error(advanceCheck.error);
-      return;
+      next.advance = advanceCheck.error;
     }
 
     if (isExistingUser && !selectedClient) {
-      toast.error("Please search and select an existing user.");
-      return;
+      next.client = "Please search and select an existing user.";
     }
 
     if (!isExistingUser && !clientName) {
-      toast.error("Please enter the walk-in client's name.");
-      return;
+      next.client = "Please enter the walk-in client's name.";
     }
 
     // Sports Complex validation: require at least one facility
     if (isSportsComplex && selectedFacilityIds.length === 0) {
-      toast.error("Please select at least one facility.");
-      return;
+      next.facilities = "Please select at least one facility.";
     }
 
     if (!isSportsComplex && !customizePerDate && isVirtualPackageId(packageId)) {
@@ -981,11 +1003,15 @@ export default function WalkInReservationPage() {
         venueRentalSlot
       );
       if (!entries.length) {
-        toast.error("Please complete your Basketball Game or Venue Rental selection.");
-        return;
+        next.package = "Please complete your Basketball Game or Venue Rental selection.";
       }
     }
 
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      return;
+    }
+    setErrors({});
     setShowOrder(true);
   };
 
@@ -998,7 +1024,7 @@ export default function WalkInReservationPage() {
     const datesToCheck = [...sortedDates];
     const advanceCheck = validateAdvanceBookingDates(datesToCheck);
     if (!advanceCheck.valid) {
-      toast.error(advanceCheck.error);
+      setErrors({ advance: advanceCheck.error });
       return;
     }
 
@@ -1253,6 +1279,7 @@ export default function WalkInReservationPage() {
       setReservedByDate({});
       setFacilityQuantities({});
       setStep(0);
+      setErrors({});
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -1510,7 +1537,23 @@ const renderPerDateFacilities = (date, cust) => {
         </p>
       </div>
 
-      <WizardSteps steps={WIZARD_STEPS} current={step} onSelect={setStep} />
+      <WizardSteps
+        steps={WIZARD_STEPS}
+        current={step}
+        onSelect={(s) => {
+          setErrors({});
+          setStep(s);
+        }}
+      />
+
+      {errors.advance && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {errors.advance}
+        </div>
+      )}
 
       {/* Order of Payment — generated once the reservation is saved */}
       {savedOrder && (
@@ -1615,6 +1658,7 @@ const renderPerDateFacilities = (date, cust) => {
                       placeholder="Search by name, email, or contact number..."
                       value={searchQuery}
                       onChange={handleSearchChange}
+                      aria-invalid={Boolean(errors.client)}
                       onFocus={() => {
                         if (searchResults.length > 0 && !selectedClient) {
                           setShowSearchResults(true);
@@ -1655,6 +1699,7 @@ const renderPerDateFacilities = (date, cust) => {
                       No users found matching "{searchQuery}"
                     </div>
                   )}
+                  <FieldError>{errors.client}</FieldError>
                 </div>
 
                 {/* Selected Client Details */}
@@ -1692,8 +1737,13 @@ const renderPerDateFacilities = (date, cust) => {
                   <Input
                     placeholder="Juan Dela Cruz"
                     value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
+                    onChange={(e) => {
+                      clearError("client");
+                      setClientName(e.target.value);
+                    }}
+                    aria-invalid={Boolean(errors.client)}
                   />
+                  <FieldError>{errors.client}</FieldError>
                 </div>
                 <div className="space-y-2">
                   <Label>Contact Number</Label>
@@ -1725,6 +1775,7 @@ const renderPerDateFacilities = (date, cust) => {
               <Select
                 value={venueId}
                 onValueChange={(v) => {
+                  clearError("venue");
                   setVenueId(v);
                   if (v === "2") {
                     // Sports Complex books per facility; per-date settings would
@@ -1735,7 +1786,7 @@ const renderPerDateFacilities = (date, cust) => {
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-invalid={Boolean(errors.venue)}>
                   <SelectValue placeholder="Select venue" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1746,20 +1797,26 @@ const renderPerDateFacilities = (date, cust) => {
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError>{errors.venue}</FieldError>
             </div>
             <div className="space-y-2">
               <Label>Event Type *</Label>
               <Input
                 placeholder="e.g. Seminar, Conference"
                 value={eventType}
-                onChange={(e) => setEventType(e.target.value)}
+                onChange={(e) => {
+                  clearError("eventType");
+                  setEventType(e.target.value);
+                }}
+                aria-invalid={Boolean(errors.eventType)}
               />
+              <FieldError>{errors.eventType}</FieldError>
             </div>
             </>
             )}
             {/* Select dates */}
             {step === STEP_DATES && (
-            <div className="space-y-2">
+            <div className="space-y-2" aria-invalid={Boolean(errors.dates)}>
               <Label>Select Dates <span className="text-red-500">*</span></Label>
               <p className="text-xs text-muted-foreground">
                 Events must be at least {MIN_ADVANCE_BOOKING_DAYS} days from today. Earliest date:{" "}
@@ -1768,6 +1825,7 @@ const renderPerDateFacilities = (date, cust) => {
               {venueId ? renderCalendar() : (
                 <p className="text-sm text-muted-foreground py-4">Please select a venue first to see available dates.</p>
               )}
+              <FieldError>{errors.dates}</FieldError>
 
               {/* Customize Per Date Button - available for Cultural Center, even for a single date */}
               {selectedDates.size > 0 && !isSportsComplex && (
@@ -1839,7 +1897,7 @@ const renderPerDateFacilities = (date, cust) => {
               <div className="space-y-2">
                 <Label>Package</Label>
                 <Select value={packageId} onValueChange={handlePackageSelect} disabled={customizePerDate}>
-                  <SelectTrigger className="w-full min-w-0">
+                  <SelectTrigger className="w-full min-w-0" aria-invalid={Boolean(errors.package)}>
                     <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
                   <SelectContent position="popper" className="w-(--radix-select-trigger-width)">
@@ -1856,7 +1914,7 @@ const renderPerDateFacilities = (date, cust) => {
               )}
 {/* Conditional: Package Inclusions, virtual packages, particulars, or Facilities */}
             {isSportsComplex ? (
-              <div className="space-y-2">
+              <div className="space-y-2" aria-invalid={Boolean(errors.facilities)}>
                 <Label>Facilities</Label>
                 <p className="text-xs text-muted-foreground">
                   Select one or more facilities. Prices shown reflect the selected time slot.
@@ -1900,6 +1958,7 @@ const renderPerDateFacilities = (date, cust) => {
                             checked={!selectAllDisabled && someSelected ? "indeterminate" : allSelected}
                             onCheckedChange={(checked) => {
                               if (selectAllDisabled) return;
+                              clearError("facilities");
                               if (checked) {
                                 setSelectedFacilityIds((prev) => {
                                   const next = new Set(prev.map(String));
@@ -2007,6 +2066,7 @@ const renderPerDateFacilities = (date, cust) => {
                     })}
                   </div>
                 )}
+                <FieldError>{errors.facilities}</FieldError>
                 {Object.keys(facilityQuantities).length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {Object.entries(facilityQuantities).reduce((sum, [, q]) => sum + (Number(q) || 0), 0)} unit(s) selected
@@ -2085,6 +2145,7 @@ const renderPerDateFacilities = (date, cust) => {
                   onChange={setParticularQuantities}
                 />
               ) : (packageId === "custom" || packageId === "0" || !packageId) ? null : null}
+              <FieldError>{errors.package}</FieldError>
             </div>
             )}
             </>
@@ -2217,7 +2278,14 @@ const renderPerDateFacilities = (date, cust) => {
       )}
 
       <WizardNav
-        onBack={step > 0 ? () => setStep(step - 1) : undefined}
+        onBack={
+          step > 0
+            ? () => {
+                setErrors({});
+                setStep(step - 1);
+              }
+            : undefined
+        }
         onNext={goNext}
         nextLabel="Next"
         nextDisabled={!stepValid[step]}

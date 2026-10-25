@@ -41,6 +41,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Pencil, Archive, RotateCcw, History, Package as PackageIcon } from "lucide-react";
 import { Pagination } from "@/components/pagination";
+import { FieldError } from "@/components/ui/field-error";
 
 function formatPHP(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -98,8 +99,23 @@ export default function PackagesPage() {
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [addPkgConfirmOpen, setAddPkgConfirmOpen] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const resetAddForm = () => {
+    setErrors({});
     setAddForm({
       packageName: "", description: "", dayRate: "", nightRate: "",
       ledWallDayRate: "", ledWallNightRate: "", timeSlotId: "",
@@ -243,10 +259,15 @@ export default function PackagesPage() {
   };
 
   const handleAddPackage = async () => {
+    const next = {};
     if (!addForm.packageName.trim()) {
-      toast.error("Package name is required");
+      next.packageName = "Package name is required";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
     setSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
@@ -390,7 +411,8 @@ export default function PackagesPage() {
             <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label htmlFor="add-name">Package Name *</Label>
-                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => setAddForm((f) => ({ ...f, packageName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 35) }))} />
+                <Input id="add-name" placeholder="e.g. Standard Day Package" value={addForm.packageName} onChange={(e) => { clearError("packageName"); setAddForm((f) => ({ ...f, packageName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 35) })); }} aria-invalid={Boolean(errors.packageName)} />
+                <FieldError>{errors.packageName}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-desc">Description</Label>

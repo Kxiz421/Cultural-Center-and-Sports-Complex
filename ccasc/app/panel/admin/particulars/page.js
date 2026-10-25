@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pagination } from "@/components/pagination";
 import { Separator } from "@/components/ui/separator";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -131,6 +132,34 @@ export default function ParticularsPage() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLogs, setHistoryLogs] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [errors, setErrors] = React.useState({});
+  const [editErrors, setEditErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+  const clearEditError = (...names) =>
+    setEditErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const fetchItems = async (search) => {
     try {
@@ -155,6 +184,7 @@ export default function ParticularsPage() {
   }, [searchQuery]);
 
   const resetAddForm = () => {
+    setErrors({});
     setAddForm({
       particularName: "",
       description: "",
@@ -174,6 +204,7 @@ export default function ParticularsPage() {
     setEditRestockQty("");
     setEditDamageQty("");
     setEditTransactions([]);
+    setEditErrors({});
     setEditOpen(true);
     // Fetch transactions for this particular
     setEditTransactionsLoading(true);
@@ -216,20 +247,25 @@ export default function ParticularsPage() {
 
   const handleSaveItem = async () => {
     if (!editItem) return;
+    const next = {};
     if (!editForm.particularName.trim()) {
-      toast.error("Particular name is required");
+      next.particularName = "Particular name is required";
+    } else {
+      const nameChanged =
+        editForm.particularName.trim().toLowerCase() !==
+        String(editItem.particularName || "").trim().toLowerCase();
+      if (
+        nameChanged &&
+        findDuplicateParticular(editForm.particularName, editItem.particularId)
+      ) {
+        next.particularName = "A particular with this name already exists.";
+      }
+    }
+    if (Object.keys(next).length > 0) {
+      setEditErrors((prev) => ({ ...prev, ...next }));
       return;
     }
-    const nameChanged =
-      editForm.particularName.trim().toLowerCase() !==
-      String(editItem.particularName || "").trim().toLowerCase();
-    if (
-      nameChanged &&
-      findDuplicateParticular(editForm.particularName, editItem.particularId)
-    ) {
-      toast.error("A particular with this name already exists.");
-      return;
-    }
+    clearEditError("particularName");
 
     setSaving(true);
     try {
@@ -266,14 +302,17 @@ export default function ParticularsPage() {
   };
 
   const handleAddParticular = async () => {
+    const next = {};
     if (!addForm.particularName.trim()) {
-      toast.error("Particular name is required");
+      next.particularName = "Particular name is required";
+    } else if (findDuplicateParticular(addForm.particularName)) {
+      next.particularName = "A particular with this name already exists.";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
-    if (findDuplicateParticular(addForm.particularName)) {
-      toast.error("A particular with this name already exists.");
-      return;
-    }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -382,9 +421,13 @@ export default function ParticularsPage() {
     if (!editItem) return;
     const qty = parseInt(editRestockQty, 10);
     if (!qty || qty <= 0) {
-      toast.error("Please enter a valid quantity");
+      setEditErrors((prev) => ({
+        ...prev,
+        restockQty: "Please enter a valid quantity",
+      }));
       return;
     }
+    clearEditError("restockQty");
 
     setSaving(true);
     try {
@@ -425,9 +468,13 @@ export default function ParticularsPage() {
     if (!editItem) return;
     const qty = parseInt(editDamageQty, 10);
     if (!qty || qty <= 0) {
-      toast.error("Please enter a valid quantity");
+      setEditErrors((prev) => ({
+        ...prev,
+        damageQty: "Please enter a valid quantity",
+      }));
       return;
     }
+    clearEditError("damageQty");
 
     setSaving(true);
     try {
@@ -530,10 +577,16 @@ export default function ParticularsPage() {
                   id="add-name"
                   placeholder="e.g. Wireless Microphone"
                   value={addForm.particularName}
-                  onChange={(e) =>
-                    setAddForm((f) => ({ ...f, particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20) }))
-                  }
+                  onChange={(e) => {
+                    clearError("particularName");
+                    setAddForm((f) => ({
+                      ...f,
+                      particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20),
+                    }));
+                  }}
+                  aria-invalid={Boolean(errors.particularName)}
                 />
+                <FieldError>{errors.particularName}</FieldError>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-desc">Brief Description</Label>
@@ -591,14 +644,17 @@ export default function ParticularsPage() {
               </Button>
               <Button
                 onClick={() => {
+                  const next = {};
                   if (!addForm.particularName.trim()) {
-                    toast.error("Particular name is required");
+                    next.particularName = "Particular name is required";
+                  } else if (findDuplicateParticular(addForm.particularName)) {
+                    next.particularName = "A particular with this name already exists.";
+                  }
+                  if (Object.keys(next).length > 0) {
+                    setErrors(next);
                     return;
                   }
-                  if (findDuplicateParticular(addForm.particularName)) {
-                    toast.error("A particular with this name already exists.");
-                    return;
-                  }
+                  setErrors({});
                   setAddConfirmOpen(true);
                 }}
                 disabled={saving}
@@ -790,7 +846,7 @@ export default function ParticularsPage() {
       </Card>
 
       {/* Edit Dialog */}
-      <Dialog key={editItem?.particularId || "no-edit"} open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog key={editItem?.particularId || "no-edit"} open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditErrors({}); }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -808,8 +864,16 @@ export default function ParticularsPage() {
               <Input
                 id="edit-name"
                 value={editForm.particularName}
-                onChange={(e) => setEditForm((f) => ({ ...f, particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20) }))}
+                onChange={(e) => {
+                  clearEditError("particularName");
+                  setEditForm((f) => ({
+                    ...f,
+                    particularName: e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 20),
+                  }));
+                }}
+                aria-invalid={Boolean(editErrors.particularName)}
               />
+              <FieldError>{editErrors.particularName}</FieldError>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-desc">Brief Description</Label>
@@ -877,8 +941,13 @@ export default function ParticularsPage() {
                     inputMode="numeric"
                     placeholder="Quantity to add"
                     value={editRestockQty}
-                    onChange={(e) => setEditRestockQty(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    onChange={(e) => {
+                      clearEditError("restockQty");
+                      setEditRestockQty(e.target.value.replace(/\D/g, "").slice(0, 5));
+                    }}
+                    aria-invalid={Boolean(editErrors.restockQty)}
                   />
+                  <FieldError>{editErrors.restockQty}</FieldError>
                 </div>
                 <Button
                   onClick={handleEditRestock}
@@ -903,8 +972,13 @@ export default function ParticularsPage() {
                     inputMode="numeric"
                     placeholder="Quantity damaged"
                     value={editDamageQty}
-                    onChange={(e) => setEditDamageQty(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    onChange={(e) => {
+                      clearEditError("damageQty");
+                      setEditDamageQty(e.target.value.replace(/\D/g, "").slice(0, 5));
+                    }}
+                    aria-invalid={Boolean(editErrors.damageQty)}
                   />
+                  <FieldError>{editErrors.damageQty}</FieldError>
                 </div>
                 <Button
                   variant="destructive"
@@ -960,28 +1034,33 @@ export default function ParticularsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); }}>
+            <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); setEditErrors({}); }}>
               Cancel
             </Button>
             <Button
               onClick={() => {
+                const next = {};
                 if (!editForm.particularName.trim()) {
-                  toast.error("Particular name is required");
+                  next.particularName = "Particular name is required";
+                } else {
+                  const nameChanged =
+                    editForm.particularName.trim().toLowerCase() !==
+                    String(editItem?.particularName || "").trim().toLowerCase();
+                  if (
+                    nameChanged &&
+                    findDuplicateParticular(
+                      editForm.particularName,
+                      editItem?.particularId
+                    )
+                  ) {
+                    next.particularName = "A particular with this name already exists.";
+                  }
+                }
+                if (Object.keys(next).length > 0) {
+                  setEditErrors((prev) => ({ ...prev, ...next }));
                   return;
                 }
-                const nameChanged =
-                  editForm.particularName.trim().toLowerCase() !==
-                  String(editItem?.particularName || "").trim().toLowerCase();
-                if (
-                  nameChanged &&
-                  findDuplicateParticular(
-                    editForm.particularName,
-                    editItem?.particularId
-                  )
-                ) {
-                  toast.error("A particular with this name already exists.");
-                  return;
-                }
+                clearEditError("particularName");
                 setEditConfirmOpen(true);
               }}
               disabled={saving}

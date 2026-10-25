@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
 
   const code = cells.join("");
 
@@ -70,6 +72,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
 
   const handleCellChange = (index, event) => {
     const digit = event.target.value.replace(/\D/g, "").slice(-1);
+    if (error) setError("");
     setCells((prev) => {
       const next = [...prev];
       next[index] = digit;
@@ -115,13 +118,14 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
 
   const sendCode = async () => {
     if (!target) {
-      toast.error(
+      setError(
         channel === "email"
           ? "Enter your email address first."
           : "Enter your mobile number first.",
       );
       return;
     }
+    setError("");
     setSending(true);
     try {
       const res = await fetch("/api/auth/register/otp", {
@@ -131,7 +135,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || "Failed to send the code.");
+        setError(data.error || "Failed to send the code.");
         return;
       }
       setSent(true);
@@ -146,9 +150,10 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
 
   const verify = async () => {
     if (code.length < OTP_LENGTH) {
-      toast.error("Enter the 6-digit verification code.");
+      setError("Enter the 6-digit verification code.");
       return;
     }
+    setError("");
     setVerifying(true);
     try {
       const res = await fetch("/api/auth/register/otp", {
@@ -163,7 +168,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || "Invalid or expired code.");
+        setError(data.error || "Invalid or expired code.");
         return;
       }
       onVerified(true);
@@ -248,6 +253,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
           ))}
         </div>
       )}
+      <FieldError>{error}</FieldError>
     </div>
   );
 }
@@ -260,6 +266,20 @@ export default function RegisterPage() {
   const [organizations, setOrganizations] = useState([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [selectedIsOther, setSelectedIsOther] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -366,18 +386,22 @@ export default function RegisterPage() {
       const digitsOnly = value.replace(/\D/g, "");
       setFormData((prev) => ({ ...prev, contactNumber: digitsOnly.slice(0, 11) }));
       setPhoneVerified(false);
+      clearError("contactNumber");
       return;
     }
     if (name === "email") {
       setFormData((prev) => ({ ...prev, email: value }));
       setEmailVerified(false);
+      clearError("email");
       return;
     }
+    clearError(name);
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleProvinceChange = async (code) => {
     const province = provinces.find((p) => p.code === code);
+    clearError("province", "city", "barangay");
     setFormData((prev) => ({
       ...prev,
       provinceCode: code,
@@ -399,6 +423,7 @@ export default function RegisterPage() {
 
   const handleCityChange = async (code) => {
     const city = cities.find((c) => c.code === code);
+    clearError("city", "barangay");
     setFormData((prev) => ({
       ...prev,
       cityCode: code,
@@ -416,6 +441,7 @@ export default function RegisterPage() {
   };
 
   const handleBarangayChange = (name) => {
+    clearError("barangay");
     setFormData((prev) => ({ ...prev, barangayName: name }));
   };
 
@@ -428,68 +454,51 @@ export default function RegisterPage() {
     return null;
   };
 
+  const validateForm = () => {
+    const next = {};
+    if (!formData.firstName) next.firstName = "First name is required.";
+    if (!formData.lastName) next.lastName = "Last name is required.";
+    if (!formData.gender) next.gender = "Please select your gender.";
+    if (!formData.birthday) next.birthday = "Please enter your birthday.";
+    if (!formData.addressLine.trim()) {
+      next.addressLine = "Please enter your house no. / street / purok.";
+    }
+    if (!formData.provinceCode) next.province = "Please select your province.";
+    if (!formData.cityCode) next.city = "Please select your city / municipality.";
+    if (!formData.barangayName) next.barangay = "Please select your barangay.";
+    if (!formData.email.trim()) next.email = "Email is required.";
+    if (!emailVerified) next.emailVerified = "Please verify your email address.";
+    if (!formData.contactNumber) next.contactNumber = "Contact number is required.";
+    else if (formData.contactNumber.length !== 11) {
+      next.contactNumber = "Contact number must be exactly 11 digits.";
+    }
+    if (!phoneVerified) next.phoneVerified = "Please verify your mobile number.";
+    if (!formData.organizationId && !formData.otherOrganization) {
+      next.organization = "Please select or enter your organization.";
+    }
+    if (!formData.password) {
+      next.password = "Password is required.";
+    } else {
+      const problem = validatePassword(formData.password);
+      if (problem) next.password = problem;
+    }
+    if (!formData.confirmPassword) {
+      next.confirmPassword = "Confirm your password.";
+    } else if (formData.password !== formData.confirmPassword) {
+      next.confirmPassword = "Passwords do not match.";
+    }
+    return next;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
-      toast.error("Please fill in all required fields.");
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
-
-    if (!emailVerified) {
-      toast.error("Please verify your email address first.");
-      return;
-    }
-
-    // Validate contact number
-    if (!formData.contactNumber || formData.contactNumber.length !== 11) {
-      toast.error("Contact number must be exactly 11 digits.");
-      return;
-    }
-
-    if (!phoneVerified) {
-      toast.error("Please verify your mobile number first.");
-      return;
-    }
-
-    if (!formData.gender) {
-      toast.error("Please select your gender.");
-      return;
-    }
-
-    if (!formData.birthday) {
-      toast.error("Please enter your birthday.");
-      return;
-    }
-
-    if (!formData.addressLine.trim()) {
-      toast.error("Please enter your street address.");
-      return;
-    }
-
-    if (!formData.provinceCode || !formData.cityCode || !formData.barangayName) {
-      toast.error("Please complete your province, city/municipality, and barangay.");
-      return;
-    }
-
-    if (!formData.organizationId && !formData.otherOrganization) {
-      toast.error("Please select or enter your organization.");
-      return;
-    }
-
-    // Validate password
-    const passwordError = validatePassword(formData.password);
-    if (passwordError) {
-      toast.error(passwordError);
-      return;
-    }
-
-    // Validate confirm password
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
-    }
+    setErrors({});
 
     setLoading(true);
 
@@ -627,8 +636,10 @@ export default function RegisterPage() {
                       onChange={handleChange}
                       placeholder="Juan"
                       className={FIELD_CLASS}
+                      aria-invalid={Boolean(errors.firstName)}
                       required
                     />
+                    <FieldError>{errors.firstName}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="middleName" className={LABEL_CLASS}>
@@ -654,8 +665,10 @@ export default function RegisterPage() {
                       onChange={handleChange}
                       placeholder="Santos"
                       className={FIELD_CLASS}
+                      aria-invalid={Boolean(errors.lastName)}
                       required
                     />
+                    <FieldError>{errors.lastName}</FieldError>
                   </div>
                 </div>
 
@@ -679,6 +692,7 @@ export default function RegisterPage() {
                         <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FieldError>{errors.gender}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="birthday" className={LABEL_CLASS}>
@@ -692,8 +706,10 @@ export default function RegisterPage() {
                       value={formData.birthday}
                       onChange={handleChange}
                       className={FIELD_CLASS}
+                      aria-invalid={Boolean(errors.birthday)}
                       required
                     />
+                    <FieldError>{errors.birthday}</FieldError>
                   </div>
                 </div>
               </section>
@@ -713,8 +729,10 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="e.g., 123 Rizal Street, Purok 4"
                     className={FIELD_CLASS}
+                    aria-invalid={Boolean(errors.addressLine)}
                     required
                   />
+                  <FieldError>{errors.addressLine}</FieldError>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -742,6 +760,7 @@ export default function RegisterPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <FieldError>{errors.province}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="city" className={LABEL_CLASS}>
@@ -772,6 +791,7 @@ export default function RegisterPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <FieldError>{errors.city}</FieldError>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="barangay" className={LABEL_CLASS}>
@@ -801,6 +821,7 @@ export default function RegisterPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <FieldError>{errors.barangay}</FieldError>
                   </div>
                 </div>
               </section>
@@ -822,9 +843,10 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="juan.santos@email.com"
                     className={FIELD_CLASS}
-                    aria-invalid={emailInvalid}
+                    aria-invalid={emailInvalid || Boolean(errors.email)}
                     required
                   />
+                  <FieldError>{errors.email}</FieldError>
                   {trimmedEmail && emailChecking ? (
                     <p className="text-sm text-muted-foreground">Checking email…</p>
                   ) : emailWarning ? (
@@ -843,8 +865,12 @@ export default function RegisterPage() {
                     channel="email"
                     target={trimmedEmail}
                     verified={emailVerified}
-                    onVerified={setEmailVerified}
+                    onVerified={(value) => {
+                      setEmailVerified(value);
+                      if (value) clearError("emailVerified");
+                    }}
                   />
+                  <FieldError>{errors.emailVerified}</FieldError>
                 </div>
 
                 {/* Phone + verification */}
@@ -859,15 +885,21 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="09123456789"
                     className={FIELD_CLASS}
+                    aria-invalid={Boolean(errors.contactNumber)}
                     required
                   />
+                  <FieldError>{errors.contactNumber}</FieldError>
                   <ContactVerifier
                     key={formData.contactNumber}
                     channel="sms"
                     target={formData.contactNumber}
                     verified={phoneVerified}
-                    onVerified={setPhoneVerified}
+                    onVerified={(value) => {
+                      setPhoneVerified(value);
+                      if (value) clearError("phoneVerified");
+                    }}
                   />
+                  <FieldError>{errors.phoneVerified}</FieldError>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -897,6 +929,7 @@ export default function RegisterPage() {
                       <Select
                         value={formData.organizationId}
                         onValueChange={(value) => {
+                          clearError("organization");
                           if (value === "other") {
                             setSelectedIsOther(true);
                             setFormData((prev) => ({
@@ -932,15 +965,20 @@ export default function RegisterPage() {
                         </SelectContent>
                       </Select>
                     )}
+                    <FieldError>{errors.organization}</FieldError>
                   </div>
                 </div>
                 {selectedIsOther && (
                   <Input
                     name="otherOrganization"
                     value={formData.otherOrganization}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      clearError("organization");
+                      handleChange(e);
+                    }}
                     placeholder="Enter your organization name"
                     className={FIELD_CLASS}
+                    aria-invalid={Boolean(errors.organization)}
                   />
                 )}
 
@@ -958,6 +996,7 @@ export default function RegisterPage() {
                         onChange={handleChange}
                         placeholder="At least 8 characters"
                         className={`${FIELD_CLASS} pr-10`}
+                        aria-invalid={Boolean(errors.password)}
                         required
                         minLength={8}
                       />
@@ -976,6 +1015,7 @@ export default function RegisterPage() {
                         )}
                       </Button>
                     </div>
+                    <FieldError>{errors.password}</FieldError>
                     <p className="text-sm text-muted-foreground">
                       Must be at least 8 characters with 1 uppercase, 1 lowercase,
                       1 number, and 1 special character.
@@ -994,6 +1034,7 @@ export default function RegisterPage() {
                         onChange={handleChange}
                         placeholder="Re-enter your password"
                         className={`${FIELD_CLASS} pr-10`}
+                        aria-invalid={Boolean(errors.confirmPassword)}
                         required
                         minLength={8}
                       />
@@ -1014,6 +1055,7 @@ export default function RegisterPage() {
                         )}
                       </Button>
                     </div>
+                    <FieldError>{errors.confirmPassword}</FieldError>
                   </div>
                 </div>
               </section>

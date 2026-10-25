@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import {
   Select,
   SelectContent,
@@ -71,6 +72,20 @@ function validateImageFile(file, label) {
   return null;
 }
 
+const FILE_ERROR_FIELDS = [
+  ["Official Receipt", "receiptFile"],
+  ["Certification", "certFile"],
+  ["Contract of Lease", "leaseFile"],
+  ["Document", "resubmitFile"],
+];
+
+function fileErrorField(message) {
+  const match = FILE_ERROR_FIELDS.find(([label]) =>
+    String(message).startsWith(`${label}:`)
+  );
+  return match ? { [match[1]]: message } : null;
+}
+
 function readPreview(file, setter) {
   if (!file) {
     setter("");
@@ -118,6 +133,21 @@ export default function ProvincialDocumentsPage() {
   const [resubmitTypeId, setResubmitTypeId] = React.useState("");
   const [resubmitFile, setResubmitFile] = React.useState(null);
   const [resubmitPreview, setResubmitPreview] = React.useState("");
+
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const selectedBooking = React.useMemo(
     () =>
@@ -270,25 +300,22 @@ export default function ProvincialDocumentsPage() {
     setResubmitPreview("");
   };
 
-  const onPickFile = (e, setFile, setPreview, label) => {
+  const onPickFile = (e, setFile, setPreview, label, errorKey) => {
     const selected = e.target.files?.[0];
     e.target.value = "";
     if (!selected) return;
     const error = validateImageFile(selected, label);
     if (error) {
-      toast.error(error);
+      setErrors((prev) => ({ ...prev, [errorKey]: error }));
       return;
     }
+    clearError(errorKey);
     setFile(selected);
     readPreview(selected, setPreview);
   };
 
   const handleUploadInitial = async (e) => {
     e.preventDefault();
-    if (!selectedReservationId) {
-      toast.error("Please select a reservation first.");
-      return;
-    }
     if (!showInitialForm) {
       toast.error(
         "Official Receipt is not available for upload on this reservation."
@@ -296,13 +323,19 @@ export default function ProvincialDocumentsPage() {
       return;
     }
 
+    const next = {};
+    if (!selectedReservationId) {
+      next.reservation = "Please select a reservation first.";
+    }
     if (phase.needsReceipt) {
       const err = validateImageFile(receiptFile, "Official Receipt");
-      if (err) {
-        toast.error(err);
-        return;
-      }
+      if (err) next.receiptFile = err;
     }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      return;
+    }
+    setErrors({});
 
     setUploading(true);
     try {
@@ -327,7 +360,13 @@ export default function ProvincialDocumentsPage() {
       resetInitialFiles();
       await loadDocumentsForReservation(selectedReservationId);
     } catch (err) {
-      toast.error(err.message || "Upload failed");
+      const message = err.message || "Upload failed";
+      const fieldError = fileErrorField(message);
+      if (fieldError) {
+        setErrors((prev) => ({ ...prev, ...fieldError }));
+      } else {
+        toast.error(message);
+      }
     } finally {
       setUploading(false);
     }
@@ -336,10 +375,6 @@ export default function ProvincialDocumentsPage() {
   const handleUploadFinal = async (e) => {
     e.preventDefault();
     if (isSportsComplex) return;
-    if (!selectedReservationId) {
-      toast.error("Please select a reservation first.");
-      return;
-    }
     if (!selectedPaidInFull) {
       toast.error(
         "Certification and Contract of Lease can only be uploaded once the reservation is fully paid."
@@ -353,20 +388,23 @@ export default function ProvincialDocumentsPage() {
       return;
     }
 
+    const next = {};
+    if (!selectedReservationId) {
+      next.reservation = "Please select a reservation first.";
+    }
     if (phase.needsCertification) {
       const err = validateImageFile(certFile, "Certification");
-      if (err) {
-        toast.error(err);
-        return;
-      }
+      if (err) next.certFile = err;
     }
     if (phase.needsLease) {
       const err = validateImageFile(leaseFile, "Contract of Lease");
-      if (err) {
-        toast.error(err);
-        return;
-      }
+      if (err) next.leaseFile = err;
     }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      return;
+    }
+    setErrors({});
 
     setUploading(true);
     try {
@@ -398,7 +436,13 @@ export default function ProvincialDocumentsPage() {
       resetFinalFiles();
       await loadDocumentsForReservation(selectedReservationId);
     } catch (err) {
-      toast.error(err.message || "Upload failed");
+      const message = err.message || "Upload failed";
+      const fieldError = fileErrorField(message);
+      if (fieldError) {
+        setErrors((prev) => ({ ...prev, ...fieldError }));
+      } else {
+        toast.error(message);
+      }
     } finally {
       setUploading(false);
     }
@@ -406,22 +450,23 @@ export default function ProvincialDocumentsPage() {
 
   const handleResubmit = async (e) => {
     e.preventDefault();
+    const next = {};
     if (!selectedReservationId) {
-      toast.error("Please select a reservation first.");
-      return;
+      next.reservation = "Please select a reservation first.";
     }
     if (!resubmitTypeId) {
-      toast.error("Select which declined document to resubmit.");
-      return;
+      next.resubmitTypeId = "Select which declined document to resubmit.";
     }
     const label =
       declinedResubmitOptions.find((o) => o.id === resubmitTypeId)?.name ||
       "Document";
     const fileErr = validateImageFile(resubmitFile, label);
-    if (fileErr) {
-      toast.error(fileErr);
+    if (fileErr) next.resubmitFile = fileErr;
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
 
     setUploading(true);
     try {
@@ -445,7 +490,13 @@ export default function ProvincialDocumentsPage() {
       resetResubmit();
       await loadDocumentsForReservation(selectedReservationId);
     } catch (err) {
-      toast.error(err.message || "Resubmit failed");
+      const message = err.message || "Resubmit failed";
+      const fieldError = fileErrorField(message);
+      if (fieldError) {
+        setErrors((prev) => ({ ...prev, ...fieldError }));
+      } else {
+        toast.error(message);
+      }
     } finally {
       setUploading(false);
     }
@@ -507,9 +558,13 @@ export default function ProvincialDocumentsPage() {
                 resetInitialFiles();
                 resetFinalFiles();
                 resetResubmit();
+                setErrors({});
               }}
             >
-              <SelectTrigger id="booking-select">
+              <SelectTrigger
+                id="booking-select"
+                aria-invalid={Boolean(errors.reservation)}
+              >
                 <SelectValue
                   placeholder={
                     bookingsLoading
@@ -531,6 +586,7 @@ export default function ProvincialDocumentsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <FieldError>{errors.reservation}</FieldError>
           </div>
           {selectedBooking && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -599,15 +655,18 @@ export default function ProvincialDocumentsPage() {
                             id="receipt-file"
                             type="file"
                             accept="image/jpeg,image/png,image/gif,image/webp"
+                            aria-invalid={Boolean(errors.receiptFile)}
                             onChange={(e) =>
                               onPickFile(
                                 e,
                                 setReceiptFile,
                                 setReceiptPreview,
-                                "Official Receipt"
+                                "Official Receipt",
+                                "receiptFile"
                               )
                             }
                           />
+                          <FieldError>{errors.receiptFile}</FieldError>
                           {receiptPreview && (
                             <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
                               <img
@@ -664,15 +723,18 @@ export default function ProvincialDocumentsPage() {
                             id="cert-file"
                             type="file"
                             accept="image/jpeg,image/png,image/gif,image/webp"
+                            aria-invalid={Boolean(errors.certFile)}
                             onChange={(e) =>
                               onPickFile(
                                 e,
                                 setCertFile,
                                 setCertPreview,
-                                "Certification"
+                                "Certification",
+                                "certFile"
                               )
                             }
                           />
+                          <FieldError>{errors.certFile}</FieldError>
                           {certPreview && (
                             <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
                               <img
@@ -691,15 +753,18 @@ export default function ProvincialDocumentsPage() {
                             id="lease-file"
                             type="file"
                             accept="image/jpeg,image/png,image/gif,image/webp"
+                            aria-invalid={Boolean(errors.leaseFile)}
                             onChange={(e) =>
                               onPickFile(
                                 e,
                                 setLeaseFile,
                                 setLeasePreview,
-                                "Contract of Lease"
+                                "Contract of Lease",
+                                "leaseFile"
                               )
                             }
                           />
+                          <FieldError>{errors.leaseFile}</FieldError>
                           {leasePreview && (
                             <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
                               <img
@@ -744,9 +809,15 @@ export default function ProvincialDocumentsPage() {
                       <Label htmlFor="resubmit-type">Document Type</Label>
                       <Select
                         value={resubmitTypeId}
-                        onValueChange={setResubmitTypeId}
+                        onValueChange={(value) => {
+                          setResubmitTypeId(value);
+                          clearError("resubmitTypeId");
+                        }}
                       >
-                        <SelectTrigger id="resubmit-type">
+                        <SelectTrigger
+                          id="resubmit-type"
+                          aria-invalid={Boolean(errors.resubmitTypeId)}
+                        >
                           <SelectValue placeholder="Select declined document" />
                         </SelectTrigger>
                         <SelectContent>
@@ -757,6 +828,7 @@ export default function ProvincialDocumentsPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FieldError>{errors.resubmitTypeId}</FieldError>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="resubmit-file">Corrected Image</Label>
@@ -764,15 +836,18 @@ export default function ProvincialDocumentsPage() {
                         id="resubmit-file"
                         type="file"
                         accept="image/jpeg,image/png,image/gif,image/webp"
+                        aria-invalid={Boolean(errors.resubmitFile)}
                         onChange={(e) =>
                           onPickFile(
                             e,
                             setResubmitFile,
                             setResubmitPreview,
-                            "Resubmission"
+                            "Resubmission",
+                            "resubmitFile"
                           )
                         }
                       />
+                      <FieldError>{errors.resubmitFile}</FieldError>
                       {resubmitPreview && (
                         <div className="relative h-40 overflow-hidden rounded-md border bg-muted/20">
                           <img

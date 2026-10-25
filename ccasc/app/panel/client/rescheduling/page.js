@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldError } from "@/components/ui/field-error";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -50,6 +51,21 @@ export default function ClientReschedulingPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState("");
   const [cancelling, setCancelling] = React.useState(false);
+
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const selected = React.useMemo(
     () => reservations.find((r) => r.id === selectedReservation) || null,
@@ -167,21 +183,12 @@ export default function ClientReschedulingPage() {
   }
 
   const handleDateDraftChange = (key, dateStr) => {
+    clearError("eventDates");
     setDateDrafts((prev) => ({ ...prev, [key]: dateStr }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selected || !reason.trim()) {
-      toast.error("Please select a reservation and provide a reason");
-      return;
-    }
-    if (pendingReservationIds.has(selected.id)) {
-      toast.error(
-        "This event already has a reschedule request pending review."
-      );
-      return;
-    }
 
     const dateChanges = [];
     for (const entry of eventEntries) {
@@ -196,8 +203,22 @@ export default function ClientReschedulingPage() {
       });
     }
 
-    if (dateChanges.length === 0) {
-      toast.error("Select at least one new event date before submitting.");
+    const next = {};
+    if (!selected) next.reservation = "Please select a reservation.";
+    if (!reason.trim()) next.reason = "Please provide a reason.";
+    if (selected && dateChanges.length === 0) {
+      next.eventDates = "Select at least one new event date before submitting.";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      return;
+    }
+    setErrors({});
+
+    if (pendingReservationIds.has(selected.id)) {
+      toast.error(
+        "This event already has a reschedule request pending review."
+      );
       return;
     }
 
@@ -327,8 +348,12 @@ export default function ClientReschedulingPage() {
                 <select
                   id="reservation"
                   value={selectedReservation}
-                  onChange={(e) => setSelectedReservation(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedReservation(e.target.value);
+                    clearError("reservation", "eventDates");
+                  }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  aria-invalid={Boolean(errors.reservation)}
                 >
                   <option value="">Select a reservation</option>
                   {rescheduleEligible.length === 0 && (
@@ -354,16 +379,20 @@ export default function ClientReschedulingPage() {
                       );
                     })}
                 </select>
+                <FieldError>{errors.reservation}</FieldError>
               </div>
 
               {selected && (
-                <RescheduleEventDatesPanel
-                  reservation={selected}
-                  eventEntries={eventEntries}
-                  dateDrafts={dateDrafts}
-                  onDateDraftChange={handleDateDraftChange}
-                  entryKey={entryKey}
-                />
+                <>
+                  <RescheduleEventDatesPanel
+                    reservation={selected}
+                    eventEntries={eventEntries}
+                    dateDrafts={dateDrafts}
+                    onDateDraftChange={handleDateDraftChange}
+                    entryKey={entryKey}
+                  />
+                  <FieldError>{errors.eventDates}</FieldError>
+                </>
               )}
 
               <div className="space-y-2">
@@ -374,10 +403,15 @@ export default function ClientReschedulingPage() {
                   id="reason"
                   placeholder="Explain why you need to reschedule..."
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    clearError("reason");
+                  }}
                   rows={3}
+                  aria-invalid={Boolean(errors.reason)}
                   required
                 />
+                <FieldError>{errors.reason}</FieldError>
               </div>
 
               <Button

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { toast } from "sonner";
 import { Search, Package, RefreshCw } from "lucide-react";
 import { Pagination } from "@/components/pagination";
@@ -27,6 +28,7 @@ export default function CoordinatorAmenitiesPage() {
   const [editItem, setEditItem] = useState(null);
   const [editQuantity, setEditQuantity] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -63,9 +65,10 @@ export default function CoordinatorAmenitiesPage() {
     if (!editItem) return;
     const qty = parseInt(editQuantity, 10);
     if (isNaN(qty) || qty < 0) {
-      toast.error("Please enter a valid quantity");
+      setErrors({ quantity: "Please enter a valid quantity" });
       return;
     }
+    setErrors({});
 
     setSaving(true);
     try {
@@ -86,6 +89,7 @@ export default function CoordinatorAmenitiesPage() {
       setEditOpen(false);
       setEditItem(null);
       setEditQuantity("");
+      setErrors({});
     } catch (err) {
       toast.error(err.message || "Failed to update quantity");
     } finally {
@@ -203,6 +207,7 @@ export default function CoordinatorAmenitiesPage() {
                       onClick={() => {
                         setEditItem(item);
                         setEditQuantity(String(item.totalQuantity));
+                        setErrors({});
                         setEditOpen(true);
                       }}
                     >
@@ -243,8 +248,13 @@ export default function CoordinatorAmenitiesPage() {
                   type="number"
                   min="0"
                   value={editQuantity}
-                  onChange={(e) => setEditQuantity(e.target.value)}
+                  onChange={(e) => {
+                    setEditQuantity(e.target.value);
+                    setErrors({});
+                  }}
+                  aria-invalid={Boolean(errors.quantity)}
                 />
+                <FieldError>{errors.quantity}</FieldError>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -254,6 +264,7 @@ export default function CoordinatorAmenitiesPage() {
                     setEditOpen(false);
                     setEditItem(null);
                     setEditQuantity("");
+                    setErrors({});
                   }}
                 >
                   Cancel

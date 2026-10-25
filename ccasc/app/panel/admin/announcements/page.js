@@ -39,6 +39,7 @@ import { Pagination } from "@/components/pagination";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldError } from "@/components/ui/field-error";
 import { toast } from "sonner";
 import {
   Archive,
@@ -101,6 +102,20 @@ export default function AnnouncementsPage() {
   const [archivingId, setArchivingId] = React.useState(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = React.useState(null);
   const [page, setPage] = React.useState(1);
+  const [errors, setErrors] = React.useState({});
+
+  const clearError = (...names) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const name of names) {
+        if (next[name]) {
+          delete next[name];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
 
   const loadAnnouncements = React.useCallback(async () => {
     try {
@@ -212,6 +227,7 @@ const activeAudienceCount = React.useMemo(() => {
   };
 
   const resetForm = () => {
+    setErrors({});
     setTitle("");
     setMessage("");
     setStartDate("");
@@ -231,10 +247,15 @@ const activeAudienceCount = React.useMemo(() => {
 
   const postAnnouncement = async () => {
     if (!canPost || posting) return;
+    const next = {};
     if (startDate && endDate && endDate < startDate) {
-      toast.error("The end date must be on or after the start date.");
+      next.endDate = "The end date must be on or after the start date.";
+    }
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
+    setErrors({});
     setPosting(true);
 
     const payload = {

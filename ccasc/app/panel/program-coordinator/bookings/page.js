@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError } from "@/components/ui/field-error";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Search, CheckCircle2, XCircle, AlertTriangle, FileText, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
@@ -68,6 +69,7 @@ function CoordinatorBookingsContent() {
   const [previewDoc, setPreviewDoc] = useState(null);
   const [resubmitDoc, setResubmitDoc] = useState(null);
   const [resubmitMessage, setResubmitMessage] = useState("");
+  const [errors, setErrors] = useState({});
   // Document awaiting a verify confirmation, or null.
   const [verifyDoc, setVerifyDoc] = useState(null);
   const [activeTab, setActiveTab] = useState("pending");
@@ -289,9 +291,10 @@ function CoordinatorBookingsContent() {
   async function handleRequestResubmit(docId) {
     const message = resubmitMessage.trim();
     if (!message) {
-      toast.error("Please provide a reason for resubmission");
+      setErrors({ resubmitMessage: "Please provide a reason for resubmission" });
       return;
     }
+    setErrors({});
     // Optimistically update UI
     updateDocumentInState(docId, { status: "Declined", remarks: message });
     setResubmitDoc(null);
@@ -736,6 +739,7 @@ function CoordinatorBookingsContent() {
                                 onClick={() => {
                                   setResubmitDoc(doc);
                                   setResubmitMessage("");
+                                  setErrors({});
                                 }}
                               >
                                 <ThumbsDown className="size-3 mr-1" />
@@ -1046,13 +1050,21 @@ function CoordinatorBookingsContent() {
             <Textarea
               placeholder="Enter reason for resubmission..."
               value={resubmitMessage}
-              onChange={(e) => setResubmitMessage(e.target.value)}
+              onChange={(e) => {
+                setResubmitMessage(e.target.value);
+                setErrors({});
+              }}
+              aria-invalid={Boolean(errors.resubmitMessage)}
               className="min-h-[100px] mb-4"
             />
+            <FieldError>{errors.resubmitMessage}</FieldError>
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
-                onClick={() => setResubmitDoc(null)}
+                onClick={() => {
+                  setResubmitDoc(null);
+                  setErrors({});
+                }}
               >
                 Cancel
               </Button>
