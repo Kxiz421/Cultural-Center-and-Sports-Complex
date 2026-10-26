@@ -84,7 +84,7 @@ export default function ClientLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "navbar-surface fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/20 text-white transition-transform duration-200 lg:static lg:translate-x-0 print:hidden",
+          "navbar-surface fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/20 text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:translate-x-0 print:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -96,27 +96,6 @@ export default function ClientLayout({ children }) {
           >
             {displayName}
           </span>
-          <button
-            type="button"
-            title="View my profile"
-            onClick={() => {
-              router.push("/panel/client/profile");
-              setSidebarOpen(false);
-            }}
-            className="shrink-0 rounded-full transition-transform hover:scale-105"
-          >
-            {profilePhoto ? (
-              <img
-                src={profilePhoto}
-                alt=""
-                className="size-12 rounded-full object-cover ring-2 ring-white/30"
-              />
-            ) : (
-              <span className="flex size-12 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/30">
-                <UserRound className="size-7" />
-              </span>
-            )}
-          </button>
           <Button
             variant="ghost"
             size="icon"
@@ -174,7 +153,7 @@ export default function ClientLayout({ children }) {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <header className="navbar-surface flex h-16 items-center gap-4 border-b border-white/20 px-4 text-white lg:px-6 print:hidden">
+        <header className="navbar-surface sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/20 px-4 text-white lg:px-6 print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -184,8 +163,26 @@ export default function ClientLayout({ children }) {
             <Menu className="size-5" />
           </Button>
           <div className="flex-1" />
-          <NotificationBell audience="client" />
           <ThemeToggle />
+          <NotificationBell audience="client" />
+          <button
+            type="button"
+            title="View my profile"
+            onClick={() => router.push("/panel/client/profile")}
+            className="shrink-0 rounded-full transition-transform hover:scale-105"
+          >
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt="My profile"
+                className="size-9 rounded-full object-cover ring-2 ring-white/30"
+              />
+            ) : (
+              <span className="flex size-9 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/30">
+                <UserRound className="size-5" />
+              </span>
+            )}
+          </button>
         </header>
         <main className={cn("flex-1", isOrderOfPayment ? "p-4 lg:p-6 print:p-0" : "p-4 lg:p-6")}>
           {children}
