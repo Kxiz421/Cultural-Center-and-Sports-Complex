@@ -9,6 +9,7 @@ import {
 } from "@/lib/register-otp";
 
 const ALLOWED_GENDERS = ["Male", "Female", "Other"];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Parse a "YYYY-MM-DD" birthday into a Date, or null when invalid/absent. */
 function parseBirthday(value) {
@@ -20,6 +21,26 @@ function parseBirthday(value) {
   return date;
 }
 
+function sanitizeUsername(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "");
+}
+
+async function usernameTaken(candidate) {
+  const [staff, client] = await Promise.all([
+    prisma.staff.findUnique({
+      where: { username: candidate },
+      select: { staffId: true },
+    }),
+    prisma.client.findUnique({
+      where: { username: candidate },
+      select: { clientId: true },
+    }),
+  ]);
+  return Boolean(staff || client);
+}
+
 export async function POST(request) {
   try {
     const {
@@ -27,8 +48,8 @@ export async function POST(request) {
       middleName,
       lastName,
       username,
-      email,
-      contactNumber,
+      email: rawEmail,
+      contactNumber: rawPhone,
       password,
       organizationId,
       otherOrganization,
@@ -38,13 +59,26 @@ export async function POST(request) {
       province,
       city,
       barangay,
+      idProof: rawIdProof,
       verifiedChannel,
     } = await request.json();
 
+    const email = String(rawEmail ?? "").trim() || null;
+    const contactNumber = String(rawPhone ?? "").trim() || null;
+    const idProof = String(rawIdProof ?? "").trim() || null;
+
     // Validate required fields
-    if (!firstName || !lastName || !email || !password) {
+    if (!firstName || !lastName || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // The client fills at least one contact and verifies that one.
+    if (!email && !contactNumber) {
+      return NextResponse.json(
+        { error: "Enter either an email address or a mobile number." },
         { status: 400 }
       );
     }
@@ -56,16 +90,16 @@ export async function POST(request) {
       );
     }
 
-    // Validate email format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Validate email format (only when one was given)
+    if (email && !EMAIL_RE.test(email)) {
       return NextResponse.json(
         { error: "Invalid email format" },
         { status: 400 }
       );
     }
 
-    // Mobile number is required and must be a valid PH mobile.
-    if (!toE164Ph(contactNumber)) {
+    // Mobile number must be a valid PH mobile when one was given.
+    if (contactNumber && !toE164Ph(contactNumber)) {
       return NextResponse.json(
         { error: "Enter a valid mobile number (e.g., 09171234567)." },
         { status: 400 }
@@ -130,32 +164,49 @@ export async function POST(request) {
       );
     }
 
-    // Use provided username or generate from email prefix
-    const finalUsername = username
-      ? username.toLowerCase().replace(/[^a-z0-9._-]/g, "")
-      : email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "");
-
-    // Check for duplicate email in both staff and client tables
-    const [existingStaffEmail, existingClientEmail] = await Promise.all([
-      prisma.staff.findUnique({ where: { email } }),
-      prisma.client.findUnique({ where: { email } }),
-    ]);
-    if (existingStaffEmail || existingClientEmail) {
-      return NextResponse.json(
-        { error: "An account with this email already exists" },
-        { status: 409 }
-      );
+    // Check for duplicate email in both staff and client tables (skipped when
+    // no email was given).
+    if (email) {
+      const [existingStaffEmail, existingClientEmail] = await Promise.all([
+        prisma.staff.findUnique({ where: { email } }),
+        prisma.client.findUnique({ where: { email } }),
+      ]);
+      if (existingStaffEmail || existingClientEmail) {
+        return NextResponse.json(
+          { error: "An account with this email already exists" },
+          { status: 409 }
+        );
+      }
     }
 
-    // Check for duplicate username
-    if (finalUsername) {
-      const [existingStaffUser, existingClientUser] = await Promise.all([
-        prisma.staff.findUnique({ where: { username: finalUsername } }),
-        prisma.client.findUnique({ where: { username: finalUsername } }),
-      ]);
-      if (existingStaffUser || existingClientUser) {
+    // Resolve a unique username. A typed one must be free; a generated one may
+    // take a numeric suffix so registration still succeeds.
+    const providedUsername = sanitizeUsername(username).slice(0, 90);
+    const generatedBase =
+      providedUsername ||
+      (email ? sanitizeUsername(email.split("@")[0]) : "") ||
+      (contactNumber ? `user${contactNumber.replace(/\D/g, "").slice(-6)}` : "") ||
+      "client";
+    let finalUsername = generatedBase.slice(0, 90) || "client";
+
+    if (await usernameTaken(finalUsername)) {
+      if (providedUsername) {
         return NextResponse.json(
           { error: "This username is already taken. Please choose a different one." },
+          { status: 409 }
+        );
+      }
+      let resolved = false;
+      for (let attempt = 0; attempt < 5 && !resolved; attempt += 1) {
+        const candidate = `${finalUsername}${Math.floor(1000 + Math.random() * 9000)}`.slice(0, 100);
+        if (!(await usernameTaken(candidate))) {
+          finalUsername = candidate;
+          resolved = true;
+        }
+      }
+      if (!resolved) {
+        return NextResponse.json(
+          { error: "We couldn't set up a username automatically. Please choose one." },
           { status: 409 }
         );
       }
@@ -164,17 +215,31 @@ export async function POST(request) {
     // The registrant chooses ONE contact channel (email or SMS) and proves it
     // with a one-time code; that chosen contact must be verified before the
     // account can be created.
-    const channel = verifiedChannel === REGISTER_CHANNEL.SMS ? REGISTER_CHANNEL.SMS : verifiedChannel === REGISTER_CHANNEL.EMAIL ? REGISTER_CHANNEL.EMAIL : null;
+    const channel =
+      verifiedChannel === REGISTER_CHANNEL.SMS
+        ? REGISTER_CHANNEL.SMS
+        : verifiedChannel === REGISTER_CHANNEL.EMAIL
+          ? REGISTER_CHANNEL.EMAIL
+          : null;
     if (!channel) {
       return NextResponse.json(
         { error: "Choose whether to verify by email or mobile number." },
         { status: 400 }
       );
     }
-    const verified = await isRegistrationTargetVerified(
-      channel,
-      channel === REGISTER_CHANNEL.SMS ? contactNumber : email
-    );
+    const target = channel === REGISTER_CHANNEL.SMS ? contactNumber : email;
+    if (!target) {
+      return NextResponse.json(
+        {
+          error:
+            channel === REGISTER_CHANNEL.SMS
+              ? "Enter a mobile number to verify."
+              : "Enter an email address to verify.",
+        },
+        { status: 400 }
+      );
+    }
+    const verified = await isRegistrationTargetVerified(channel, target);
     if (!verified) {
       return NextResponse.json(
         {
@@ -227,6 +292,7 @@ export async function POST(request) {
         email,
         contactNumber,
         password: hashedPassword,
+        idProof,
         gender,
         birthday: parseBirthday(birthday),
         addressLine: String(addressLine).trim(),
@@ -249,6 +315,7 @@ export async function POST(request) {
       {
         message: "Registration successful. You can now sign in.",
         clientId: `CLT-${client.clientId}`,
+        username: finalUsername,
       },
       { status: 201 }
     );

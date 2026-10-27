@@ -88,8 +88,8 @@ model Client {
   firstName          String  @map("first_name") @db.VarChar(100)
   middleName         String? @map("middle_name") @db.VarChar(100)
   lastName           String  @map("last_name") @db.VarChar(100)
-  email              String  @unique @map("email") @db.VarChar(150)
-  contactNumber      String  @map("contact_number") @db.VarChar(20)
+  email              String? @unique @map("email") @db.VarChar(150)
+  contactNumber      String? @map("contact_number") @db.VarChar(20)
   password           String  @map("password") @db.VarChar(255)
   idProof            String? @map("id_proof") @db.Text
   accountStatus      String  @default("Active") @map("account_status") @db.VarChar(50)

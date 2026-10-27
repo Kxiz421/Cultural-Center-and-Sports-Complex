@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
+import { signIn, getSession } from "next-auth/react";
 import {
   Eye,
   EyeOff,
@@ -11,9 +12,12 @@ import {
   CheckCircle2,
   Mail,
   Phone,
+  Upload,
+  FileText,
 } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
+import { uploadIdProof } from "@/lib/upload-id-proof";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   TransitionLink,
@@ -29,6 +33,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/ui/field-error";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { WizardSteps, WizardNav } from "@/components/reservation-wizard";
 import { cn } from "@/lib/utils";
 import {
@@ -49,16 +61,14 @@ const LABEL_CLASS = "text-base";
 
 const OTP_LENGTH = 6;
 
-const STEP_PERSONAL = 0;
-const STEP_ADDRESS = 1;
-const STEP_CONTACT = 2;
-const STEP_ACCOUNT = 3;
-const WIZARD_STEPS = ["Personal Information", "Address", "Contact", "Account & Review"];
+const STEP_DETAILS = 0;
+const STEP_VERIFY = 1;
+const STEP_REVIEW = 2;
+const WIZARD_STEPS = ["Personal Information", "Verify Contact", "Account Overview"];
 const STEP_HINTS = [
-  "Tell us who you are. Fields marked with * are required.",
-  "Where can we reach you? Complete your province, city/municipality, and barangay.",
-  "Choose ONE way to verify your registration (SMS or email) and enter the code we send.",
-  "Set up your sign-in details, then review everything before confirming.",
+  "Fill in your details. Provide at least one contact - an email address or a mobile number - to verify in the next step.",
+  "Choose the contact you want to verify, then enter the code we send you.",
+  "Review everything below. You can edit your details before confirming.",
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -280,7 +290,9 @@ function SummaryRow({ label, value }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border/60 py-2 last:border-b-0">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-right text-sm font-medium">{value || "—"}</span>
+      <span className="min-w-0 text-right text-sm font-medium break-words">
+        {value || "—"}
+      </span>
     </div>
   );
 }
@@ -288,13 +300,18 @@ function SummaryRow({ label, value }) {
 export default function RegisterPage() {
   const { start: startRouteTransition } = useRouteTransition();
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(STEP_PERSONAL);
+  const [step, setStep] = useState(STEP_DETAILS);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [organizations, setOrganizations] = useState([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [selectedIsOther, setSelectedIsOther] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const [idUploading, setIdUploading] = useState(false);
+  const [idError, setIdError] = useState("");
+  const idInputRef = useRef(null);
 
   const clearError = (...names) =>
     setErrors((prev) => {
@@ -328,6 +345,7 @@ export default function RegisterPage() {
     cityCode: "",
     cityName: "",
     barangayName: "",
+    idProof: "",
   });
   const [emailCheck, setEmailCheck] = useState(null);
   const [emailChecking, setEmailChecking] = useState(false);
@@ -473,6 +491,31 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, barangayName: name }));
   };
 
+  const handleIdPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setIdError("Choose an image file (JPEG, PNG, GIF, or WebP).");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setIdError("File must be 50MB or smaller.");
+      return;
+    }
+    setIdError("");
+    setIdUploading(true);
+    try {
+      const url = await uploadIdProof(file);
+      setFormData((prev) => ({ ...prev, idProof: url }));
+      clearError("idProof");
+    } catch (err) {
+      setIdError(err.message || "Failed to upload the file.");
+    } finally {
+      setIdUploading(false);
+    }
+  };
+
   const validatePassword = (password) => {
     if (password.length < 8) return "Password must be at least 8 characters long.";
     if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter.";
@@ -482,50 +525,35 @@ export default function RegisterPage() {
     return null;
   };
 
-  const validatePersonal = () => {
+  const validateDetails = () => {
     const next = {};
     if (!formData.firstName.trim()) next.firstName = "First name is required.";
     if (!formData.lastName.trim()) next.lastName = "Last name is required.";
     if (!formData.gender) next.gender = "Please select your gender.";
     if (!formData.birthday) next.birthday = "Please enter your birthday.";
-    return next;
-  };
-
-  const validateAddress = () => {
-    const next = {};
+    if (!formData.idProof) next.idProof = "Please upload a valid ID or certificate.";
     if (!formData.addressLine.trim()) {
       next.addressLine = "Please enter your house no. / street / purok.";
     }
     if (!formData.provinceCode) next.province = "Please select your province.";
     if (!formData.cityCode) next.city = "Please select your city / municipality.";
     if (!formData.barangayName) next.barangay = "Please select your barangay.";
-    return next;
-  };
 
-  const validateContact = () => {
-    const next = {};
     const email = formData.email.trim();
-    if (!email) next.email = "Email is required.";
-    else if (!EMAIL_RE.test(email)) next.email = "Enter a valid email address.";
-
     const digits = formData.contactNumber.replace(/\D/g, "");
-    if (!digits) next.contactNumber = "Contact number is required.";
-    else if (digits.length !== 11) {
-      next.contactNumber = "Contact number must be exactly 11 digits.";
+    if (!email && !digits) {
+      const message = "Enter an email address or a mobile number.";
+      next.email = message;
+      next.contactNumber = message;
+    } else {
+      if (email && !EMAIL_RE.test(email)) {
+        next.email = "Enter a valid email address.";
+      }
+      if (digits && digits.length !== 11) {
+        next.contactNumber = "Contact number must be exactly 11 digits.";
+      }
     }
 
-    const verified = verifyChannel === "email" ? emailVerified : phoneVerified;
-    if (!verified) {
-      next.verification =
-        verifyChannel === "email"
-          ? "Please verify your email address."
-          : "Please verify your mobile number.";
-    }
-    return next;
-  };
-
-  const validateAccount = () => {
-    const next = {};
     if (!formData.organizationId && !formData.otherOrganization) {
       next.organization = "Please select or enter your organization.";
     }
@@ -543,10 +571,31 @@ export default function RegisterPage() {
     return next;
   };
 
-  const validators = [validatePersonal, validateAddress, validateContact, validateAccount];
+  const hasEmail = Boolean(formData.email.trim());
+  const hasPhone = Boolean(formData.contactNumber.replace(/\D/g, ""));
+  const effectiveChannel =
+    verifyChannel === "email"
+      ? hasEmail
+        ? "email"
+        : "sms"
+      : hasPhone
+        ? "sms"
+        : "email";
+
+  const validateVerify = () => {
+    const next = {};
+    const verified = effectiveChannel === "email" ? emailVerified : phoneVerified;
+    if (!verified) {
+      next.verification =
+        effectiveChannel === "email"
+          ? "Please verify your email address."
+          : "Please verify your mobile number.";
+    }
+    return next;
+  };
 
   const goNext = () => {
-    const stepErrors = validators[step]();
+    const stepErrors = step === STEP_DETAILS ? validateDetails() : validateVerify();
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       return;
@@ -555,10 +604,8 @@ export default function RegisterPage() {
     setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
   };
 
-  const handleConfirm = async (e) => {
-    e.preventDefault();
-
-    const perStep = validators.map((validate) => validate());
+  const requestConfirm = () => {
+    const perStep = [validateDetails(), validateVerify()];
     const merged = Object.assign({}, ...perStep);
     const firstBad = perStep.findIndex((errs) => Object.keys(errs).length > 0);
     if (firstBad >= 0) {
@@ -567,6 +614,11 @@ export default function RegisterPage() {
       return;
     }
     setErrors({});
+    setConfirmOpen(true);
+  };
+
+  const submitRegistration = async () => {
+    setConfirmOpen(false);
     setLoading(true);
 
     try {
@@ -589,7 +641,8 @@ export default function RegisterPage() {
           province: formData.provinceName,
           city: formData.cityName,
           barangay: formData.barangayName,
-          verifiedChannel: verifyChannel,
+          idProof: formData.idProof,
+          verifiedChannel: effectiveChannel,
         }),
       });
 
@@ -598,29 +651,47 @@ export default function RegisterPage() {
       if (!res.ok) {
         if (res.status === 409 && /email/i.test(data.error || "")) {
           setErrors({ email: data.error });
-          setStep(STEP_CONTACT);
+          setStep(STEP_DETAILS);
           return;
         }
         if (res.status === 409 && /username/i.test(data.error || "")) {
           setErrors({ username: data.error });
-          setStep(STEP_ACCOUNT);
+          setStep(STEP_DETAILS);
           return;
         }
         if (res.status === 400 && /verify/i.test(data.error || "")) {
           setErrors({ verification: data.error });
-          setStep(STEP_CONTACT);
+          setStep(STEP_VERIFY);
           return;
         }
         toast.error(data.error || "Registration failed");
         return;
       }
 
-      toast.success("Registration successful! You can now sign in with your account.");
-      // Covered transition into the sign-in page (see
-      // `components/route-transition.jsx`); the success toast still shows
-      // because sonner renders above the curtain.
+      // Sign the new client in and land them on the facility calendar.
+      const identifier = data.username || formData.email.trim();
+      try {
+        await signIn("credentials", {
+          email: identifier,
+          password: formData.password,
+          redirect: false,
+        });
+        const session = await getSession();
+        if (session?.user?.type) {
+          toast.success("Welcome! Your account is ready.");
+          const home = "/panel/client/calendar";
+          if (!startRouteTransition(home, "Setting up your account…", { hard: true })) {
+            window.location.assign(home);
+          }
+          return;
+        }
+      } catch {
+        // Fall through to the manual sign-in path below.
+      }
+
+      toast.success("Account created. Please sign in to continue.");
       startRouteTransition("/login");
-    } catch (error) {
+    } catch {
       toast.error("An error occurred during registration.");
     } finally {
       setLoading(false);
@@ -645,7 +716,7 @@ export default function RegisterPage() {
     formData.organizationId && formData.organizationId !== "other"
       ? organizations.find(
           (org) => String(org.clientOrgId) === String(formData.organizationId)
-        )?.organizationName || "—"
+        )?.organizationName || ""
       : formData.otherOrganization || "";
 
   const fullAddress = [
@@ -657,6 +728,10 @@ export default function RegisterPage() {
     .map((part) => String(part || "").trim())
     .filter(Boolean)
     .join(", ");
+
+  const fullName = [formData.firstName, formData.middleName, formData.lastName]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -715,347 +790,339 @@ export default function RegisterPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Client Registration</CardTitle>
             <p className="text-muted-foreground text-base">
-              Create an account to book facilities. Choose one contact channel to
-              verify, then review your details before confirming.
+              Fill in your details, verify one contact (email or mobile), then
+              review everything before confirming.
             </p>
           </CardHeader>
-          <form onSubmit={handleConfirm} noValidate>
+          <form onSubmit={(e) => e.preventDefault()} noValidate>
             <CardContent className="space-y-8">
               <WizardSteps steps={WIZARD_STEPS} current={step} onSelect={setStep} />
               <p className="text-muted-foreground -mt-4 text-sm">
                 {STEP_HINTS[step]}
               </p>
 
-              {/* Step 1 — Personal Information */}
-              {step === STEP_PERSONAL && (
-                <section className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName" className={LABEL_CLASS}>
-                        First Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleChange}
-                        placeholder="Juan"
-                        className={FIELD_CLASS}
-                        aria-invalid={Boolean(errors.firstName)}
-                      />
-                      <FieldError>{errors.firstName}</FieldError>
+              {/* Step 1 — Personal info, ID photo, address, contact, account */}
+              {step === STEP_DETAILS && (
+                <div className="space-y-8">
+                  <section className="space-y-4">
+                    <h2 className="text-lg font-semibold">Personal Information</h2>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName" className={LABEL_CLASS}>
+                          First Name <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="firstName"
+                          name="firstName"
+                          value={formData.firstName}
+                          onChange={handleChange}
+                          placeholder="Juan"
+                          className={FIELD_CLASS}
+                          aria-invalid={Boolean(errors.firstName)}
+                        />
+                        <FieldError>{errors.firstName}</FieldError>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="middleName" className={LABEL_CLASS}>
+                          Middle Name
+                        </Label>
+                        <Input
+                          id="middleName"
+                          name="middleName"
+                          value={formData.middleName}
+                          onChange={handleChange}
+                          placeholder="Dela Cruz"
+                          className={FIELD_CLASS}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName" className={LABEL_CLASS}>
+                          Last Name <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="lastName"
+                          name="lastName"
+                          value={formData.lastName}
+                          onChange={handleChange}
+                          placeholder="Santos"
+                          className={FIELD_CLASS}
+                          aria-invalid={Boolean(errors.lastName)}
+                        />
+                        <FieldError>{errors.lastName}</FieldError>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="middleName" className={LABEL_CLASS}>
-                        Middle Name
-                      </Label>
-                      <Input
-                        id="middleName"
-                        name="middleName"
-                        value={formData.middleName}
-                        onChange={handleChange}
-                        placeholder="Dela Cruz"
-                        className={FIELD_CLASS}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName" className={LABEL_CLASS}>
-                        Last Name <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        value={formData.lastName}
-                        onChange={handleChange}
-                        placeholder="Santos"
-                        className={FIELD_CLASS}
-                        aria-invalid={Boolean(errors.lastName)}
-                      />
-                      <FieldError>{errors.lastName}</FieldError>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="gender" className={LABEL_CLASS}>
-                        Gender <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.gender}
-                        onValueChange={(value) => {
-                          clearError("gender");
-                          setFormData((prev) => ({ ...prev, gender: value }));
-                        }}
-                      >
-                        <SelectTrigger
-                          id="gender"
-                          className={SELECT_CLASS}
-                          aria-invalid={Boolean(errors.gender)}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="gender" className={LABEL_CLASS}>
+                          Gender <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                          value={formData.gender}
+                          onValueChange={(value) => {
+                            clearError("gender");
+                            setFormData((prev) => ({ ...prev, gender: value }));
+                          }}
                         >
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Male">Male</SelectItem>
-                          <SelectItem value="Female">Female</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FieldError>{errors.gender}</FieldError>
+                          <SelectTrigger
+                            id="gender"
+                            className={SELECT_CLASS}
+                            aria-invalid={Boolean(errors.gender)}
+                          >
+                            <SelectValue placeholder="Select gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FieldError>{errors.gender}</FieldError>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="birthday" className={LABEL_CLASS}>
+                          Birthday <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="birthday"
+                          name="birthday"
+                          type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          value={formData.birthday}
+                          onChange={handleChange}
+                          className={FIELD_CLASS}
+                          aria-invalid={Boolean(errors.birthday)}
+                        />
+                        <FieldError>{errors.birthday}</FieldError>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="birthday" className={LABEL_CLASS}>
-                        Birthday <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="birthday"
-                        name="birthday"
-                        type="date"
-                        max={new Date().toISOString().slice(0, 10)}
-                        value={formData.birthday}
-                        onChange={handleChange}
-                        className={FIELD_CLASS}
-                        aria-invalid={Boolean(errors.birthday)}
-                      />
-                      <FieldError>{errors.birthday}</FieldError>
-                    </div>
-                  </div>
-                </section>
-              )}
 
-              {/* Step 2 — Address */}
-              {step === STEP_ADDRESS && (
-                <section className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="addressLine" className={LABEL_CLASS}>
-                      House No. / Street / Purok{" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="addressLine"
-                      name="addressLine"
-                      value={formData.addressLine}
-                      onChange={handleChange}
-                      placeholder="e.g., 123 Rizal Street, Purok 4"
-                      className={FIELD_CLASS}
-                      aria-invalid={Boolean(errors.addressLine)}
-                    />
-                    <FieldError>{errors.addressLine}</FieldError>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="space-y-2">
-                      <Label htmlFor="province" className={LABEL_CLASS}>
-                        Province <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.provinceCode}
-                        onValueChange={handleProvinceChange}
-                        disabled={provincesLoading}
-                      >
-                        <SelectTrigger id="province" className={SELECT_CLASS}>
-                          <SelectValue
-                            placeholder={
-                              provincesLoading ? "Loading…" : "Select province"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent position="popper" className="max-h-60">
-                          {provinces.map((province) => (
-                            <SelectItem key={province.code} value={province.code}>
-                              {province.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FieldError>{errors.province}</FieldError>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="city" className={LABEL_CLASS}>
-                        City / Municipality{" "}
+                      <Label className={LABEL_CLASS}>
+                        Valid ID / Certificate{" "}
                         <span className="text-destructive">*</span>
                       </Label>
-                      <Select
-                        value={formData.cityCode}
-                        onValueChange={handleCityChange}
-                        disabled={!formData.provinceCode || citiesLoading}
-                      >
-                        <SelectTrigger id="city" className={SELECT_CLASS}>
-                          <SelectValue
-                            placeholder={
-                              !formData.provinceCode
-                                ? "Select province first"
-                                : citiesLoading
-                                  ? "Loading…"
-                                  : "Select city/municipality"
-                            }
+                      <div className="flex flex-wrap items-center gap-4">
+                        {formData.idProof ? (
+                          <img
+                            src={formData.idProof}
+                            alt="Uploaded ID"
+                            className="h-24 w-24 rounded-lg border object-cover"
                           />
-                        </SelectTrigger>
-                        <SelectContent position="popper" className="max-h-60">
-                          {cities.map((city) => (
-                            <SelectItem key={city.code} value={city.code}>
-                              {city.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FieldError>{errors.city}</FieldError>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="barangay" className={LABEL_CLASS}>
-                        Barangay <span className="text-destructive">*</span>
-                      </Label>
-                      <Select
-                        value={formData.barangayName}
-                        onValueChange={handleBarangayChange}
-                        disabled={!formData.cityCode || barangaysLoading}
-                      >
-                        <SelectTrigger id="barangay" className={SELECT_CLASS}>
-                          <SelectValue
-                            placeholder={
-                              !formData.cityCode
-                                ? "Select city first"
-                                : barangaysLoading
-                                  ? "Loading…"
-                                  : "Select barangay"
-                            }
+                        ) : (
+                          <div className="text-muted-foreground flex h-24 w-24 items-center justify-center rounded-lg border border-dashed">
+                            <FileText className="size-7" />
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            ref={idInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleIdPhoto}
                           />
-                        </SelectTrigger>
-                        <SelectContent position="popper" className="max-h-60">
-                          {barangays.map((barangay) => (
-                            <SelectItem key={barangay.code} value={barangay.name}>
-                              {barangay.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FieldError>{errors.barangay}</FieldError>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Step 3 — Contact & Verification */}
-              {step === STEP_CONTACT && (
-                <section className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className={LABEL_CLASS}>
-                      Choose how to verify your registration{" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {[
-                        { value: "sms", label: "Text message (SMS)", icon: Phone },
-                        { value: "email", label: "Email", icon: Mail },
-                      ].map((option) => {
-                        const Icon = option.icon;
-                        const active = verifyChannel === option.value;
-                        return (
-                          <button
-                            key={option.value}
+                          <Button
                             type="button"
-                            onClick={() => {
-                              setVerifyChannel(option.value);
-                              clearError("verification");
-                            }}
-                            aria-pressed={active}
-                            className={cn(
-                              "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
-                              active ? "border-primary bg-primary/5" : "hover:bg-muted"
-                            )}
+                            variant="outline"
+                            disabled={idUploading}
+                            onClick={() => idInputRef.current?.click()}
                           >
-                            <Icon className="text-muted-foreground size-4 shrink-0" />
-                            <span className="text-sm font-medium">
-                              {option.label}
-                            </span>
-                            {active && (
-                              <CheckCircle2 className="ml-auto size-4 text-emerald-600" />
+                            {idUploading ? (
+                              <Loader2 className="mr-2 size-4 animate-spin" />
+                            ) : (
+                              <Upload className="mr-2 size-4" />
                             )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className={LABEL_CLASS}>
-                      Email <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="juan.santos@email.com"
-                      className={FIELD_CLASS}
-                      aria-invalid={emailInvalid || Boolean(errors.email)}
-                    />
-                    <FieldError>{errors.email}</FieldError>
-                    {trimmedEmail && emailChecking ? (
-                      <p className="text-sm text-muted-foreground">Checking email…</p>
-                    ) : emailWarning ? (
-                      <p
-                        className={
-                          emailInvalid
-                            ? "text-sm text-destructive"
-                            : "text-sm text-amber-600"
-                        }
-                      >
-                        {emailWarning}
+                            {formData.idProof ? "Change file" : "Upload file"}
+                          </Button>
+                          {formData.idProof && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setFormData((prev) => ({ ...prev, idProof: "" }));
+                                clearError("idProof");
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        JPEG, PNG, GIF, or WebP — up to 50MB.
                       </p>
-                    ) : null}
-                    {verifyChannel === "email" && (
-                      <ContactVerifier
-                        key={`email-${trimmedEmail}`}
-                        channel="email"
-                        target={trimmedEmail}
-                        verified={emailVerified}
-                        onVerified={(value) => {
-                          setEmailVerified(value);
-                          if (value) clearError("verification");
-                        }}
+                      <FieldError>{errors.idProof || idError}</FieldError>
+                    </div>
+                  </section>
+
+                  <section className="space-y-4">
+                    <h2 className="text-lg font-semibold">Address</h2>
+                    <div className="space-y-2">
+                      <Label htmlFor="addressLine" className={LABEL_CLASS}>
+                        House No. / Street / Purok{" "}
+                        <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="addressLine"
+                        name="addressLine"
+                        value={formData.addressLine}
+                        onChange={handleChange}
+                        placeholder="e.g., 123 Rizal Street, Purok 4"
+                        className={FIELD_CLASS}
+                        aria-invalid={Boolean(errors.addressLine)}
                       />
-                    )}
-                  </div>
+                      <FieldError>{errors.addressLine}</FieldError>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="contactNumber" className={LABEL_CLASS}>
-                      Contact Number <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="contactNumber"
-                      name="contactNumber"
-                      value={formData.contactNumber}
-                      onChange={handleChange}
-                      placeholder="09123456789"
-                      className={FIELD_CLASS}
-                      inputMode="numeric"
-                      aria-invalid={Boolean(errors.contactNumber)}
-                    />
-                    <FieldError>{errors.contactNumber}</FieldError>
-                    {verifyChannel === "sms" && (
-                      <ContactVerifier
-                        key={`sms-${formData.contactNumber}`}
-                        channel="sms"
-                        target={formData.contactNumber}
-                        verified={phoneVerified}
-                        onVerified={(value) => {
-                          setPhoneVerified(value);
-                          if (value) clearError("verification");
-                        }}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="province" className={LABEL_CLASS}>
+                          Province <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                          value={formData.provinceCode}
+                          onValueChange={handleProvinceChange}
+                          disabled={provincesLoading}
+                        >
+                          <SelectTrigger id="province" className={SELECT_CLASS}>
+                            <SelectValue
+                              placeholder={
+                                provincesLoading ? "Loading…" : "Select province"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent position="popper" className="max-h-60">
+                            {provinces.map((province) => (
+                              <SelectItem key={province.code} value={province.code}>
+                                {province.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FieldError>{errors.province}</FieldError>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city" className={LABEL_CLASS}>
+                          City / Municipality{" "}
+                          <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                          value={formData.cityCode}
+                          onValueChange={handleCityChange}
+                          disabled={!formData.provinceCode || citiesLoading}
+                        >
+                          <SelectTrigger id="city" className={SELECT_CLASS}>
+                            <SelectValue
+                              placeholder={
+                                !formData.provinceCode
+                                  ? "Select province first"
+                                  : citiesLoading
+                                    ? "Loading…"
+                                    : "Select city/municipality"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent position="popper" className="max-h-60">
+                            {cities.map((city) => (
+                              <SelectItem key={city.code} value={city.code}>
+                                {city.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FieldError>{errors.city}</FieldError>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="barangay" className={LABEL_CLASS}>
+                          Barangay <span className="text-destructive">*</span>
+                        </Label>
+                        <Select
+                          value={formData.barangayName}
+                          onValueChange={handleBarangayChange}
+                          disabled={!formData.cityCode || barangaysLoading}
+                        >
+                          <SelectTrigger id="barangay" className={SELECT_CLASS}>
+                            <SelectValue
+                              placeholder={
+                                !formData.cityCode
+                                  ? "Select city first"
+                                  : barangaysLoading
+                                    ? "Loading…"
+                                    : "Select barangay"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent position="popper" className="max-h-60">
+                            {barangays.map((barangay) => (
+                              <SelectItem key={barangay.code} value={barangay.name}>
+                                {barangay.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FieldError>{errors.barangay}</FieldError>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="space-y-4">
+                    <h2 className="text-lg font-semibold">Contact</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Provide at least one: an email address or a mobile number.
+                      You will verify the one you choose in the next step.
+                    </p>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className={LABEL_CLASS}>
+                        Email
+                      </Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="juan.santos@email.com"
+                        className={FIELD_CLASS}
+                        aria-invalid={emailInvalid || Boolean(errors.email)}
                       />
-                    )}
-                  </div>
+                      <FieldError>{errors.email}</FieldError>
+                      {trimmedEmail && emailChecking ? (
+                        <p className="text-sm text-muted-foreground">Checking email…</p>
+                      ) : emailWarning ? (
+                        <p
+                          className={
+                            emailInvalid
+                              ? "text-sm text-destructive"
+                              : "text-sm text-amber-600"
+                          }
+                        >
+                          {emailWarning}
+                        </p>
+                      ) : null}
+                    </div>
 
-                  <FieldError>{errors.verification}</FieldError>
-                </section>
-              )}
+                    <div className="space-y-2">
+                      <Label htmlFor="contactNumber" className={LABEL_CLASS}>
+                        Mobile Number
+                      </Label>
+                      <Input
+                        id="contactNumber"
+                        name="contactNumber"
+                        value={formData.contactNumber}
+                        onChange={handleChange}
+                        placeholder="09123456789"
+                        className={FIELD_CLASS}
+                        inputMode="numeric"
+                        aria-invalid={Boolean(errors.contactNumber)}
+                      />
+                      <FieldError>{errors.contactNumber}</FieldError>
+                    </div>
+                  </section>
 
-              {/* Step 4 — Account & Review */}
-              {step === STEP_ACCOUNT && (
-                <section className="space-y-6">
-                  <div className="space-y-4">
-                    <h2 className="text-lg font-semibold">Account Details</h2>
+                  <section className="space-y-4">
+                    <h2 className="text-lg font-semibold">Account</h2>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="username" className={LABEL_CLASS}>
@@ -1214,54 +1281,137 @@ export default function RegisterPage() {
                         <FieldError>{errors.confirmPassword}</FieldError>
                       </div>
                     </div>
+                  </section>
+                </div>
+              )}
+
+              {/* Step 2 — Verify one contact */}
+              {step === STEP_VERIFY && (
+                <section className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className={LABEL_CLASS}>
+                      Choose how to verify your registration{" "}
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {[
+                        {
+                          value: "sms",
+                          label: "Text message (SMS)",
+                          icon: Phone,
+                          available: hasPhone,
+                          target: formData.contactNumber,
+                        },
+                        {
+                          value: "email",
+                          label: "Email",
+                          icon: Mail,
+                          available: hasEmail,
+                          target: trimmedEmail,
+                        },
+                      ].map((option) => {
+                        const Icon = option.icon;
+                        const active = effectiveChannel === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            disabled={!option.available}
+                            onClick={() => {
+                              setVerifyChannel(option.value);
+                              clearError("verification");
+                            }}
+                            aria-pressed={active}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                              active ? "border-primary bg-primary/5" : "hover:bg-muted",
+                              !option.available &&
+                                "cursor-not-allowed opacity-50 hover:bg-transparent"
+                            )}
+                          >
+                            <Icon className="text-muted-foreground size-4 shrink-0" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">
+                                {option.label}
+                              </span>
+                              <span className="text-muted-foreground block truncate text-xs">
+                                {option.available
+                                  ? option.target
+                                  : option.value === "email"
+                                    ? "No email provided"
+                                    : "No mobile number provided"}
+                              </span>
+                            </span>
+                            {active && (
+                              <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold">Review Your Details</h2>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                      <SummaryRow
-                        label="Name"
-                        value={[
-                          formData.firstName,
-                          formData.middleName,
-                          formData.lastName,
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      />
-                      <SummaryRow label="Gender" value={formData.gender} />
-                      <SummaryRow
-                        label="Birthday"
-                        value={
-                          formData.birthday
-                            ? new Date(`${formData.birthday}T00:00:00`).toLocaleDateString(
+                  <ContactVerifier
+                    key={`${effectiveChannel}-${effectiveChannel === "email" ? trimmedEmail : formData.contactNumber}`}
+                    channel={effectiveChannel}
+                    target={effectiveChannel === "email" ? trimmedEmail : formData.contactNumber}
+                    verified={effectiveChannel === "email" ? emailVerified : phoneVerified}
+                    onVerified={(value) => {
+                      if (effectiveChannel === "email") setEmailVerified(value);
+                      else setPhoneVerified(value);
+                      if (value) clearError("verification");
+                    }}
+                  />
+
+                  <FieldError>{errors.verification}</FieldError>
+                </section>
+              )}
+
+              {/* Step 3 — Account overview */}
+              {step === STEP_REVIEW && (
+                <section className="space-y-4">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="mb-3 flex items-center gap-4">
+                      {formData.idProof ? (
+                        <img
+                          src={formData.idProof}
+                          alt="Uploaded ID"
+                          className="size-20 rounded-lg border object-cover"
+                        />
+                      ) : (
+                        <div className="text-muted-foreground flex size-20 items-center justify-center rounded-lg border border-dashed">
+                          <FileText className="size-6" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-semibold">{fullName}</p>
+                        <p className="text-muted-foreground text-sm">
+                          {formData.gender || "—"}
+                          {formData.birthday
+                            ? ` · ${new Date(`${formData.birthday}T00:00:00`).toLocaleDateString(
                                 "en-US",
                                 { month: "long", day: "numeric", year: "numeric" }
-                              )
-                            : ""
-                        }
-                      />
-                      <SummaryRow label="Address" value={fullAddress} />
-                      <SummaryRow label="Email" value={formData.email} />
-                      <SummaryRow
-                        label="Contact number"
-                        value={formData.contactNumber}
-                      />
-                      <SummaryRow
-                        label="Verified via"
-                        value={
-                          verifyChannel === "email"
-                            ? "Email"
-                            : "Text message (SMS)"
-                        }
-                      />
-                      <SummaryRow label="Organization" value={organizationLabel} />
+                              )}`
+                            : ""}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Please check that everything is correct. This will create your
-                      account.
-                    </p>
+
+                    <SummaryRow label="Address" value={fullAddress} />
+                    <SummaryRow label="Email" value={formData.email} />
+                    <SummaryRow label="Mobile number" value={formData.contactNumber} />
+                    <SummaryRow
+                      label="Verified via"
+                      value={effectiveChannel === "email" ? "Email" : "Text message (SMS)"}
+                    />
+                    <SummaryRow label="Organization" value={organizationLabel} />
+                    <SummaryRow label="Username" value={formData.username} />
+                    <SummaryRow label="Password" value={"•".repeat(8)} />
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Check that everything is correct. You can edit your details,
+                    or confirm to create your account.
+                  </p>
                 </section>
               )}
             </CardContent>
@@ -1278,15 +1428,20 @@ export default function RegisterPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setStep(STEP_PERSONAL)}
+                    onClick={() => setStep(STEP_DETAILS)}
                   >
                     Edit
                   </Button>
-                  <Button type="submit" size="lg" disabled={loading}>
+                  <Button
+                    type="button"
+                    size="lg"
+                    disabled={loading}
+                    onClick={requestConfirm}
+                  >
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 size-4 animate-spin" />
-                        Registering...
+                        Creating account...
                       </>
                     ) : (
                       "Confirm & Create Account"
@@ -1307,6 +1462,48 @@ export default function RegisterPage() {
           </form>
         </Card>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create your account?</DialogTitle>
+            <DialogDescription>
+              Please make sure the details below are correct. Your account will be
+              created and you will be signed in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+            <SummaryRow label="Name" value={fullName} />
+            <SummaryRow label="Email" value={formData.email} />
+            <SummaryRow label="Mobile number" value={formData.contactNumber} />
+            <SummaryRow
+              label="Verified via"
+              value={effectiveChannel === "email" ? "Email" : "Text message (SMS)"}
+            />
+            <SummaryRow label="Organization" value={organizationLabel} />
+          </div>
+          <DialogFooter className="gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={loading}
+            >
+              Go back
+            </Button>
+            <Button type="button" onClick={submitRegistration} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Yes, create my account"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
