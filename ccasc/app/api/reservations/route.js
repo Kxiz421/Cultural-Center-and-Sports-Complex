@@ -630,6 +630,54 @@ export async function POST(request) {
 
     const reservationId = `RES-${reservation.reservationId}`;
 
+    // Notify the Local Treasury Operations Officer about a new reservation
+    // submitted by a client or a provincial agency, with the details they need
+    // to act on it.
+    if (!isWalkIn) {
+      const clientRecord =
+        parsedClientId != null
+          ? await prisma.client.findUnique({
+              where: { clientId: parsedClientId },
+              select: {
+                firstName: true,
+                lastName: true,
+                clientRole: { select: { clientRoleId: true } },
+              },
+            })
+          : null;
+      const isProvincial = clientRecord?.clientRole?.clientRoleId === "PROV";
+      const clientLabel =
+        [clientRecord?.firstName, clientRecord?.lastName]
+          .filter(Boolean)
+          .join(" ") ||
+        walkInDisplayName(storedNotes) ||
+        "Client";
+      const clientTypeLabel = isProvincial ? "Provincial Agency" : "Client";
+      const dateLabel = allDates
+        .map((d) => d.toISOString().split("T")[0])
+        .join(", ");
+      const treasuryOfficers = await prisma.staff.findMany({
+        where: {
+          status: "Active",
+          staffRole: { roleName: "Local Treasury Operations Officer" },
+        },
+        select: { staffId: true },
+      });
+      if (treasuryOfficers.length > 0) {
+        await prisma.notification.createMany({
+          data: treasuryOfficers.map((staff) => ({
+            message: `New reservation ${reservationId} — ${clientLabel} (${clientTypeLabel}) · ${eventType} · ${dateLabel}.`,
+            type: "Reservation",
+            isRead: false,
+            sentAt: new Date(),
+            staffId: staff.staffId,
+            clientId: null,
+            link: `/panel/local-treasury-officer/payments?reservationId=${reservation.reservationId}`,
+          })),
+        });
+      }
+    }
+
     if (isWalkIn) {
       const displayName = clientName || "Walk-in Client";
       const timeSlotName = getTimeSlotLabel(timeSlotId);
