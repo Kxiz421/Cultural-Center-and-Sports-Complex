@@ -118,6 +118,44 @@ export async function GET(request) {
       ])
     );
 
+    // Units reserved by events happening today (Philippine Time), per
+    // particular, so the amenities overview can show what is in use.
+    const PHT_OFFSET_MS = 8 * 60 * 60 * 1000;
+    const shiftedNow = new Date(Date.now() + PHT_OFFSET_MS);
+    const dayStart = new Date(
+      Date.UTC(
+        shiftedNow.getUTCFullYear(),
+        shiftedNow.getUTCMonth(),
+        shiftedNow.getUTCDate()
+      ) - PHT_OFFSET_MS
+    );
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const todaysReservations = await prisma.reservation.findMany({
+      where: {
+        reservationStatus: { notIn: ["Cancelled", "Declined"] },
+        OR: [
+          { eventDate: { gte: dayStart, lt: dayEnd } },
+          {
+            additionalDates: {
+              some: { eventDate: { gte: dayStart, lt: dayEnd } },
+            },
+          },
+        ],
+      },
+      select: {
+        reservedParticulars: { select: { particularId: true, quantity: true } },
+      },
+    });
+    const inUseById = new Map();
+    for (const reservation of todaysReservations) {
+      for (const rp of reservation.reservedParticulars || []) {
+        inUseById.set(
+          rp.particularId,
+          (inUseById.get(rp.particularId) || 0) + (Number(rp.quantity) || 0)
+        );
+      }
+    }
+
     const formatted = items.map((item) => ({
       id: item.particularId,
       particularId: item.particularId,
@@ -125,6 +163,7 @@ export async function GET(request) {
       description: item.description || "",
       category: item.category || "",
       totalQuantity: item.inventory?.quantityAvailable ?? 0,
+      inUseToday: inUseById.get(item.particularId) || 0,
       damagedQuantity: damagedById.get(item.particularId) || 0,
       unitCost: item.inventory?.unitCost ? Number(item.inventory.unitCost) : 0,
       inventoryName: item.inventory?.itemName || "",

@@ -353,6 +353,7 @@ export default function AmenitiesPage() {
                 <TableHead>Particular</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">On hand</TableHead>
+                <TableHead className="text-right">In use today</TableHead>
                 <TableHead className="text-right">Unit cost</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -360,13 +361,13 @@ export default function AmenitiesPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     Loading particulars…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     {particulars.length === 0
                       ? "No particulars found"
                       : "No particulars match your search"}
@@ -389,6 +390,9 @@ export default function AmenitiesPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {Number(p.totalQuantity) || 0}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {Number(p.inUseToday) || 0}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatPeso(p.unitCost)}
@@ -456,6 +460,14 @@ export default function AmenitiesPage() {
                   </p>
                   <p className="font-medium tabular-nums">
                     {Number(details.totalQuantity) || 0}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">
+                    In use today
+                  </p>
+                  <p className="font-medium tabular-nums">
+                    {Number(details.inUseToday) || 0}
                   </p>
                 </div>
                 <div>
