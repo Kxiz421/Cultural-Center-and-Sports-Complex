@@ -33,10 +33,17 @@ async function syncFacilityToVenueRental(facility, rate) {
   const dayRate = Number(rate?.dayRate ?? 0);
   if (dayRate <= 0) return;
   const particularName = `Venue Rental – ${facility.facilityName}`;
+  const description =
+    facility.description || `Venue rental for ${facility.facilityName}`;
   let particular = await prisma.particular.findFirst({ where: { particularName } });
   if (!particular) {
     particular = await prisma.particular.create({
-      data: { particularName, description: facility.description || `Venue rental for ${facility.facilityName}`, statusId: facility.statusId },
+      data: { particularName, description, statusId: facility.statusId },
+    });
+  } else {
+    particular = await prisma.particular.update({
+      where: { particularId: particular.particularId },
+      data: { description, statusId: facility.statusId },
     });
   }
   let inventory = await prisma.inventory.findFirst({
@@ -65,10 +72,10 @@ async function syncFacilityToVenueRental(facility, rate) {
 async function main() {
   console.log("\n=== Sync Cultural Center Facilities \u2192 Venue Rental ===\n");
   const facilities = await prisma.facility.findMany({
-    where: { venueId: CULTURAL_CENTER_VENUE_ID, statusId: 1 },
+    where: { venueId: CULTURAL_CENTER_VENUE_ID },
     include: { rate: true },
   });
-  console.log(`Found ${facilities.length} active Cultural Center facilities\n`);
+  console.log(`Found ${facilities.length} Cultural Center facilities\n`);
   for (const f of facilities) {
     console.log(`Processing: ${f.facilityName} (day_rate=\u20B1${Number(f.rate?.dayRate ?? 0).toLocaleString()})`);
     await syncFacilityToVenueRental(f, f.rate);

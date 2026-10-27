@@ -114,6 +114,7 @@ export function VenueRentalParticularsList({
                             {tier.qty} units = {toPeso(tier.price)} ({tier.label})
                           </div>
                         ))}
+                        <div className="font-medium">Minimum 4 units.</div>
                       </div>
                     )}
                     {!isBasketball && !isAircon && (
@@ -127,6 +128,7 @@ export function VenueRentalParticularsList({
                   <ParticularQuantityStepper
                     value={qty}
                     max={maxQty}
+                    min={isAircon ? 4 : 0}
                     buttonClassName="size-7"
                     onChange={(value) => setQuantity(p.particularId, value)}
                   />

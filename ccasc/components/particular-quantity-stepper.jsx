@@ -9,19 +9,23 @@ import { ParticularQuantityInput } from "@/components/particular-quantity-input"
 const HOLD_SNAP_MS = 5000;
 const HOLD_STEP_MS = 100;
 
-function clampQty(value, max) {
+function clampQty(value, max, min = 0) {
   const cap = Number(max) || 999;
-  if (value < 0) return 0;
+  const floor = Number(min) || 0;
+  if (value <= 0) return 0;
+  if (value < floor) return Math.min(floor, cap);
   if (value > cap) return cap;
   return value;
 }
 
 /**
  * Minus/plus controls with hold-to-repeat; hold 5s snaps to 0 (minus) or max (plus).
+ * `min` sets a floor for a selected item (0 still means "not selected").
  */
 export function ParticularQuantityStepper({
   value = 0,
   max = 999,
+  min = 0,
   onChange,
   disabled,
   className,
@@ -30,6 +34,7 @@ export function ParticularQuantityStepper({
 }) {
   const numericValue = Number(value) || 0;
   const cap = Number(max) || 999;
+  const floor = Number(min) || 0;
   const valueRef = React.useRef(numericValue);
   const holdTimerRef = React.useRef(null);
   const startTimeRef = React.useRef(0);
@@ -58,12 +63,12 @@ export function ParticularQuantityStepper({
       const dir = directionRef.current;
       if (dir > 0) {
         if (current >= cap) return false;
-        const next = clampQty(current + 1, cap);
+        const next = clampQty(current + 1, cap, floor);
         onChange(next);
         return next < cap;
       }
       if (current <= 0) return false;
-      const next = clampQty(current - 1, cap);
+      const next = current <= floor ? 0 : clampQty(current - 1, cap, floor);
       onChange(next);
       return next > 0;
     };
@@ -115,6 +120,7 @@ export function ParticularQuantityStepper({
       <ParticularQuantityInput
         value={numericValue}
         max={cap}
+        min={floor}
         disabled={disabled}
         className={inputClassName}
         onChange={onChange}

@@ -3,9 +3,11 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-function clampQty(value, max) {
+function clampQty(value, max, min = 0) {
   const cap = Number(max) || 999;
-  if (value < 0) return 0;
+  const floor = Number(min) || 0;
+  if (value <= 0) return 0;
+  if (value < floor) return Math.min(floor, cap);
   if (value > cap) return cap;
   return value;
 }
@@ -17,6 +19,7 @@ function clampQty(value, max) {
 export function ParticularQuantityInput({
   value = 0,
   max = 999,
+  min = 0,
   onChange,
   className,
   disabled,
@@ -53,7 +56,7 @@ export function ParticularQuantityInput({
       onChange(0);
       return;
     }
-    const next = clampQty(parsed, max);
+    const next = clampQty(parsed, max, min);
     lastEmittedRef.current = next;
     onChange(next);
   };
@@ -77,7 +80,7 @@ export function ParticularQuantityInput({
           setDraft("0");
         } else {
           const parsed = parseInt(draft, 10);
-          const next = Number.isNaN(parsed) ? 0 : clampQty(parsed, max);
+          const next = Number.isNaN(parsed) ? 0 : clampQty(parsed, max, min);
           lastEmittedRef.current = next;
           onChange(next);
           setDraft(String(next));

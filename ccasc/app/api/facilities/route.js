@@ -15,6 +15,9 @@ async function syncFacilityToVenueRental(facility, rate) {
   if (dayRate <= 0) return;
 
   const particularName = `Venue Rental – ${facility.facilityName}`;
+  const description =
+    facility.description || `Venue rental for ${facility.facilityName}`;
+  const statusId = facility.statusId;
 
   // Find or create the Particular
   let particular = await prisma.particular.findFirst({
@@ -22,11 +25,15 @@ async function syncFacilityToVenueRental(facility, rate) {
   });
   if (!particular) {
     particular = await prisma.particular.create({
-      data: {
-        particularName,
-        description: facility.description || `Venue rental for ${facility.facilityName}`,
-        statusId: facility.statusId,
-      },
+      data: { particularName, description, statusId },
+    });
+  } else {
+    // Keep the linked amenity in step with the facility (name/description/
+    // availability), so archiving a facility also makes its Venue Rental
+    // particular Unavailable instead of leaving it bookable.
+    particular = await prisma.particular.update({
+      where: { particularId: particular.particularId },
+      data: { description, statusId },
     });
   }
 
@@ -41,7 +48,7 @@ async function syncFacilityToVenueRental(facility, rate) {
         unitCost: dayRate,
         quantityAvailable: facility.capacity || 1,
         venueId: CULTURAL_CENTER_VENUE_ID,
-        statusId: facility.statusId,
+        statusId,
       },
     });
   } else {
@@ -50,7 +57,7 @@ async function syncFacilityToVenueRental(facility, rate) {
       data: {
         unitCost: dayRate,
         quantityAvailable: facility.capacity || 1,
-        statusId: facility.statusId,
+        statusId,
       },
     });
   }
@@ -368,6 +375,12 @@ export async function PATCH(request) {
         images: true
       }
     });
+
+    // Archiving/restoring a Cultural Center facility must also update its
+    // linked Venue Rental particular + inventory availability.
+    if (facility.venueId === CULTURAL_CENTER_VENUE_ID) {
+      await syncFacilityToVenueRental(facility, facility.rate);
+    }
 
     return NextResponse.json({
       id: `FAC-${facility.facilityId}`,
