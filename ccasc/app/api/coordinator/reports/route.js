@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { walkInDisplayName } from "@/lib/walk-in";
+import { isReservationReportEligible } from "@/lib/report-eligibility";
 
 import { requireApiAuth } from "@/lib/api-auth";
 const CULTURAL_VENUE_IDS = [1];
@@ -62,7 +63,9 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
-    const formatted = reservations.map((r) => {
+    const formatted = reservations
+      .filter(isReservationReportEligible)
+      .map((r) => {
       const totalPaid = r.bookings.reduce(
         (sum, b) => sum + b.payments.reduce((s, p) => s + Number(p.amountPaid), 0),
         0

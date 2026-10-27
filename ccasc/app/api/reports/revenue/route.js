@@ -3,6 +3,7 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import { resolvePeriodRange } from "@/lib/report-period";
 import { buildRevenueReport, isRevenueGroup } from "@/lib/report-revenue";
 import { dateCell } from "@/lib/report-activities";
+import { isReservationReportEligible } from "@/lib/report-eligibility";
 import { extractChargeBreakdownFromNotes } from "@/lib/reservation-charge-breakdown";
 import {
   reportVenueIdsForUserType,
@@ -127,7 +128,9 @@ export async function GET(request) {
         additionalDates: { select: { eventDate: true } },
         schedules: { select: { facilityId: true } },
         bookings: {
-          include: { payments: { select: { amountPaid: true } } },
+          include: {
+            payments: { select: { amountPaid: true, discountAmount: true } },
+          },
         },
         reservedParticulars: {
           include: {
@@ -144,7 +147,9 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
-    const rows = reservations.map((r) => {
+    const rows = reservations
+      .filter(isReservationReportEligible)
+      .map((r) => {
       const additionalDates = (r.additionalDates || []).map((d) => d.eventDate);
       const collectedAmount = (r.bookings || []).reduce(
         (sum, b) =>

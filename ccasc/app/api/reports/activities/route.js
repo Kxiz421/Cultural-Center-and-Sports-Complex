@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { resolvePeriodRange } from "@/lib/report-period";
 import { buildActivitiesReport, buildActivityRows } from "@/lib/report-activities";
+import { isReservationReportEligible } from "@/lib/report-eligibility";
 import {
   resolveReportVenueIds,
   venueIdsFromReportVenue,
@@ -97,12 +98,14 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
-    const rows = reservations.flatMap((reservation) =>
-      buildActivityRows({
-        ...reservation,
-        additionalDates: (reservation.additionalDates || []).map((d) => d.eventDate),
-      })
-    );
+    const rows = reservations
+      .filter(isReservationReportEligible)
+      .flatMap((reservation) =>
+        buildActivityRows({
+          ...reservation,
+          additionalDates: (reservation.additionalDates || []).map((d) => d.eventDate),
+        })
+      );
 
     const report = buildActivitiesReport({
       rows,
