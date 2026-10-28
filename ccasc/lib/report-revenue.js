@@ -304,15 +304,7 @@ function facilityAllocations(reservation, { amount, collected, reservationId }) 
     );
   }
 
-  return [
-    allocation({
-      key: "facility:none",
-      label: NO_FACILITY_LABEL,
-      amount,
-      collected,
-      reservationId,
-    }),
-  ];
+  return [];
 }
 
 function allocation({
