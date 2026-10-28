@@ -24,7 +24,9 @@ export function formatMoneyInput(amount) {
  * and never above max. Returns the sanitized string to show in the input.
  */
 export function sanitizeMoneyInput(raw, max) {
-  const limit = roundMoney(max);
+  // No max (undefined/null/"") means "no cap" — only clamp when a real limit is given.
+  const hasMax = max !== undefined && max !== null && max !== "";
+  const limit = hasMax ? roundMoney(max) : Infinity;
   if (raw === "" || raw === null || raw === undefined) return "";
 
   let s = String(raw).replace(/[^\d.]/g, "");
@@ -54,7 +56,7 @@ export function sanitizeMoneyInput(raw, max) {
   s = decPart !== null ? `${intPart}.${decPart}` : intPart;
 
   const numeric = Number(s);
-  if (Number.isFinite(numeric) && numeric > limit) {
+  if (Number.isFinite(numeric) && Number.isFinite(limit) && numeric > limit) {
     return formatMoneyInput(limit);
   }
 
