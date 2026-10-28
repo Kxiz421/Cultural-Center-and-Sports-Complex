@@ -369,10 +369,11 @@ export function reservationAllocations(reservation, groupBy) {
   }
 
   if (groupBy === REVENUE_GROUP_PACKAGE) {
+    if (!reservation.packageName) return [];
     return [
       allocation({
         key: `package:${reservation.packageId ?? 0}`,
-        label: reservation.packageName || NO_PACKAGE_LABEL,
+        label: reservation.packageName,
         amount,
         collected,
         reservationId,
@@ -381,17 +382,7 @@ export function reservationAllocations(reservation, groupBy) {
   }
 
   const particulars = reservation.particulars || [];
-  if (particulars.length === 0) {
-    return [
-      allocation({
-        key: "particular:none",
-        label: NO_PARTICULAR_LABEL,
-        amount,
-        collected,
-        reservationId,
-      }),
-    ];
-  }
+  if (particulars.length === 0) return [];
 
   const eventDayCount = 1 + (Number(reservation.additionalDateCount) || 0);
   const weights = particulars.map((p) =>

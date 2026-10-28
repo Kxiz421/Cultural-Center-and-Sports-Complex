@@ -23,9 +23,9 @@ const PERIODS = [
 ];
 
 const GROUP_OPTIONS = [
-  { value: "particular", label: "Per Particular" },
-  { value: "package", label: "Per Package" },
-  { value: "facility", label: "Per Facility" },
+  { value: "particular", label: "Particulars" },
+  { value: "package", label: "Packages" },
+  { value: "facility", label: "Facilities" },
 ];
 
 const GROUP_NOUN = {
@@ -323,6 +323,7 @@ export function RevenueCharts({
                   : "No revenue in this period."}
             </p>
           ) : (
+            <>
             <div className="flex flex-col items-center gap-6 sm:flex-row">
               <svg viewBox="0 0 160 160" className="size-48 shrink-0">
                 <defs>
@@ -453,40 +454,37 @@ export function RevenueCharts({
                   );
                 })}
               </ul>
-              {slices.length > LEGEND_PAGE_SIZE && (
-                <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                  <span className="text-muted-foreground">
-                    {legendStart + 1}–
-                    {Math.min(legendStart + LEGEND_PAGE_SIZE, slices.length)} of{" "}
-                    {slices.length}
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      className="rounded-md border px-2 py-1 disabled:opacity-40"
-                      disabled={safeLegendPage <= 1}
-                      onClick={() =>
-                        setLegendPage((p) => Math.max(1, p - 1))
-                      }
-                    >
-                      Prev
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border px-2 py-1 disabled:opacity-40"
-                      disabled={safeLegendPage >= legendTotalPages}
-                      onClick={() =>
-                        setLegendPage((p) =>
-                          Math.min(legendTotalPages, p + 1)
-                        )
-                      }
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
+            {slices.length > LEGEND_PAGE_SIZE && (
+              <div className="flex items-center justify-between gap-2 pt-2 text-xs">
+                <span className="text-muted-foreground">
+                  {legendStart + 1}–
+                  {Math.min(legendStart + LEGEND_PAGE_SIZE, slices.length)} of{" "}
+                  {slices.length}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className="rounded-md border px-2 py-1 disabled:opacity-40"
+                    disabled={safeLegendPage <= 1}
+                    onClick={() => setLegendPage((p) => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border px-2 py-1 disabled:opacity-40"
+                    disabled={safeLegendPage >= legendTotalPages}
+                    onClick={() =>
+                      setLegendPage((p) => Math.min(legendTotalPages, p + 1))
+                    }
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
 
