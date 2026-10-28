@@ -234,6 +234,7 @@ export function buildRevenueCharts({
   };
 
   const graph = window.buckets.map((label) => ({ label, amount: 0 }));
+  const seriesMap = new Map();
 
   for (const transaction of transactions || []) {
     const when = new Date(transaction.paymentDate);
@@ -243,6 +244,21 @@ export function buildRevenueCharts({
     const selected = selectedFor(transaction);
     if (!selected) continue;
     graph[index].amount += selected.amount * selected.share;
+
+    for (const item of selected.items) {
+      const itemAmount =
+        selected.amount * ((Number(item.amount) || 0) / selected.allTotal);
+      let entry = seriesMap.get(item.key);
+      if (!entry) {
+        entry = {
+          key: item.key,
+          label: item.label,
+          points: graph.map(() => 0),
+        };
+        seriesMap.set(item.key, entry);
+      }
+      entry.points[index] += itemAmount;
+    }
   }
 
   const pie = new Map();
@@ -287,9 +303,26 @@ export function buildRevenueCharts({
     }))
     .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
 
+  const pieOrder = new Map(pieRows.map((row, index) => [row.key, index]));
+  const series = [...seriesMap.values()]
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      points: entry.points.map((amount, index) => ({
+        label: window.buckets[index],
+        amount: round2(amount),
+      })),
+    }))
+    .sort((a, b) => {
+      const ai = pieOrder.has(a.key) ? pieOrder.get(a.key) : Number.MAX_SAFE_INTEGER;
+      const bi = pieOrder.has(b.key) ? pieOrder.get(b.key) : Number.MAX_SAFE_INTEGER;
+      return ai - bi || a.label.localeCompare(b.label);
+    });
+
   return {
     total: totalRounded,
     graph: graph.map((bucket) => ({ ...bucket, amount: round2(bucket.amount) })),
     pie: pieRows,
+    series,
   };
 }

@@ -239,6 +239,7 @@ export async function GET(request) {
       scopeLabel: venueScopeLabel(scope && scope.length ? scope : []),
       graph: charts.graph,
       pie: charts.pie,
+      series: charts.series,
       total: charts.total,
     });
   } catch (error) {

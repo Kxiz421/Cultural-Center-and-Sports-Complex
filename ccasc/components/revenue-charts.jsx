@@ -124,6 +124,7 @@ export function RevenueCharts({
 
   const graph = data?.graph || [];
   const pie = data?.pie || [];
+  const series = data?.series || [];
   const total = data?.total || 0;
   const allowedGroups = data?.allowedGroups || ["particular"];
   const groupOptions = GROUP_OPTIONS.filter((option) =>
@@ -178,6 +179,10 @@ export function RevenueCharts({
     legendStart,
     legendStart + LEGEND_PAGE_SIZE,
   );
+  const colorByKey = {};
+  slices.forEach((slice) => {
+    colorByKey[slice.key] = slice.color;
+  });
 
   const selectMonth = (index) => {
     if (period !== "month") return;
@@ -280,7 +285,7 @@ export function RevenueCharts({
                   <SelectTrigger className="w-[190px]">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent position="popper" className="max-h-60">
+                  <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                     <SelectItem value="all">
                       All{" "}
                       {activeGroup === "particular" ? "particulars" : "packages"}
@@ -530,48 +535,52 @@ export function RevenueCharts({
               })}
               {(() => {
                 const step = graph.length > 1 ? 580 / (graph.length - 1) : 0;
-                const points = graph.map((bucket, index) => ({
-                  x: 44 + step * index,
-                  y: 190 - (bucket.amount / maxGraph) * 160,
-                  bucket,
-                  index,
-                }));
-                const path = points
-                  .map(
-                    (point, index) =>
-                      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`,
-                  )
-                  .join(" ");
+                const yFor = (amount) =>
+                  190 - ((Number(amount) || 0) / maxGraph) * 160;
+                const lines =
+                  series.length > 0
+                    ? series.map((s, index) => ({
+                        key: s.key,
+                        color:
+                          colorByKey[s.key] ||
+                          PIE_COLORS[index % PIE_COLORS.length],
+                        points: s.points.map((point) => point.amount),
+                      }))
+                    : [
+                        {
+                          key: "__total__",
+                          color: "var(--primary)",
+                          points: graph.map((bucket) => bucket.amount),
+                        },
+                      ];
                 return (
                   <>
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke="var(--primary)"
-                      strokeWidth="2.5"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
-                    {points.map((point) => (
-                      <g key={point.index}>
-                        <circle
-                          cx={point.x}
-                          cy={point.y}
-                          r="4"
-                          fill="var(--primary)"
-                          stroke="var(--card)"
-                          strokeWidth="2"
-                        />
-                        <text
-                          x={point.x}
-                          y={210}
-                          textAnchor="middle"
-                          className="fill-muted-foreground text-[8px]"
-                        >
-                          {point.bucket.label}
-                        </text>
-                        <title>{`${point.bucket.label}: ${formatPhp(point.bucket.amount)}`}</title>
-                      </g>
+                    {lines.map((line) => (
+                      <path
+                        key={line.key}
+                        d={line.points
+                          .map(
+                            (amount, index) =>
+                              `${index === 0 ? "M" : "L"} ${44 + step * index} ${yFor(amount)}`,
+                          )
+                          .join(" ")}
+                        fill="none"
+                        stroke={line.color}
+                        strokeWidth="2"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    ))}
+                    {graph.map((bucket, index) => (
+                      <text
+                        key={index}
+                        x={44 + step * index}
+                        y={210}
+                        textAnchor="middle"
+                        className="fill-muted-foreground text-[8px]"
+                      >
+                        {bucket.label}
+                      </text>
                     ))}
                   </>
                 );
