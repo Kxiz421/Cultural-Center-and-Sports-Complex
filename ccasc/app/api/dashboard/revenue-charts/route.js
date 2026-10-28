@@ -59,20 +59,24 @@ export async function GET(request) {
 
     // Session scope only.
     const scope = resolveReportVenueIds(guard.user.type, []);
-    const culturalOnly =
-      scope && scope.length === 1 && scope[0] === CULTURAL_CENTER_VENUE_ID;
+    const canChooseVenue = !scope || scope.length !== 1;
+    const venueParam = searchParams.get("venue") || "all";
+    const venueFilter = canChooseVenue ? venueParam : "all";
+    const selectedVenueIds =
+      canChooseVenue && venueFilter === "cultural"
+        ? [CULTURAL_CENTER_VENUE_ID]
+        : canChooseVenue && venueFilter === "sports"
+          ? [2]
+          : scope && scope.length
+            ? scope
+            : null;
 
-    // The Sports Complex bills per facility (never per particular / package);
-    // the Cultural Center is the opposite. An unrestricted view offers all.
-    const allowedGroups = isSportsComplexOnly(scope)
+    // Sports Complex bills per facility; the Cultural Center per particular /
+    // package. Facility breakdown only exists for the Sports Complex.
+    const sportsOnly = isSportsComplexOnly(selectedVenueIds);
+    const allowedGroups = sportsOnly
       ? [REVENUE_GROUP_FACILITY]
-      : culturalOnly
-        ? [REVENUE_GROUP_PARTICULAR, REVENUE_GROUP_PACKAGE]
-        : [
-            REVENUE_GROUP_PARTICULAR,
-            REVENUE_GROUP_PACKAGE,
-            REVENUE_GROUP_FACILITY,
-          ];
+      : [REVENUE_GROUP_PARTICULAR, REVENUE_GROUP_PACKAGE];
 
     const requestedGroup = searchParams.get("group");
     const group =
@@ -81,8 +85,10 @@ export async function GET(request) {
         : allowedGroups[0];
 
     const where = { paymentDate: { gte: window.start, lte: window.end } };
-    if (scope && scope.length) {
-      where.payment = { booking: { reservation: { venueId: { in: scope } } } };
+    if (selectedVenueIds && selectedVenueIds.length) {
+      where.payment = {
+        booking: { reservation: { venueId: { in: selectedVenueIds } } },
+      };
     }
 
     const monthParam = parseInt(searchParams.get("month"), 10);
@@ -129,6 +135,7 @@ export async function GET(request) {
         },
       }),
       prisma.facility.findMany({
+        where: { venueId: 2 },
         select: {
           facilityId: true,
           facilityName: true,
@@ -232,6 +239,13 @@ export async function GET(request) {
       label: window.label,
       group,
       allowedGroups,
+      venue: venueFilter,
+      canChooseVenue,
+      venueOptions: [
+        { value: "all", label: "All venues" },
+        { value: "cultural", label: "Cultural Center" },
+        { value: "sports", label: "Sports Complex" },
+      ],
       particularId: hasParticularFilter ? particularIdParam : null,
       packageId: hasPackageFilter ? packageIdParam : null,
       particularOptions,

@@ -84,6 +84,7 @@ export function RevenueCharts({
   const [year, setYear] = React.useState(String(today.getFullYear()));
   const [month, setMonth] = React.useState("all");
   const [group, setGroup] = React.useState("");
+  const [venue, setVenue] = React.useState("all");
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [activeSlice, setActiveSlice] = React.useState(null);
@@ -96,6 +97,7 @@ export function RevenueCharts({
     async function load() {
       const params = new URLSearchParams({ period, year });
       if (group) params.set("group", group);
+      params.set("venue", venue);
       if (group === "particular" && selectedItem !== "all") {
         params.set("particularId", selectedItem);
       }
@@ -120,7 +122,7 @@ export function RevenueCharts({
     return () => {
       active = false;
     };
-  }, [period, year, group, month, selectedItem]);
+  }, [period, year, group, month, selectedItem, venue]);
 
   const graph = data?.graph || [];
   const pie = data?.pie || [];
@@ -146,6 +148,11 @@ export function RevenueCharts({
   React.useEffect(() => {
     setLegendPage(1);
   }, [period, year, group, month, selectedItem, data]);
+
+  React.useEffect(() => {
+    setGroup("");
+    setSelectedItem("all");
+  }, [venue]);
 
   React.useEffect(() => {
     if (data?.group && !group) setGroup(data.group);
@@ -257,6 +264,24 @@ export function RevenueCharts({
                 </Select>
               </div>
             </>
+          )}
+
+          {data?.canChooseVenue && (
+            <div className="space-y-1">
+              <span className="text-muted-foreground text-xs">Venue</span>
+              <Select value={venue} onValueChange={setVenue}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="max-h-60">
+                  {(data?.venueOptions || []).map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <div className="space-y-1">
