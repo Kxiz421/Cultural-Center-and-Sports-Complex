@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { ParticularQuantityStepper } from "@/components/particular-quantity-stepper";
 import { filterCustomParticulars } from "@/lib/reservation-package-select";
 import { readParticularQuantity } from "@/lib/particular-options";
@@ -114,7 +115,9 @@ export function VenueRentalParticularsList({
                             {tier.qty} units = {toPeso(tier.price)} ({tier.label})
                           </div>
                         ))}
-                        <div className="font-medium">Minimum 4 units.</div>
+                        <div className="font-medium">
+                          Fixed to 4, 6, 8, or 10 units.
+                        </div>
                       </div>
                     )}
                     {!isBasketball && !isAircon && (
@@ -125,13 +128,37 @@ export function VenueRentalParticularsList({
                       </p>
                     )}
                   </div>
-                  <ParticularQuantityStepper
-                    value={qty}
-                    max={maxQty}
-                    min={isAircon ? 4 : 0}
-                    buttonClassName="size-7"
-                    onChange={(value) => setQuantity(p.particularId, value)}
-                  />
+                  {isAircon ? (
+                    <div className="flex shrink-0 flex-wrap gap-1">
+                      {AIRCON_TIERS.map((tier) => {
+                        const active = Number(qty) === tier.qty;
+                        const overStock = hasInventory && tier.qty > maxQty;
+                        return (
+                          <Button
+                            key={tier.qty}
+                            type="button"
+                            size="sm"
+                            variant={active ? "default" : "outline"}
+                            className="h-7 min-w-9 px-2 text-xs tabular-nums"
+                            aria-pressed={active}
+                            disabled={overStock}
+                            onClick={() =>
+                              setQuantity(p.particularId, active ? 0 : tier.qty)
+                            }
+                          >
+                            {tier.qty}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <ParticularQuantityStepper
+                      value={qty}
+                      max={maxQty}
+                      buttonClassName="size-7"
+                      onChange={(value) => setQuantity(p.particularId, value)}
+                    />
+                  )}
                 </div>
               );
             })}

@@ -110,6 +110,7 @@ export default function LoginPage() {
   const [pwChangeLoading, setPwChangeLoading] = React.useState(false);
   const [showPwChange, setShowPwChange] = React.useState(false);
   const [errors, setErrors] = React.useState({});
+  const [loginError, setLoginError] = React.useState("");
   const [recoverErrors, setRecoverErrors] = React.useState({});
   const [pwChangeErrors, setPwChangeErrors] = React.useState({});
 
@@ -213,6 +214,7 @@ export default function LoginPage() {
    * the forced-change dialog instead of signing in.
    */
   const attemptLogin = async (identifierValue, passwordValue) => {
+    setLoginError("");
     // Single authentication point: Auth.js verifies the credentials,
     // enforces the IP rate limit, and issues the signed httpOnly session
     // cookie. Identity is never derived from localStorage again.
@@ -243,7 +245,7 @@ export default function LoginPage() {
         LOGIN_ERROR_MESSAGES[result?.code] ??
         LOGIN_ERROR_MESSAGES[result?.error] ??
         LOGIN_ERROR_MESSAGES.CredentialsSignin;
-      toast.error(message);
+      setLoginError(message);
       return false;
     }
 
@@ -295,12 +297,13 @@ export default function LoginPage() {
       return;
     }
     setErrors({});
+    setLoginError("");
 
     setLoginLoading(true);
     try {
       await attemptLogin(email.trim(), password);
     } catch (err) {
-      toast.error("An error occurred during login. Please try again.");
+      setLoginError("An error occurred during login. Please try again.");
     } finally {
       setLoginLoading(false);
     }
@@ -622,6 +625,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => {
                   clearError(setErrors, "email");
+                  setLoginError("");
                   setEmail(e.target.value);
                 }}
                 placeholder="Enter your email or username"
@@ -640,6 +644,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => {
                     clearError(setErrors, "password");
+                    setLoginError("");
                     setPassword(e.target.value);
                   }}
                   placeholder="Enter your password"
@@ -668,6 +673,15 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
+            {loginError && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
+              >
+                {loginError}
+              </div>
+            )}
             <Button type="submit" className="w-full">
               Login
             </Button>
