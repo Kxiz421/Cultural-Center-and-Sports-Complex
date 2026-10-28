@@ -157,9 +157,67 @@ export async function GET(request) {
         })
       : transactions;
 
+    const particularIdParam = parseInt(searchParams.get("particularId"), 10);
+    const packageIdParam = parseInt(searchParams.get("packageId"), 10);
+    const hasParticularFilter =
+      group === REVENUE_GROUP_PARTICULAR && Number.isInteger(particularIdParam);
+    const hasPackageFilter =
+      group === REVENUE_GROUP_PACKAGE && Number.isInteger(packageIdParam);
+
+    const matchesItem = (transaction) => {
+      if (!hasParticularFilter && !hasPackageFilter) return true;
+      const reservation = transaction.payment?.booking?.reservation;
+      if (!reservation) return false;
+      if (hasParticularFilter) {
+        return (reservation.reservedParticulars || []).some(
+          (rp) =>
+            Number(rp.particular?.particularId ?? rp.particularId) ===
+            particularIdParam
+        );
+      }
+      return Number(reservation.package?.packageId ?? 0) === packageIdParam;
+    };
+
+    const filteredTransactions = breakdownTransactions.filter(matchesItem);
+
+    const particularOptionsMap = new Map();
+    const packageOptionsMap = new Map();
+    for (const transaction of breakdownTransactions) {
+      const reservation = transaction.payment?.booking?.reservation;
+      if (!reservation) continue;
+      for (const rp of reservation.reservedParticulars || []) {
+        const id = Number(rp.particular?.particularId ?? rp.particularId);
+        if (Number.isInteger(id) && !particularOptionsMap.has(id)) {
+          particularOptionsMap.set(
+            id,
+            rp.particular?.particularName || `Particular ${id}`
+          );
+        }
+      }
+      const pkg = reservation.package;
+      const packageIdNum = Number(pkg?.packageId);
+      if (
+        pkg &&
+        Number.isInteger(packageIdNum) &&
+        !packageOptionsMap.has(packageIdNum)
+      ) {
+        packageOptionsMap.set(
+          packageIdNum,
+          pkg.packageName || `Package ${packageIdNum}`
+        );
+      }
+    }
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    const particularOptions = [...particularOptionsMap]
+      .map(([id, name]) => ({ id, name }))
+      .sort(byName);
+    const packageOptions = [...packageOptionsMap]
+      .map(([id, name]) => ({ id, name }))
+      .sort(byName);
+
     const charts = buildRevenueCharts({
-      transactions,
-      breakdownTransactions,
+      transactions: filteredTransactions,
+      breakdownTransactions: filteredTransactions,
       facilitiesById,
       group,
       window,
@@ -172,6 +230,10 @@ export async function GET(request) {
       label: window.label,
       group,
       allowedGroups,
+      particularId: hasParticularFilter ? particularIdParam : null,
+      packageId: hasPackageFilter ? packageIdParam : null,
+      particularOptions,
+      packageOptions,
       scopeLabel: venueScopeLabel(scope && scope.length ? scope : []),
       graph: charts.graph,
       pie: charts.pie,

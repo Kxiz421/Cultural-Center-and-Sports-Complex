@@ -87,6 +87,8 @@ export function RevenueCharts({
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [activeSlice, setActiveSlice] = React.useState(null);
+  const [selectedItem, setSelectedItem] = React.useState("all");
+  const [legendPage, setLegendPage] = React.useState(1);
 
   React.useEffect(() => {
     let active = true;
@@ -94,6 +96,12 @@ export function RevenueCharts({
     async function load() {
       const params = new URLSearchParams({ period, year });
       if (group) params.set("group", group);
+      if (group === "particular" && selectedItem !== "all") {
+        params.set("particularId", selectedItem);
+      }
+      if (group === "package" && selectedItem !== "all") {
+        params.set("packageId", selectedItem);
+      }
       if (period === "month" && month !== "all") params.set("month", month);
       try {
         const res = await fetch(
@@ -112,7 +120,7 @@ export function RevenueCharts({
     return () => {
       active = false;
     };
-  }, [period, year, group, month]);
+  }, [period, year, group, month, selectedItem]);
 
   const graph = data?.graph || [];
   const pie = data?.pie || [];
@@ -123,6 +131,24 @@ export function RevenueCharts({
   );
   const activeGroup = allowedGroups.includes(group) ? group : allowedGroups[0];
   const activeNoun = GROUP_NOUN[activeGroup] || "item";
+  const itemOptions =
+    activeGroup === "particular"
+      ? data?.particularOptions || []
+      : activeGroup === "package"
+        ? data?.packageOptions || []
+        : [];
+
+  React.useEffect(() => {
+    setSelectedItem("all");
+  }, [group]);
+
+  React.useEffect(() => {
+    setLegendPage(1);
+  }, [period, year, group, month, selectedItem, data]);
+
+  React.useEffect(() => {
+    if (data?.group && !group) setGroup(data.group);
+  }, [data, group]);
 
   const maxGraph = Math.max(1, ...graph.map((bucket) => bucket.amount));
 
@@ -140,6 +166,18 @@ export function RevenueCharts({
     end: cumulative[index] / pieSum,
     color: PIE_COLORS[index % PIE_COLORS.length],
   }));
+
+  const LEGEND_PAGE_SIZE = 8;
+  const legendTotalPages = Math.max(
+    1,
+    Math.ceil(slices.length / LEGEND_PAGE_SIZE),
+  );
+  const safeLegendPage = Math.min(legendPage, legendTotalPages);
+  const legendStart = (safeLegendPage - 1) * LEGEND_PAGE_SIZE;
+  const legendSlices = slices.slice(
+    legendStart,
+    legendStart + LEGEND_PAGE_SIZE,
+  );
 
   const selectMonth = (index) => {
     if (period !== "month") return;
@@ -231,6 +269,31 @@ export function RevenueCharts({
               </SelectContent>
             </Select>
           </div>
+
+          {(activeGroup === "particular" || activeGroup === "package") &&
+            itemOptions.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-muted-foreground text-xs">
+                  Which {activeGroup === "particular" ? "particular" : "package"}
+                </span>
+                <Select value={selectedItem} onValueChange={setSelectedItem}>
+                  <SelectTrigger className="w-[190px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="max-h-60">
+                    <SelectItem value="all">
+                      All{" "}
+                      {activeGroup === "particular" ? "particulars" : "packages"}
+                    </SelectItem>
+                    {itemOptions.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        {option.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
           <div className="ml-auto text-right">
             <span className="text-muted-foreground text-xs">Total</span>
@@ -345,7 +408,8 @@ export function RevenueCharts({
               </svg>
 
               <ul className="w-full space-y-1">
-                {slices.map((slice, index) => {
+                {legendSlices.map((slice, offset) => {
+                  const index = legendStart + offset;
                   const isActive = activeSlice === index;
                   return (
                     <li
@@ -389,6 +453,39 @@ export function RevenueCharts({
                   );
                 })}
               </ul>
+              {slices.length > LEGEND_PAGE_SIZE && (
+                <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                  <span className="text-muted-foreground">
+                    {legendStart + 1}–
+                    {Math.min(legendStart + LEGEND_PAGE_SIZE, slices.length)} of{" "}
+                    {slices.length}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="rounded-md border px-2 py-1 disabled:opacity-40"
+                      disabled={safeLegendPage <= 1}
+                      onClick={() =>
+                        setLegendPage((p) => Math.max(1, p - 1))
+                      }
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border px-2 py-1 disabled:opacity-40"
+                      disabled={safeLegendPage >= legendTotalPages}
+                      onClick={() =>
+                        setLegendPage((p) =>
+                          Math.min(legendTotalPages, p + 1)
+                        )
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

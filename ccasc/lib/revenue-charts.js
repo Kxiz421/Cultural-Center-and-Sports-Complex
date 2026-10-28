@@ -209,10 +209,7 @@ export function buildRevenueCharts({
     total += amount;
 
     const reservation = transaction.payment?.booking?.reservation;
-    if (!reservation) {
-      add("unassigned", "Unassigned", amount, "unassigned", 0);
-      continue;
-    }
+    if (!reservation) continue;
 
     const prepared = prepareReservation(reservation, facilitiesById);
     const allocations = reservationAllocations(prepared, group);
@@ -220,10 +217,7 @@ export function buildRevenueCharts({
       (sum, item) => sum + (Number(item.amount) || 0),
       0,
     );
-    if (allocationTotal <= 0) {
-      add("unassigned", "Unassigned", amount, reservation.reservationId, 0);
-      continue;
-    }
+    if (allocationTotal <= 0) continue;
 
     for (const item of allocations) {
       const share = (Number(item.amount) || 0) / allocationTotal;
