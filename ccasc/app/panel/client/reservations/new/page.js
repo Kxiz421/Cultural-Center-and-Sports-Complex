@@ -907,40 +907,43 @@ export default function ClientNewReservationPage() {
   // Wizard. Sports Complex facilities can only be chosen once dates are
   // selected (availability is per date), so its facility step follows Dates.
   const STEP_DETAILS = 0;
-  const STEP_DATES = isSportsComplex ? 1 : 2;
-  const STEP_PACKAGE = isSportsComplex ? 2 : 1;
-  const STEP_REVIEW = 3;
-  const WIZARD_STEPS = [
-    "Reservation Details",
-    isSportsComplex ? "Select Dates" : "Package",
-    isSportsComplex ? "Facilities" : "Select Dates",
-    "Review & Submit",
-  ];
+  const STEP_SELECT = 1;
+  const STEP_DATES = STEP_SELECT;
+  const STEP_PACKAGE = STEP_SELECT;
+  const STEP_REVIEW = 2;
+  const WIZARD_STEPS = ["Venue & Event", "Date & Packages", "Review & Submit"];
   const STEP_HINTS = [
     "Choose the venue, give your event a name, and pick a time slot.",
-    isSportsComplex
-      ? "Select your event date(s) from the calendar."
-      : "Choose a package, or build your own with the additional services.",
-    isSportsComplex
-      ? "Select one or more facilities for your event."
-      : "Select your event date(s) from the calendar.",
+    "Select your date(s), then choose a package or the facilities and particulars for your event. The cost breakdown updates on the right.",
     "Review the details below, then generate your Order of Payment.",
   ];
   const stepValid = [];
   stepValid[STEP_DETAILS] = Boolean(form.venueId && form.eventType && form.timeSlotId);
-  stepValid[STEP_DATES] = selectedDates.size > 0;
-  stepValid[STEP_PACKAGE] = isSportsComplex
-    ? customizePerDate || selectedFacilityIds.length > 0
-    : true;
+  stepValid[STEP_SELECT] =
+    selectedDates.size > 0 &&
+    (isSportsComplex
+      ? customizePerDate || selectedFacilityIds.length > 0
+      : true);
   stepValid[STEP_REVIEW] = true;
-  const stepErrors = (s) =>
-    s === STEP_DETAILS
-      ? { details: "Please select a venue, event type, and time slot." }
-      : s === STEP_DATES
-        ? { dates: "Please select at least one date." }
-        : isSportsComplex
-          ? { facilities: "Please select at least one facility." }
-          : { package: "Please complete your package selection." };
+  const stepErrors = (s) => {
+    if (s === STEP_DETAILS) {
+      return { details: "Please select a venue, event type, and time slot." };
+    }
+    if (s === STEP_SELECT) {
+      if (selectedDates.size === 0) {
+        return { dates: "Please select at least one date." };
+      }
+      if (
+        isSportsComplex &&
+        !customizePerDate &&
+        selectedFacilityIds.length === 0
+      ) {
+        return { facilities: "Please select at least one facility." };
+      }
+      return { package: "Please complete your package selection." };
+    }
+    return {};
+  };
   const goNext = () => {
     if (!stepValid[step]) {
       setErrors(stepErrors(step));
@@ -1598,6 +1601,8 @@ const renderPerDateFacilities = (date, cust) => {
               )}
             </div>
 {/* Date Picker - Calendar Grid */}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
             {step === STEP_DATES && (
             <div className="space-y-2" aria-invalid={Boolean(errors.dates)}>
               <Label>Select Dates <span className="text-red-500">*</span></Label>
@@ -1881,6 +1886,38 @@ const renderPerDateFacilities = (date, cust) => {
             )}
             </>
             )}
+            </div>
+            {step === STEP_SELECT && (
+              <div className="space-y-3 lg:sticky lg:top-20">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Cost Breakdown</CardTitle>
+                    <CardDescription>Updates as you select.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {summaryLines.length > 0 ? (
+                      summaryLines.map((line, i) => (
+                        <div key={`${line.date || "line"}-${i}`} className="flex items-start justify-between gap-3">
+                          <span className="min-w-0 wrap-break-word">{line.label}</span>
+                          <span className="shrink-0 tabular-nums font-medium">₱{line.amount.toLocaleString()}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No charges selected yet.</p>
+                    )}
+                    <Separator />
+                    <div className="flex justify-between text-base font-bold">
+                      <span>Total</span>
+                      <span className="tabular-nums">₱{total.toLocaleString()}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Button type="button" size="lg" className="w-full" onClick={goNext}>
+                  Review &amp; Submit
+                </Button>
+              </div>
+            )}
+            </div>
 
             {step === STEP_REVIEW && (
             <div className="space-y-2">

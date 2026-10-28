@@ -572,46 +572,43 @@ export default function WalkInReservationPage() {
   // Wizard steps (client details first for walk-in reservations). Sports
   // Complex facilities need dates first, so its facility step follows Dates.
   const STEP_CLIENT = 0;
-  const STEP_DETAILS = 1;
-  const STEP_DATES = isSportsComplex ? 2 : 3;
-  const STEP_PACKAGE = isSportsComplex ? 3 : 2;
-  const STEP_REVIEW = 4;
-  const WIZARD_STEPS = [
-    "Client",
-    "Reservation Details",
-    isSportsComplex ? "Select Dates" : "Package",
-    isSportsComplex ? "Facilities" : "Select Dates",
-    "Review & Submit",
-  ];
+  const STEP_DETAILS = 0;
+  const STEP_SELECT = 1;
+  const STEP_DATES = STEP_SELECT;
+  const STEP_PACKAGE = STEP_SELECT;
+  const STEP_REVIEW = 2;
+  const WIZARD_STEPS = ["Client & Event", "Date & Packages", "Review & Submit"];
   const STEP_HINTS = [
-    "Choose whether this is a new walk-in client or an existing user.",
-    "Enter the venue, event name, and time slot.",
-    isSportsComplex
-      ? "Select the event date(s) from the calendar."
-      : "Choose a package, or build your own with the additional services.",
-    isSportsComplex
-      ? "Select one or more facilities for this event."
-      : "Select the event date(s) from the calendar.",
+    "Choose the client, then enter the venue, event name, and time slot.",
+    "Select the event date(s), then choose a package or the facilities and particulars. The cost breakdown updates on the right.",
     "Review the details, then save and print the Order of Payment.",
   ];
   const stepValid = [];
-  stepValid[STEP_CLIENT] = isExistingUser
-    ? Boolean(selectedClient)
-    : Boolean(clientName);
-  stepValid[STEP_DETAILS] = Boolean(venueId && eventType);
-  stepValid[STEP_DATES] = selectedDates.size > 0;
-  stepValid[STEP_PACKAGE] = true;
+  stepValid[STEP_CLIENT] = Boolean(
+    (isExistingUser ? selectedClient : Boolean(clientName)) &&
+      venueId &&
+      eventType
+  );
+  stepValid[STEP_SELECT] = selectedDates.size > 0;
   stepValid[STEP_REVIEW] = true;
-  const stepErrors = (s) =>
-    s === STEP_CLIENT
-      ? {
-          client: isExistingUser
-            ? "Please search and select an existing user."
-            : "Please enter the walk-in client's name.",
-        }
-      : s === STEP_DETAILS
-        ? { venue: "Please select a venue.", eventType: "Please enter the event type." }
-        : { dates: "Please select at least one date." };
+  const stepErrors = (s) => {
+    if (s === STEP_CLIENT) {
+      if (isExistingUser && !selectedClient) {
+        return { client: "Please search and select an existing user." };
+      }
+      if (!isExistingUser && !clientName) {
+        return { client: "Please enter the walk-in client's name." };
+      }
+      return {
+        venue: "Please select a venue.",
+        eventType: "Please enter the event type.",
+      };
+    }
+    if (s === STEP_SELECT) {
+      return { dates: "Please select at least one date." };
+    }
+    return {};
+  };
   const goNext = () => {
     if (!stepValid[step]) {
       setErrors(stepErrors(step));
@@ -1814,6 +1811,8 @@ const renderPerDateFacilities = (date, cust) => {
             </div>
             </>
             )}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
             {/* Select dates */}
             {step === STEP_DATES && (
             <div className="space-y-2" aria-invalid={Boolean(errors.dates)}>
@@ -2150,6 +2149,38 @@ const renderPerDateFacilities = (date, cust) => {
             )}
             </>
             )}
+            </div>
+            {step === STEP_SELECT && (
+              <div className="space-y-3 lg:sticky lg:top-20">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Cost Breakdown</CardTitle>
+                    <CardDescription>Updates as you select.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    {summaryLines.length > 0 ? (
+                      summaryLines.map((line, i) => (
+                        <div key={`${line.date || "line"}-${i}`} className="flex items-start justify-between gap-3">
+                          <span className="min-w-0 wrap-break-word">{line.label}</span>
+                          <span className="shrink-0 tabular-nums font-medium">₱{line.amount.toLocaleString()}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No charges selected yet.</p>
+                    )}
+                    <Separator />
+                    <div className="flex justify-between text-base font-bold">
+                      <span>Total</span>
+                      <span className="tabular-nums">₱{total.toLocaleString()}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Button type="button" size="lg" className="w-full" onClick={goNext}>
+                  Review &amp; Submit
+                </Button>
+              </div>
+            )}
+            </div>
             {step === STEP_REVIEW && (
             <div className="space-y-2">
               <Label>Additional Notes</Label>
