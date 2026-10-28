@@ -1884,7 +1884,15 @@ export default function LTOOPaymentsPage() {
                     <span className="text-muted-foreground">Original 10%</span>
                     <span className="tabular-nums text-right">{formatPhp(historyReservation.deposit.requiredAmount)}</span>
                     <span className="text-muted-foreground">After deductions</span>
-                    <span className="tabular-nums text-right">{formatPhp(Math.max(0, roundMoney(historyReservation.deposit.amountAfterDeductions)))}</span>
+                    <span
+                      className={`tabular-nums text-right ${
+                        roundMoney(historyReservation.deposit.amountAfterDeductions) < 0
+                          ? "font-medium text-destructive"
+                          : ""
+                      }`}
+                    >
+                      {formatPhp(roundMoney(historyReservation.deposit.amountAfterDeductions))}
+                    </span>
                     {roundMoney(historyReservation.deposit.outstandingBalance) > 0 && (
                       <>
                         <span className="text-muted-foreground">Outstanding balance</span>
@@ -2135,8 +2143,14 @@ export default function LTOOPaymentsPage() {
                   {selectedTransaction.depositAmountAfterDeductions != null && (
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">After deductions</span>
-                      <span className="font-medium tabular-nums">
-                        {formatPhp(Math.max(0, roundMoney(selectedTransaction.depositAmountAfterDeductions)))}
+                      <span
+                        className={`font-medium tabular-nums ${
+                          roundMoney(selectedTransaction.depositAmountAfterDeductions) < 0
+                            ? "text-destructive"
+                            : ""
+                        }`}
+                      >
+                        {formatPhp(roundMoney(selectedTransaction.depositAmountAfterDeductions))}
                       </span>
                     </div>
                   )}

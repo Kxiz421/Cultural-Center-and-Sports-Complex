@@ -4,10 +4,13 @@ import prisma from "@/lib/prisma";
 import { formatDbDate, formatPhp, roundMoney } from "@/lib/utils";
 import {
   consumeDeposit,
+  getDepositOutstanding,
+  getDepositRemaining,
   mapDepositSnapshot,
   pulloutDeposit,
   settleDepositBalance,
 } from "@/lib/deposit-utils";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -15,6 +18,27 @@ export const dynamic = "force-dynamic";
 function parseStaffId(performedBy) {
   if (!performedBy) return null;
   return parseInt(String(performedBy).replace("STF-", ""), 10) || null;
+}
+
+/** Build the reservation context string + email rows used in client notifications. */
+function reservationContext(reservation, reservationId) {
+  const eventDate = reservation?.eventDate ? formatDbDate(reservation.eventDate) : null;
+  const venue = reservation?.venue?.venue || null;
+  const text = [
+    reservation?.eventType ? `"${reservation.eventType}"` : null,
+    eventDate ? `on ${eventDate}` : null,
+    venue ? `at ${venue}` : null,
+    reservationId ? `(Reservation #${reservationId})` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const rows = [
+    ...(reservation?.eventType ? [{ label: "Event", value: reservation.eventType }] : []),
+    ...(eventDate ? [{ label: "Event date", value: eventDate }] : []),
+    ...(venue ? [{ label: "Venue", value: venue }] : []),
+    ...(reservationId ? [{ label: "Reference", value: `RES-${reservationId}` }] : []),
+  ];
+  return { text, rows };
 }
 
 async function findBookingId(reservationId) {
@@ -33,6 +57,7 @@ async function findBookingId(reservationId) {
           eventType: true,
           eventDate: true,
           eventStatus: true,
+          venue: { select: { venue: true } },
           additionalDates: { select: { eventDate: true } },
         },
       },
@@ -90,6 +115,49 @@ export async function POST(request) {
         },
       });
 
+      const clientId = booking.reservation?.clientId;
+      if (clientId) {
+        const outstanding = getDepositOutstanding(result.deposit);
+        const remaining = getDepositRemaining(result.deposit);
+        const ctx = reservationContext(booking.reservation, parsedReservationId);
+        const overLimit = outstanding > 0;
+        const message =
+          `A deduction of ${formatPhp(result.deduction.amount)} was applied to your 10% deposit` +
+          `${ctx.text ? ` for ${ctx.text}` : ""} (reason: ${result.deduction.reason}).` +
+          (overLimit
+            ? ` This exceeds the amount held, leaving an outstanding balance of ${formatPhp(outstanding)}.`
+            : ` Remaining deposit: ${formatPhp(remaining)}.`);
+
+        await notifyClientEvent({
+          clientId,
+          type: "payment",
+          message,
+          email: {
+            subject: overLimit
+              ? "Deposit Deduction — Outstanding Balance - CSASC"
+              : "10% Deposit Deduction - CSASC",
+            heading: overLimit ? "⚠️ Deposit Deduction — Balance Due" : "🧾 Deposit Deduction",
+            accent: overLimit ? "#dc2626" : "#2563eb",
+            intro: overLimit
+              ? "A deduction was applied to your 10% deposit and went beyond the amount you paid."
+              : "A deduction was applied to your 10% deposit.",
+            rows: [
+              { label: "Deduction", value: formatPhp(result.deduction.amount) },
+              { label: "Reason", value: result.deduction.reason },
+              ...ctx.rows,
+              { label: "Remaining deposit", value: formatPhp(remaining) },
+              ...(overLimit
+                ? [{ label: "Outstanding balance", value: formatPhp(outstanding) }]
+                : []),
+            ],
+            note: overLimit
+              ? `Please settle the outstanding balance of ${formatPhp(outstanding)} at the Local Treasury Operations Office. You cannot reserve a new event until this balance is settled.`
+              : undefined,
+          },
+          sms: message,
+        });
+      }
+
       return NextResponse.json({
         success: true,
         deposit: mapDepositSnapshot(result.deposit),
@@ -124,6 +192,32 @@ export async function POST(request) {
           details: `Pulled out remaining deposit of ${formatPhp(result.releaseAmount)}.`,
         },
       });
+
+      const clientId = booking.reservation?.clientId;
+      if (clientId) {
+        const ctx = reservationContext(booking.reservation, parsedReservationId);
+        const message = `Your remaining 10% deposit of ${formatPhp(result.releaseAmount)} has been pulled out${
+          ctx.text ? ` for ${ctx.text}` : ""
+        }.`;
+
+        await notifyClientEvent({
+          clientId,
+          type: "payment",
+          message,
+          email: {
+            subject: "10% Deposit Pulled Out - CSASC",
+            heading: "💸 10% Deposit Pulled Out",
+            accent: "#059669",
+            intro: "Your remaining 10% deposit has been released.",
+            rows: [
+              { label: "Amount released", value: formatPhp(result.releaseAmount) },
+              ...ctx.rows,
+            ],
+            note: "This confirms the release of your remaining deposit after the event has ended.",
+          },
+          sms: message,
+        });
+      }
 
       return NextResponse.json({
         success: true,
