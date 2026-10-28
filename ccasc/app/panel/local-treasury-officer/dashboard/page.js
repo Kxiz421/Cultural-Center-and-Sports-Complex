@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 import { RevenueCharts } from "@/components/revenue-charts";
-import { Wallet, BellRing } from "lucide-react";
 
 export default function LTOODashboardPage() {
   const [stats, setStats] = React.useState(null);
@@ -34,44 +33,43 @@ export default function LTOODashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Dashboard</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          Treasury Dashboard
+        </h2>
         <p className="text-muted-foreground text-sm">
-          Overview of payments, notifications, documents, and revenue.
+          Payments, notifications and recorded revenue.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
-            <Wallet className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? "..." : stats?.totalPayments ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Recorded payments</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Notifications</CardTitle>
-            <BellRing className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? "..." : stats?.pendingNotifications ?? 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Awaiting notify</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Revenue windows: daily, weekly, monthly and yearly */}
       <RevenueSummaryCards
         revenue={stats?.revenue}
         note="Payments recorded in this window."
       />
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Payments</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {loading ? "..." : stats?.totalPayments ?? 0}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Recorded payments.
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Pending Notifications</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {loading ? "..." : stats?.pendingNotifications ?? 0}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Awaiting a notify action.
+          </CardContent>
+        </Card>
+      </div>
 
       <RevenueCharts description="Payments recorded across both venues." />
     </div>

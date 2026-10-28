@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Bell, FileText, History } from "lucide-react";
 import ReservationsTracker from "@/components/reservations-tracker";
 
 export default function ProvincialAgencyDashboard() {
@@ -13,7 +18,6 @@ export default function ProvincialAgencyDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // In production, pass the actual clientId from auth context
         const res = await fetch("/api/dashboard/provincial-agency?clientId=1");
         const json = await res.json();
         setData(json);
@@ -28,11 +32,11 @@ export default function ProvincialAgencyDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-2xl font-semibold tracking-tight">
             Welcome, Provincial Agency
-          </h1>
+          </h2>
           <p className="text-muted-foreground text-sm">
             Loading live data from database...
           </p>
@@ -51,71 +55,63 @@ export default function ProvincialAgencyDashboard() {
   const upcomingEvents = data?.upcomingEvents || [];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h2 className="text-2xl font-semibold tracking-tight">
           Welcome, Provincial Agency
-        </h1>
+        </h2>
         <p className="text-muted-foreground text-sm">
-          Live data from database — Provincial Department Agency Portal
+          Reservations, documents and notifications overview.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Reservations</CardTitle>
-            <Calendar className="text-muted-foreground size-4" />
+          <CardHeader className="pb-2">
+            <CardDescription>Total Reservations</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {stats.totalReservations}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats.totalReservations}</p>
-            <p className="text-xs text-muted-foreground">
-              {stats.confirmedReservations} confirmed · {stats.pendingReservations} pending
-            </p>
+          <CardContent className="text-muted-foreground text-xs">
+            {stats.confirmedReservations} confirmed · {stats.pendingReservations} pending
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Confirmed</CardTitle>
-            <Calendar className="text-muted-foreground size-4" />
+          <CardHeader className="pb-2">
+            <CardDescription>Confirmed</CardDescription>
+            <CardTitle className="text-3xl text-green-600 tabular-nums">
+              {stats.confirmedReservations}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-600">{stats.confirmedReservations}</p>
-            <p className="text-xs text-muted-foreground">
-              Approved and scheduled events
-            </p>
+          <CardContent className="text-muted-foreground text-xs">
+            Approved and scheduled events.
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Notifications</CardTitle>
-            <Bell className="text-muted-foreground size-4" />
+          <CardHeader className="pb-2">
+            <CardDescription>Notifications</CardDescription>
+            <CardTitle className="text-3xl text-blue-600 tabular-nums">
+              {stats.unreadNotifications}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-blue-600">{stats.unreadNotifications}</p>
-            <p className="text-xs text-muted-foreground">
-              Unread notifications
-            </p>
+          <CardContent className="text-muted-foreground text-xs">
+            Unread notifications.
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Documents</CardTitle>
-            <FileText className="text-muted-foreground size-4" />
+          <CardHeader className="pb-2">
+            <CardDescription>Documents</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {stats.totalDocuments}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats.totalDocuments}</p>
-            <p className="text-xs text-muted-foreground">
-              Uploaded documents
-            </p>
+          <CardContent className="text-muted-foreground text-xs">
+            Uploaded documents.
           </CardContent>
         </Card>
       </div>
 
-      {/* Upcoming Events */}
       {upcomingEvents.length > 0 && (
         <Card>
           <CardHeader>
@@ -144,7 +140,6 @@ export default function ProvincialAgencyDashboard() {
         </Card>
       )}
 
-      {/* Reservations tracker — search, filters and the live process per reservation. */}
       <ReservationsTracker
         showNewReservation={false}
         title="My Reservations"

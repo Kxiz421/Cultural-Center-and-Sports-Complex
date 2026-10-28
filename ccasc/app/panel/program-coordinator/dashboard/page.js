@@ -9,10 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 import { RevenueCharts } from "@/components/revenue-charts";
-import { CalendarDays, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -73,23 +71,20 @@ export default function CoordinatorDashboardPage() {
           Program Coordinator Dashboard
         </h2>
         <p className="text-muted-foreground text-sm">
-          {venueLabel} — live data from database.
+          {venueLabel} reservations and recorded receipts.
         </p>
       </div>
 
-      {/* Revenue windows: daily, weekly, monthly and yearly */}
       <RevenueSummaryCards
         revenue={revenue}
         note={`Recorded receipts for ${venueLabel}.`}
       />
 
-      <RevenueCharts description={`Recorded receipts for ${venueLabel}.`} />
-
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Active Reservations</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
+            <CardTitle className="text-3xl tabular-nums">
               {bookingStatus.pending + bookingStatus.confirmed}
             </CardTitle>
           </CardHeader>
@@ -97,62 +92,59 @@ export default function CoordinatorDashboardPage() {
             Total pending and confirmed reservations.
           </CardContent>
         </Card>
-      </div>
-
-      {/* Booking Status Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Pending</CardDescription>
-            <Clock className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-yellow-600">
+            <CardTitle className="text-3xl text-yellow-600 tabular-nums">
               {bookingStatus.pending}
             </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Awaiting confirmation.
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Confirmed</CardDescription>
-            <CheckCircle2 className="size-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-green-600">
+            <CardTitle className="text-3xl text-green-600 tabular-nums">
               {bookingStatus.confirmed}
             </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Approved and scheduled events.
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Ongoing</CardDescription>
-            <TrendingUp className="size-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-blue-600">
+            <CardTitle className="text-3xl text-blue-600 tabular-nums">
               {bookingStatus.ongoing}
             </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Events currently in progress.
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Completed</CardDescription>
-            <CalendarDays className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
             <CardTitle className="text-3xl tabular-nums">
               {bookingStatus.completed}
             </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Finished events.
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Reservations */}
+      <RevenueCharts description={`Recorded receipts for ${venueLabel}.`} />
+
       <Card>
         <CardHeader>
           <CardTitle>Recent Reservations</CardTitle>
           <CardDescription>
-            Latest reservation activity in the Cultural Center.
+            Latest reservation activity for {venueLabel}.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -205,12 +197,11 @@ export default function CoordinatorDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Monthly Revenue */}
       <Card>
         <CardHeader>
           <CardTitle>Monthly Revenue (Current Year)</CardTitle>
           <CardDescription>
-            Cultural Center revenue per month.
+            {venueLabel} revenue per month.
           </CardDescription>
         </CardHeader>
         <CardContent>

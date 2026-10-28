@@ -9,10 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { RevenueSummaryCards } from "@/components/revenue-summary-cards";
 import { RevenueCharts } from "@/components/revenue-charts";
-import { CalendarDays, ClipboardList, TrendingUp } from "lucide-react";
 
 function formatPhp(amount) {
   return new Intl.NumberFormat("en-PH", {
@@ -69,62 +67,64 @@ export default function AccountingDashboardPage() {
           Accounting Dashboard
         </h2>
         <p className="text-muted-foreground text-sm">
-          Live data from database — reservations and payments overview.
+          Reservations and client payments overview.
         </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <RevenueSummaryCards
+        revenue={revenue}
+        note="Client payments recorded in this window."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Total Reservations</CardDescription>
-          </CardHeader>
-          <CardContent>
             <CardTitle className="text-3xl tabular-nums">
               {summary.total}
             </CardTitle>
-            <p className="text-muted-foreground text-xs">All time reservations</p>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            All time reservations.
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Partially Paid</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-yellow-600">
+            <CardTitle className="text-3xl text-yellow-600 tabular-nums">
               {summary.partiallyPaid}
             </CardTitle>
-            <p className="text-muted-foreground text-xs">Awaiting full payment</p>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Awaiting full payment.
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Fully Paid</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-green-600">
+            <CardTitle className="text-3xl text-green-600 tabular-nums">
               {summary.fullyPaid}
             </CardTitle>
-            <p className="text-muted-foreground text-xs">Completed payments</p>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Completed payments.
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardDescription>Pending Action</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl tabular-nums text-orange-600">
+            <CardTitle className="text-3xl text-orange-600 tabular-nums">
               {pendingReservations}
             </CardTitle>
-            <p className="text-muted-foreground text-xs">Needs attention</p>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-xs">
+            Needs attention.
           </CardContent>
         </Card>
       </div>
 
-      {/* Reservation List */}
+      <RevenueCharts description="Client payments across both venues." />
+
       <Card>
         <CardHeader>
           <CardTitle>Recent Reservations</CardTitle>
@@ -178,50 +178,39 @@ export default function AccountingDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Revenue windows: daily, weekly, monthly and yearly */}
-      <RevenueSummaryCards
-        revenue={revenue}
-        note="Client payments recorded in this window."
-      />
-
-      <RevenueCharts description="Client payments across both venues." />
-
-      {/* Monthly Revenue */}
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly Revenue (Current Year)</CardTitle>
-            <CardDescription>
-              Client payments per month.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {monthlyRevenue.slice(0, 6).map((m) => (
-                <div
-                  key={m.month}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="w-20 font-medium">{m.month}</span>
-                  <div className="flex flex-1 items-center gap-2">
-                    <div className="bg-primary/20 h-2 flex-1 rounded-full">
-                      <div
-                        className="bg-primary h-2 rounded-full"
-                        style={{
-                          width: `${(m.clientRevenue / 500000) * 100}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="w-24 text-right tabular-nums text-muted-foreground">
-                      {formatPhp(m.clientRevenue)}
-                    </span>
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Revenue (Current Year)</CardTitle>
+          <CardDescription>
+            Client payments per month.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {monthlyRevenue.slice(0, 6).map((m) => (
+              <div
+                key={m.month}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="w-20 font-medium">{m.month}</span>
+                <div className="flex flex-1 items-center gap-2">
+                  <div className="bg-primary/20 h-2 flex-1 rounded-full">
+                    <div
+                      className="bg-primary h-2 rounded-full"
+                      style={{
+                        width: `${(m.clientRevenue / 500000) * 100}%`,
+                      }}
+                    />
                   </div>
+                  <span className="w-24 text-right tabular-nums text-muted-foreground">
+                    {formatPhp(m.clientRevenue)}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
