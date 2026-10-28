@@ -23,6 +23,7 @@ import {
 } from "@/lib/facility-reservation-availability";
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
+import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
 import { processBalanceDeadlineReminders } from "@/lib/reservation-deadline-reminders";
 
@@ -674,6 +675,31 @@ export async function POST(request) {
             clientId: null,
             link: `/panel/local-treasury-officer/payments?reservationId=${reservation.reservationId}`,
           })),
+        });
+      }
+
+      if (parsedClientId != null) {
+        const message = `Your reservation ${reservationId} for "${eventType}" on ${dateLabel} at ${venueName} has been submitted. A 50% down payment and 10% deposit are required by ${downPaymentDeadline}.`;
+        await notifyClientEvent({
+          clientId: parsedClientId,
+          type: "reservation",
+          message,
+          email: {
+            subject: "Reservation Submitted - CSASC",
+            heading: "Reservation Submitted",
+            accent: "#2563eb",
+            intro: "We have received your reservation.",
+            rows: [
+              { label: "Reference", value: reservationId },
+              { label: "Event", value: eventType },
+              { label: "Date(s)", value: dateLabel },
+              { label: "Venue", value: venueName },
+              { label: "Total", value: formatPhp(totalAmount) },
+              { label: "Pay by", value: downPaymentDeadline },
+            ],
+            note: "A 50% down payment and 10% deposit are required to secure your slot.",
+          },
+          sms: message,
         });
       }
     }
