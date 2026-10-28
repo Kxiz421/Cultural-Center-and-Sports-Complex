@@ -97,7 +97,8 @@ export async function GET(request) {
         ? monthParam
         : null;
 
-    const [transactions, facilities] = await Promise.all([
+    const [transactions, facilities, particularCatalog, packageCatalog] =
+      await Promise.all([
       prisma.transaction.findMany({
         where,
         include: {
@@ -141,6 +142,14 @@ export async function GET(request) {
           facilityName: true,
           rate: { select: { dayRate: true } },
         },
+      }),
+      prisma.particular.findMany({
+        select: { particularId: true, particularName: true },
+        orderBy: { particularName: "asc" },
+      }),
+      prisma.package.findMany({
+        select: { packageId: true, packageName: true },
+        orderBy: { packageName: "asc" },
       }),
     ]);
 
@@ -187,39 +196,15 @@ export async function GET(request) {
 
     const filteredTransactions = breakdownTransactions.filter(matchesItem);
 
-    const particularOptionsMap = new Map();
-    const packageOptionsMap = new Map();
-    for (const transaction of breakdownTransactions) {
-      const reservation = transaction.payment?.booking?.reservation;
-      if (!reservation) continue;
-      for (const rp of reservation.reservedParticulars || []) {
-        const id = Number(rp.particular?.particularId ?? rp.particularId);
-        if (Number.isInteger(id) && !particularOptionsMap.has(id)) {
-          particularOptionsMap.set(
-            id,
-            rp.particular?.particularName || `Particular ${id}`
-          );
-        }
-      }
-      const pkg = reservation.package;
-      const packageIdNum = Number(pkg?.packageId);
-      if (
-        pkg &&
-        Number.isInteger(packageIdNum) &&
-        !packageOptionsMap.has(packageIdNum)
-      ) {
-        packageOptionsMap.set(
-          packageIdNum,
-          pkg.packageName || `Package ${packageIdNum}`
-        );
-      }
-    }
     const byName = (a, b) => a.name.localeCompare(b.name);
-    const particularOptions = [...particularOptionsMap]
-      .map(([id, name]) => ({ id, name }))
+    const particularOptions = particularCatalog
+      .map((particular) => ({
+        id: particular.particularId,
+        name: particular.particularName,
+      }))
       .sort(byName);
-    const packageOptions = [...packageOptionsMap]
-      .map(([id, name]) => ({ id, name }))
+    const packageOptions = packageCatalog
+      .map((pkg) => ({ id: pkg.packageId, name: pkg.packageName }))
       .sort(byName);
 
     const charts = buildRevenueCharts({
