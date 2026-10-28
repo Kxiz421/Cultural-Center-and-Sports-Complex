@@ -493,80 +493,90 @@ export function RevenueCharts({
             <p className="text-sm font-medium">
               Revenue {periodLabel}
             </p>
-            {period === "month" && (
-              <span className="text-muted-foreground text-xs">
-                Click a month to see its breakdown
-              </span>
-            )}
           </div>
           {loading || graph.length === 0 ? (
             <p className="text-muted-foreground py-16 text-center text-sm">
               {loading ? "Loading…" : "No data for this period."}
             </p>
           ) : (
-            <div className="relative h-56 w-full">
-              {[0, 25, 50, 75, 100].map((line) => (
-                <div
-                  key={line}
-                  className="border-border/60 absolute inset-x-0 border-t"
-                  style={{ bottom: `${line}%` }}
-                />
-              ))}
-              <div className="relative flex h-56 items-end gap-2">
-                {graph.map((bucket, index) => {
-                  const pct = (bucket.amount / maxGraph) * 100;
-                  const isSelected = selectedBar === index;
-                  const isDimmed = selectedBar !== null && !isSelected;
-                  return (
-                    <div
-                      key={index}
-                      role={period === "month" ? "button" : undefined}
-                      tabIndex={period === "month" ? 0 : undefined}
-                      aria-pressed={period === "month" ? isSelected : undefined}
-                      onClick={() => selectMonth(index)}
-                      onKeyDown={(event) => {
-                        if (period !== "month") return;
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          selectMonth(index);
-                        }
-                      }}
-                      title={
-                        period === "month"
-                          ? `Show ${bucket.label} breakdown`
-                          : undefined
-                      }
-                      className={`group flex h-full flex-1 flex-col items-center justify-end gap-1 transition-opacity ${
-                        period === "month" ? "cursor-pointer" : ""
-                      } ${isDimmed ? "opacity-40" : "opacity-100"}`}
+            <svg
+              viewBox="0 0 640 220"
+              className="h-56 w-full"
+              role="img"
+              aria-label={`Revenue ${periodLabel}`}
+            >
+              {[0, 25, 50, 75, 100].map((line) => {
+                const y = 190 - (line / 100) * 160;
+                return (
+                  <g key={line}>
+                    <line
+                      x1="44"
+                      x2="624"
+                      y1={y}
+                      y2={y}
+                      stroke="var(--border)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x="38"
+                      y={y + 3}
+                      textAnchor="end"
+                      className="fill-muted-foreground text-[8px]"
                     >
-                      <div className="relative flex w-full flex-1 items-end justify-center">
-                        <span className="bg-popover text-popover-foreground border-border pointer-events-none absolute -top-1 z-10 rounded-md border px-2 py-1 text-[11px] font-medium whitespace-nowrap opacity-0 shadow-md transition-opacity group-hover:opacity-100">
-                          {formatPhp(bucket.amount)}
-                        </span>
-                        <div
-                          className={`w-full max-w-[42px] rounded-t-lg bg-gradient-to-t transition-all duration-300 group-hover:brightness-110 ${
-                            isSelected
-                              ? "from-primary via-primary to-primary shadow-[0_0_12px_rgba(37,99,235,0.55)]"
-                              : "from-primary/30 via-primary/70 to-primary shadow-[0_-2px_8px_rgba(37,99,235,0.25)]"
-                          }`}
-                          style={{ height: `${bucket.amount > 0 ? Math.max(pct, 3) : 0}%` }}
+                      {Math.round((maxGraph * line) / 100).toLocaleString()}
+                    </text>
+                  </g>
+                );
+              })}
+              {(() => {
+                const step = graph.length > 1 ? 580 / (graph.length - 1) : 0;
+                const points = graph.map((bucket, index) => ({
+                  x: 44 + step * index,
+                  y: 190 - (bucket.amount / maxGraph) * 160,
+                  bucket,
+                  index,
+                }));
+                const path = points
+                  .map(
+                    (point, index) =>
+                      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`,
+                  )
+                  .join(" ");
+                return (
+                  <>
+                    <path
+                      d={path}
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    {points.map((point) => (
+                      <g key={point.index}>
+                        <circle
+                          cx={point.x}
+                          cy={point.y}
+                          r="4"
+                          fill="var(--primary)"
+                          stroke="var(--card)"
+                          strokeWidth="2"
                         />
-                      </div>
-                      <span
-                        className={`truncate text-[10px] whitespace-nowrap ${
-                          isSelected
-                            ? "text-foreground font-semibold"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {bucket.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                        <text
+                          x={point.x}
+                          y={210}
+                          textAnchor="middle"
+                          className="fill-muted-foreground text-[8px]"
+                        >
+                          {point.bucket.label}
+                        </text>
+                        <title>{`${point.bucket.label}: ${formatPhp(point.bucket.amount)}`}</title>
+                      </g>
+                    ))}
+                  </>
+                );
+              })()}
+            </svg>
           )}
         </div>
       </CardContent>

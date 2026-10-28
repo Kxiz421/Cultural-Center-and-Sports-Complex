@@ -216,11 +216,13 @@ export async function GET(request) {
       .sort(byName);
 
     const charts = buildRevenueCharts({
-      transactions: filteredTransactions,
-      breakdownTransactions: filteredTransactions,
+      transactions,
+      breakdownTransactions,
       facilitiesById,
       group,
       window,
+      particularId: hasParticularFilter ? particularIdParam : null,
+      packageId: hasPackageFilter ? packageIdParam : null,
     });
 
     return noCacheJson({

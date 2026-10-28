@@ -176,22 +176,76 @@ export function buildRevenueCharts({
   group,
   window,
   breakdownTransactions,
+  particularId = null,
+  packageId = null,
 }) {
+  const itemId =
+    group === REVENUE_GROUP_PARTICULAR
+      ? Number.isInteger(particularId)
+        ? particularId
+        : null
+      : group === REVENUE_GROUP_PACKAGE
+        ? Number.isInteger(packageId)
+          ? packageId
+          : null
+        : null;
+
+  const selectedFor = (transaction) => {
+    const amount = Number(transaction.payment?.amountPaid ?? 0);
+    if (!amount) return null;
+    const reservation = transaction.payment?.booking?.reservation;
+    if (!reservation) return null;
+    const prepared = prepareReservation(reservation, facilitiesById);
+    const all = reservationAllocations(prepared, group);
+    const allTotal = all.reduce(
+      (sum, item) => sum + (Number(item.amount) || 0),
+      0,
+    );
+    if (allTotal <= 0) return null;
+
+    let items = all;
+    if (itemId != null) {
+      items = all.filter((item) => {
+        if (group === REVENUE_GROUP_PARTICULAR) {
+          return Number(item.particularId) === itemId;
+        }
+        if (group === REVENUE_GROUP_PACKAGE) {
+          return item.key === `package:${itemId}`;
+        }
+        if (group === REVENUE_GROUP_FACILITY) {
+          return item.key === `facility:${itemId}`;
+        }
+        return true;
+      });
+    }
+    if (items.length === 0) return null;
+
+    const selected = items.reduce(
+      (sum, item) => sum + (Number(item.amount) || 0),
+      0,
+    );
+    return {
+      amount,
+      allTotal,
+      items,
+      share: selected / allTotal,
+      reservationId: reservation.reservationId,
+    };
+  };
+
   const graph = window.buckets.map((label) => ({ label, amount: 0 }));
 
   for (const transaction of transactions || []) {
-    const amount = Number(transaction.payment?.amountPaid ?? 0);
-    if (!amount) continue;
-
     const when = new Date(transaction.paymentDate);
     if (Number.isNaN(when.getTime())) continue;
-
     const index = window.bucketIndex(when);
-    if (index >= 0 && index < graph.length) graph[index].amount += amount;
+    if (index < 0 || index >= graph.length) continue;
+    const selected = selectedFor(transaction);
+    if (!selected) continue;
+    graph[index].amount += selected.amount * selected.share;
   }
 
   const pie = new Map();
-  let total = 0;
 
   const add = (key, label, amount, reservationId, quantity) => {
     const entry =
@@ -203,43 +257,33 @@ export function buildRevenueCharts({
   };
 
   for (const transaction of breakdownTransactions ?? transactions ?? []) {
-    const amount = Number(transaction.payment?.amountPaid ?? 0);
-    if (!amount) continue;
-
-    total += amount;
-
-    const reservation = transaction.payment?.booking?.reservation;
-    if (!reservation) continue;
-
-    const prepared = prepareReservation(reservation, facilitiesById);
-    const allocations = reservationAllocations(prepared, group);
-    const allocationTotal = allocations.reduce(
-      (sum, item) => sum + (Number(item.amount) || 0),
-      0,
-    );
-    if (allocationTotal <= 0) continue;
-
-    for (const item of allocations) {
-      const share = (Number(item.amount) || 0) / allocationTotal;
+    const selected = selectedFor(transaction);
+    if (!selected) continue;
+    for (const item of selected.items) {
+      const itemShare = (Number(item.amount) || 0) / selected.allTotal;
       add(
         item.key,
         item.label,
-        amount * share,
-        reservation.reservationId,
+        selected.amount * itemShare,
+        selected.reservationId,
         item.quantity,
       );
     }
   }
 
-  const totalRounded = round2(total);
-  const pieRows = [...pie.values()]
+  const entryList = [...pie.values()];
+  const totalRounded = round2(
+    entryList.reduce((sum, entry) => sum + entry.amount, 0),
+  );
+  const pieRows = entryList
     .map((entry) => ({
       key: entry.key,
       label: entry.label,
       amount: round2(entry.amount),
       quantity: entry.quantity,
       reservations: entry.reservationIds.size,
-      percent: total > 0 ? round2((entry.amount / total) * 100) : 0,
+      percent:
+        totalRounded > 0 ? round2((entry.amount / totalRounded) * 100) : 0,
     }))
     .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
 
