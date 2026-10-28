@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/ui/field-error";
 import { cn, formatPhp, roundMoney } from "@/lib/utils";
+import { DEFAULT_AVATAR } from "@/lib/constants";
 import { uploadProfilePhoto } from "@/lib/upload-profile-photo";
 
 function passwordProblem(password) {
@@ -80,6 +81,7 @@ export default function ClientProfilePage() {
 
   const [photoError, setPhotoError] = React.useState("");
   const [photoUploading, setPhotoUploading] = React.useState(false);
+  const [photoBroken, setPhotoBroken] = React.useState(false);
   const photoInputRef = React.useRef(null);
 
   const load = React.useCallback(async () => {
@@ -89,6 +91,7 @@ export default function ClientProfilePage() {
       const res = await fetch("/api/clients/me", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load your profile");
+      setPhotoBroken(false);
       setProfile(data);
       setAccountForm({
         username: data.username || "",
@@ -220,6 +223,7 @@ export default function ClientProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save your photo");
+      setPhotoBroken(false);
       setProfile(data.profile);
       toast.success("Profile photo updated");
     } catch (err) {
@@ -240,6 +244,7 @@ export default function ClientProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to remove your photo");
+      setPhotoBroken(false);
       setProfile(data.profile);
       toast.success("Profile photo removed");
     } catch (err) {
@@ -295,17 +300,16 @@ export default function ClientProfilePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-4">
-              {profile.profilePhoto ? (
-                <img
-                  src={profile.profilePhoto}
-                  alt={profile.fullName}
-                  className="size-28 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex size-28 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <UserRound className="size-14" />
-                </div>
-              )}
+              <img
+                src={
+                  !photoBroken && profile.profilePhoto
+                    ? profile.profilePhoto
+                    : DEFAULT_AVATAR
+                }
+                alt={profile.fullName || "Profile"}
+                onError={() => setPhotoBroken(true)}
+                className="size-28 shrink-0 rounded-full bg-muted object-cover"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-semibold">
                   {profile.fullName}

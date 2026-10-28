@@ -13,3 +13,7 @@ export const PAGE_LOGO =
 /** Secondary logo, shown beside {@link PAGE_LOGO} (file under `public/`). */
 export const PAGE_LOGO_2 =
   process.env.NEXT_PUBLIC_PAGE_LOGO_2 ?? "/PageLogo2.webp";
+
+/** Fallback avatar shown when a user has no (working) profile photo. */
+export const DEFAULT_AVATAR =
+  process.env.NEXT_PUBLIC_DEFAULT_AVATAR ?? "/default-avatar.svg";

@@ -3,9 +3,9 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, CalendarRange, FileText, History, LogOut, Menu, X, ClipboardEdit, UserRound } from "lucide-react";
+import { Calendar, CalendarRange, FileText, History, LogOut, Menu, X, ClipboardEdit } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
-import { PAGE_LOGO } from "@/lib/constants";
+import { DEFAULT_AVATAR, PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -47,13 +47,17 @@ export default function ClientLayout({ children }) {
       .trim() || "Client";
 
   const [profilePhoto, setProfilePhoto] = React.useState(null);
+  const [photoBroken, setPhotoBroken] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
     fetch("/api/clients/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (active && data) setProfilePhoto(data.profilePhoto || null);
+        if (active && data) {
+          setPhotoBroken(false);
+          setProfilePhoto(data.profilePhoto || null);
+        }
       })
       .catch(() => {});
     return () => {
@@ -168,20 +172,16 @@ export default function ClientLayout({ children }) {
           <button
             type="button"
             title="View my profile"
+            aria-label="View my profile"
             onClick={() => router.push("/panel/client/profile")}
             className="shrink-0 rounded-full transition-transform hover:scale-105"
           >
-            {profilePhoto ? (
-              <img
-                src={profilePhoto}
-                alt="My profile"
-                className="size-9 rounded-full object-cover ring-2 ring-white/30"
-              />
-            ) : (
-              <span className="flex size-9 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/30">
-                <UserRound className="size-5" />
-              </span>
-            )}
+            <img
+              src={!photoBroken && profilePhoto ? profilePhoto : DEFAULT_AVATAR}
+              alt="My profile"
+              onError={() => setPhotoBroken(true)}
+              className="size-9 rounded-full bg-white/15 object-cover ring-2 ring-white/30"
+            />
           </button>
         </header>
         <main className={cn("flex-1", isOrderOfPayment ? "p-4 lg:p-6 print:p-0" : "p-4 lg:p-6")}>
