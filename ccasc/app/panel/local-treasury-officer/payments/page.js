@@ -268,7 +268,7 @@ export default function LTOOPaymentsPage() {
   const [discountOnlySubmission, setDiscountOnlySubmission] = React.useState(false);
   const [consumeAmount, setConsumeAmount] = React.useState("");
   const [consumeReason, setConsumeReason] = React.useState("");
-  const [settleAmount, setSettleAmount] = React.useState("");
+  const [settleConfirmOpen, setSettleConfirmOpen] = React.useState(false);
   const [depositSaving, setDepositSaving] = React.useState(false);
   const [depositPanelOpen, setDepositPanelOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -538,7 +538,6 @@ export default function LTOOPaymentsPage() {
     setPaymentAmount(defaultAmount > 0 ? formatMoneyInput(defaultAmount) : "");
     setConsumeAmount("");
     setConsumeReason("");
-    setSettleAmount("");
     setDepositPanelOpen(false);
     setStep(0);
     const hasExistingDiscount = reservation.totalDiscount > 0;
@@ -586,7 +585,6 @@ export default function LTOOPaymentsPage() {
     setHistoryTransactions([]);
     setConsumeAmount("");
     setConsumeReason("");
-    setSettleAmount("");
     setDepositPanelOpen(false);
     try {
       await loadHistoryTransactions(reservation.reservationId);
@@ -868,7 +866,6 @@ export default function LTOOPaymentsPage() {
       toast.success("Deposit deduction recorded");
       setConsumeAmount("");
       setConsumeReason("");
-      setSettleAmount("");
       applyDepositSnapshot(reservation.reservationId, data.deposit);
       setDepositPanelOpen(true);
       await refreshSelectedReservation();
@@ -922,8 +919,7 @@ export default function LTOOPaymentsPage() {
     const reservation = (historyOpen && historyReservation) || selectedReservation;
     if (!reservation) return;
     const outstanding = roundMoney(reservation.deposit?.outstandingBalance || 0);
-    const amount = roundMoney(settleAmount || outstanding);
-    if (outstanding <= 0 || amount <= 0) return;
+    if (outstanding <= 0) return;
     setDepositSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
@@ -934,7 +930,7 @@ export default function LTOOPaymentsPage() {
         body: JSON.stringify({
           action: "settle",
           reservationId: reservation.reservationId,
-          amount,
+          amount: outstanding,
           performedBy,
           performedByName,
         }),
@@ -942,7 +938,6 @@ export default function LTOOPaymentsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to settle the outstanding balance");
       toast.success(`Settled ${formatPhp(data.settledAmount)}`);
-      setSettleAmount("");
       applyDepositSnapshot(reservation.reservationId, data.deposit);
       setDepositPanelOpen(true);
       await refreshSelectedReservation();
@@ -1961,21 +1956,14 @@ export default function LTOOPaymentsPage() {
                       <p className="text-xs text-muted-foreground">
                         Collected by the Local Treasury Operations Officer. The client cannot reserve a new event until this balance is settled.
                       </p>
-                      <Input
-                        inputMode="decimal"
-                        placeholder={formatPhp(historyReservation.deposit.outstandingBalance)}
-                        value={settleAmount}
-                        onChange={(e) => setSettleAmount(sanitizeMoneyInput(e.target.value))}
-                        className="tabular-nums"
-                      />
                       <Button
                         type="button"
                         size="sm"
                         disabled={depositSaving}
-                        onClick={handleSettleDeposit}
+                        onClick={() => setSettleConfirmOpen(true)}
                       >
                         <PhilippinePeso className="size-4 mr-1" />
-                        Settle {formatPhp(roundMoney(settleAmount || historyReservation.deposit.outstandingBalance))}
+                        Settle {formatPhp(historyReservation.deposit.outstandingBalance)}
                       </Button>
                     </div>
                   )}
@@ -2274,6 +2262,38 @@ export default function LTOOPaymentsPage() {
             <Button variant="outline" onClick={() => { setConfirmOpen(false); setDiscountOnlySubmission(false); }}>Cancel</Button>
             <Button onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>
               {saving ? "Saving..." : (discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Confirm Discount") : "Confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settle Outstanding Balance Confirm Dialog */}
+      <Dialog open={settleConfirmOpen} onOpenChange={setSettleConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PhilippinePeso className="size-5" />
+              Confirm Settlement
+            </DialogTitle>
+            <DialogDescription>
+              Settle the full outstanding deposit balance for {historyReservation?.clientName || "this client"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between"><span className="text-foreground/70">Client:</span><span className="font-medium text-foreground">{historyReservation?.clientName || "—"}</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">Event:</span><span className="font-medium text-foreground">{historyReservation?.eventType || "—"}</span></div>
+            <div className="flex justify-between"><span className="text-foreground/70">Outstanding balance:</span><span className="font-medium tabular-nums text-destructive">{formatPhp(historyReservation?.deposit?.outstandingBalance || 0)}</span></div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            This records the full payment and notifies the client via email and SMS.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSettleConfirmOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => { setSettleConfirmOpen(false); handleSettleDeposit(); }}
+              disabled={depositSaving}
+            >
+              {depositSaving ? "Settling..." : "Confirm settlement"}
             </Button>
           </DialogFooter>
         </DialogContent>

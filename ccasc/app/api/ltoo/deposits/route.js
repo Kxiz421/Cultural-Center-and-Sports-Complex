@@ -251,6 +251,39 @@ export async function POST(request) {
         },
       });
 
+      const clientId = booking.reservation?.clientId;
+      if (clientId) {
+        const outstanding = getDepositOutstanding(result.deposit);
+        const ctx = reservationContext(booking.reservation, parsedReservationId);
+        const message =
+          `Your outstanding 10% deposit balance of ${formatPhp(result.settledAmount)} has been settled${
+            ctx.text ? ` for ${ctx.text}` : ""
+          }.` +
+          (outstanding > 0 ? ` Remaining balance: ${formatPhp(outstanding)}.` : " Thank you.");
+
+        await notifyClientEvent({
+          clientId,
+          type: "payment",
+          message,
+          email: {
+            subject: "Deposit Balance Settled - CSASC",
+            heading: "✅ Deposit Balance Settled",
+            accent: "#059669",
+            intro: "Your outstanding deposit balance has been settled.",
+            rows: [
+              { label: "Amount settled", value: formatPhp(result.settledAmount) },
+              ...ctx.rows,
+              { label: "Remaining balance", value: formatPhp(outstanding) },
+            ],
+            note:
+              outstanding > 0
+                ? undefined
+                : "Your deposit account is now fully settled. Thank you.",
+          },
+          sms: message,
+        });
+      }
+
       return NextResponse.json({
         success: true,
         deposit: mapDepositSnapshot(result.deposit),
