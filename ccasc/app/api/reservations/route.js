@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { formatDbDate, formatPhp, parseSqlDate, roundMoney } from "@/lib/utils";
+import { getBilledTotals, sumPaymentDiscounts } from "@/lib/payment-utils";
 import { BASKETBALL_NAME, getBasketballPrice } from "@/lib/particular-options";
 import { canManageReservationScope } from "@/lib/reschedule-scope";
 import { getTimeSlotLabel, isWholeDaySlot, WHOLE_DAY_SLOT } from "@/lib/time-slots";
@@ -113,11 +114,14 @@ function addDays(date, days) {
 }
 
 function computePaymentStatus(totalAmount, payments) {
-  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
-  if (totalAmount <= 0 || totalPaid <= 0) return "Pending";
-  // 10% deposit is on TOP, so total payable = base * 1.1
-  const totalPayable = totalAmount * 1.1;
-  if (totalPaid >= totalPayable) return "BalanceSettled";
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
+  const totalDiscount = sumPaymentDiscounts(payments);
+  const billed = getBilledTotals(totalAmount, totalDiscount);
+  if (billed.originalBase <= 0) return "Pending";
+  if (billed.totalPayable <= 0) return "BalanceSettled";
+  if (totalPaid <= 0) return "Pending";
+  // A fully discounted / fully settled balance counts as paid in full.
+  if (totalPaid >= billed.totalPayable) return "BalanceSettled";
   // 50% down payment + 10% deposit = 60% of base
   if (totalPaid >= totalAmount * 0.6) return "DepositPaid";
   if (totalPaid >= totalAmount * 0.5) return "DownPaymentPaid";
@@ -162,7 +166,13 @@ export async function GET(request) {
         bookings: {
           include: {
             status: { select: { status: true } },
-            payments: { select: { amountPaid: true } },
+            payments: {
+              select: {
+                amountPaid: true,
+                discountAmount: true,
+                status: { select: { status: true } },
+              },
+            },
           },
         },
         reservedParticulars: {
@@ -235,7 +245,14 @@ export async function GET(request) {
 
         const today = new Date(); today.setHours(0,0,0,0);
         const isFinal = today >= addDays(event, -30);
-        const paymentStatus = computePaymentStatus(totalAmount || 0, allPayments);
+        const hasFullyPaidPayment = r.bookings.some((b) =>
+          (b.payments || []).some((p) =>
+            /^fully paid$/i.test(String(p.status?.status || ""))
+          )
+        );
+        const paymentStatus = hasFullyPaidPayment
+          ? "BalanceSettled"
+          : computePaymentStatus(totalAmount || 0, allPayments);
         const calendarVisible = computeCalendarVisible(totalAmount || 0, allPayments);
 
         // Facilities / particulars / time slot can still be managed while the
