@@ -6,6 +6,7 @@ import {
   revenueGroupsForVenueIds,
   venueIdsFromReportVenue,
 } from "@/lib/report-venue-scope";
+import { toDateInput } from "@/lib/report-period";
 
 /** "1,2" -> [1, 2]; anything unusable -> []. */
 function parseVenueIds(value) {
@@ -41,6 +42,12 @@ export function useReports({ venueIds } = {}) {
   const [month, setMonth] = React.useState(String(new Date().getMonth()));
   const [week, setWeek] = React.useState("1");
   const [year, setYear] = React.useState(String(new Date().getFullYear()));
+  // Custom Range bounds ("YYYY-MM-DD"): first of the month -> today.
+  const [from, setFrom] = React.useState(() => {
+    const now = new Date();
+    return toDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+  });
+  const [to, setTo] = React.useState(() => toDateInput(new Date()));
   const [venue, setVenue] = React.useState("all");
   const [revenueGroup, setRevenueGroup] = React.useState("particular");
   const [specific, setSpecific] = React.useState("all");
@@ -179,6 +186,11 @@ export function useReports({ venueIds } = {}) {
         const isRevenue = reportType === "revenue";
         const params = new URLSearchParams({ period, month, week, year });
 
+        if (period === "r") {
+          params.set("from", from);
+          params.set("to", to);
+        }
+
         if (venue && venue !== "all") params.set("venue", venue);
         if (venueIds) params.set("venueIds", venueIds);
 
@@ -207,7 +219,7 @@ export function useReports({ venueIds } = {}) {
         if (requestId === requestIdRef.current) setLoading(false);
       }
     },
-    [period, month, week, year, venue, venueIds, reportType, revenueGroup, specific]
+    [period, month, week, year, from, to, venue, venueIds, reportType, revenueGroup, specific]
   );
 
   // The report generates itself: once on mount, and again whenever any
@@ -236,6 +248,10 @@ export function useReports({ venueIds } = {}) {
     setWeek,
     year,
     setYear,
+    from,
+    setFrom,
+    to,
+    setTo,
     venue,
     setVenue,
     revenueGroup,

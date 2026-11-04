@@ -26,8 +26,9 @@ export const dynamic = "force-dynamic";
  * (its package, the particulars used and the facilities booked).
  *
  * Query params
- *   period        m | w | y                    (default: m)
+ *   period        m | w | y | r                (default: m)
  *   year / month / week                        period parts, as in activities
+ *   from / to     YYYY-MM-DD                   Custom Range (period r)
  *   groupBy       particular | venue | package | facility
  *                 a Sports Complex report is always grouped per facility
  *   particularId  keep one particular's share of the revenue
@@ -73,6 +74,8 @@ export async function GET(request) {
       year: searchParams.get("year"),
       month: searchParams.get("month"),
       week: searchParams.get("week"),
+      from: searchParams.get("from"),
+      to: searchParams.get("to"),
     });
 
     // Venue scope: the panel hint is used when present, and the session's own

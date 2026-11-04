@@ -19,10 +19,11 @@ export const dynamic = "force-dynamic";
  * the identical LIST OF SCGCC ACTIVITIES document.
  *
  * Query params
- *   period  m | w | y            (default: m)
+ *   period  m | w | y | r        (default: m)
  *   year    4-digit year         (default: current year)
  *   month   0-11                 (used by m and w)
  *   week    1-5                  (used by w)
+ *   from / to  YYYY-MM-DD        (used by r - Custom Range)
  *   venue   all | sports | cultural
  *   venueIds  comma separated ids - narrows the report to those venues
  *
@@ -48,6 +49,8 @@ export async function GET(request) {
       year: searchParams.get("year"),
       month: searchParams.get("month"),
       week: searchParams.get("week"),
+      from: searchParams.get("from"),
+      to: searchParams.get("to"),
     });
 
     const where = {

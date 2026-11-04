@@ -34,6 +34,7 @@ export const PARTICULARS_REPORT_PERIODS = [
   { value: "w", label: "Weekly" },
   { value: "y", label: "Yearly" },
   { value: "d", label: "Specific Date" },
+  { value: "r", label: "Custom Range" },
 ];
 
 /** Human label of a movement type stored in ParticularTransaction. */
@@ -132,7 +133,7 @@ export function movementTimeLabel(value) {
 /**
  * Resolves the inclusive range behind a particulars report selection.
  *
- * `m` / `w` / `y` delegate to the shared `resolvePeriodRange`; `d` is the
+ * `m` / `w` / `y` / `r` delegate to the shared `resolvePeriodRange`; `d` is the
  * single-day ("Specific Date") range, and falls back to today when the date
  * input is empty or malformed so the report is never blank by accident.
  *
@@ -150,6 +151,8 @@ export function resolveParticularsReportRange({
   month,
   week,
   date,
+  from,
+  to,
 } = {}) {
   if (period === "d") {
     const day = parseDateInput(date) || new Date();
@@ -163,7 +166,7 @@ export function resolveParticularsReportRange({
     };
   }
 
-  return resolvePeriodRange({ period, year, month, week });
+  return resolvePeriodRange({ period, year, month, week, from, to });
 }
 
 /** Flattens ParticularTransaction rows into the printed log lines. */

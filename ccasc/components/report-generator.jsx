@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -80,6 +81,10 @@ export function ReportControls({
   onYearChange,
   week,
   onWeekChange,
+  from,
+  onFromChange,
+  to,
+  onToChange,
   venue,
   onVenueChange,
   reportType,
@@ -99,7 +104,7 @@ export function ReportControls({
   const yearOptions = years || reportYears(5);
   const showMonth = period === "m" || period === "w";
   const isRevenue = reportType === "revenue";
-  const preview = resolvePeriodRange({ period, year, month, week });
+  const preview = resolvePeriodRange({ period, year, month, week, from, to });
   // A venue scope may restrict the groupings (Sports Complex is per facility).
   const allowedGroups = revenueGroups?.length
     ? REVENUE_GROUPS.filter((group) => revenueGroups.includes(group.value))
@@ -169,6 +174,27 @@ export function ReportControls({
             </Select>
           </Field>
 
+          {period === "r" && (
+            <>
+              <Field label="From" className="w-[170px]">
+                <Input
+                  type="date"
+                  value={from || ""}
+                  max={to || undefined}
+                  onChange={(e) => onFromChange?.(e.target.value)}
+                />
+              </Field>
+              <Field label="To" className="w-[170px]">
+                <Input
+                  type="date"
+                  value={to || ""}
+                  min={from || undefined}
+                  onChange={(e) => onToChange?.(e.target.value)}
+                />
+              </Field>
+            </>
+          )}
+
           {showMonth && (
             <Field label="Month" className="w-[170px]">
               <Select value={String(month)} onValueChange={onMonthChange}>
@@ -203,20 +229,22 @@ export function ReportControls({
             </Field>
           )}
 
-          <Field label="Year" className="w-[120px]">
-            <Select value={String(year)} onValueChange={onYearChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => (
-                  <SelectItem key={y} value={y}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          {period !== "r" && (
+            <Field label="Year" className="w-[120px]">
+              <Select value={String(year)} onValueChange={onYearChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
 
           {onVenueChange && (
             <Field label="Venue" className="w-[180px]">

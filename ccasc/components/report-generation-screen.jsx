@@ -88,6 +88,10 @@ export function ReportGenerationScreen({
           onMonthChange={reports.setMonth}
           week={reports.week}
           onWeekChange={reports.setWeek}
+          from={reports.from}
+          onFromChange={reports.setFrom}
+          to={reports.to}
+          onToChange={reports.setTo}
           year={reports.year}
           onYearChange={reports.setYear}
           venue={reports.venue}

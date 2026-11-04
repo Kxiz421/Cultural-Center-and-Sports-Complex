@@ -11,6 +11,7 @@ export const REPORT_PERIODS = [
   { value: "m", label: "Monthly" },
   { value: "w", label: "Weekly" },
   { value: "y", label: "Yearly" },
+  { value: "r", label: "Custom Range" },
 ];
 
 export const REPORT_MONTHS = [
@@ -107,10 +108,35 @@ function endOfDay(date) {
   return d;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+/** A Date (or anything `new Date` accepts) as a "YYYY-MM-DD" input value. */
+export function toDateInput(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** "2026-09-14" (an <input type="date"> value) -> local Date, or null. */
+export function parseDateInput(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "September 14, 2026" - the printed form of a range boundary. */
+function longDateLabel(date) {
+  return `${monthName(date.getMonth())} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
 /**
  * Resolves the inclusive date range for a period selection.
  *
- * @param {{ period?: string, year?: string|number, month?: string|number, week?: string|number }} input
+ * @param {{ period?: string, year?: string|number, month?: string|number, week?: string|number, from?: string, to?: string }} input
+ *   `from` / `to` are "YYYY-MM-DD" inputs used by the "r" (Custom Range) period.
  * @returns {{
  *   startDate: Date,
  *   endDate: Date,
@@ -119,7 +145,7 @@ function endOfDay(date) {
  *   groupByMonth: boolean // yearly reports print a band per month, like the paper form
  * }}
  */
-export function resolvePeriodRange({ period = "m", year, month, week } = {}) {
+export function resolvePeriodRange({ period = "m", year, month, week, from, to } = {}) {
   const now = new Date();
   const y = parseInt(year ?? now.getFullYear(), 10);
   const m = parseInt(month ?? now.getMonth(), 10);
@@ -161,6 +187,47 @@ export function resolvePeriodRange({ period = "m", year, month, week } = {}) {
       heading: `FOR THE WEEK ${w} OF ${upper} ${y}`,
       rangeLabel: `${name} ${y} · Week ${w} (${rawFrom}–${to})`,
       groupByMonth: false,
+    };
+  }
+
+  if (period === "r") {
+    const fromDate = parseDateInput(from);
+    const toDate = parseDateInput(to);
+
+    // An incomplete range (only one bound, or neither) still has to produce a
+    // sensible report: a single bound becomes a one-day range, and a fully
+    // empty range falls back to the current month.
+    if (!fromDate && !toDate) {
+      const nowM = now.getMonth();
+      const nowY = now.getFullYear();
+      return {
+        startDate: startOfDay(new Date(nowY, nowM, 1)),
+        endDate: endOfDay(new Date(nowY, nowM + 1, 0)),
+        heading: `FOR THE MONTH OF ${monthName(nowM).toUpperCase()} ${nowY}`,
+        rangeLabel: `${monthName(nowM)} ${nowY}`,
+        groupByMonth: false,
+      };
+    }
+
+    let start = fromDate || toDate;
+    let end = toDate || fromDate;
+    if (start > end) [start, end] = [end, start];
+
+    const sameDay = start.toDateString() === end.toDateString();
+    const groupByMonth =
+      start.getFullYear() !== end.getFullYear() ||
+      start.getMonth() !== end.getMonth();
+
+    return {
+      startDate: startOfDay(start),
+      endDate: endOfDay(end),
+      heading: sameDay
+        ? `FOR ${longDateLabel(start).toUpperCase()}`
+        : `FOR ${longDateLabel(start).toUpperCase()} TO ${longDateLabel(end).toUpperCase()}`,
+      rangeLabel: sameDay
+        ? longDateLabel(start)
+        : `${longDateLabel(start)} – ${longDateLabel(end)}`,
+      groupByMonth,
     };
   }
 

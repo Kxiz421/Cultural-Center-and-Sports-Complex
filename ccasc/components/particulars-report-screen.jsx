@@ -34,7 +34,7 @@ import {
   resolveParticularsReportRange,
   todayDateInput,
 } from "@/lib/report-particulars";
-import { REPORT_MONTHS, REPORT_WEEKS, reportYears } from "@/lib/report-period";
+import { REPORT_MONTHS, REPORT_WEEKS, reportYears, toDateInput } from "@/lib/report-period";
 
 /**
  * "Particulars Report" screen.
@@ -64,6 +64,12 @@ export function ParticularsReportScreen({
   const [week, setWeek] = React.useState("1");
   const [year, setYear] = React.useState(String(new Date().getFullYear()));
   const [date, setDate] = React.useState(todayDateInput());
+  // Custom Range bounds ("YYYY-MM-DD"): first of the month -> today.
+  const [from, setFrom] = React.useState(() => {
+    const now = new Date();
+    return toDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+  });
+  const [to, setTo] = React.useState(() => toDateInput(new Date()));
   const [report, setReport] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -92,13 +98,15 @@ export function ParticularsReportScreen({
 
   const showMonth = period === "m" || period === "w";
   const showWeek = period === "w";
-  const showYear = period !== "d";
+  const showYear = period !== "d" && period !== "r";
   const preview = resolveParticularsReportRange({
     period,
     year,
     month,
     week,
     date,
+    from,
+    to,
   });
 
   /** Switching particulars invalidates the document already on screen. */
@@ -117,6 +125,10 @@ export function ParticularsReportScreen({
     setLoading(true);
     try {
       const params = new URLSearchParams({ period, month, week, year, date });
+      if (period === "r") {
+        params.set("from", from);
+        params.set("to", to);
+      }
       if (particularId !== "all") params.set("particularId", particularId);
       params.set("movement", movement);
 
@@ -280,6 +292,27 @@ export function ParticularsReportScreen({
                     onChange={(e) => setDate(e.target.value)}
                   />
                 </Field>
+              )}
+
+              {period === "r" && (
+                <>
+                  <Field label="From" className="w-[200px]">
+                    <Input
+                      type="date"
+                      value={from}
+                      max={to || undefined}
+                      onChange={(e) => setFrom(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="To" className="w-[200px]">
+                    <Input
+                      type="date"
+                      value={to}
+                      min={from || undefined}
+                      onChange={(e) => setTo(e.target.value)}
+                    />
+                  </Field>
+                </>
               )}
 
               <Button

@@ -18,11 +18,12 @@ export const dynamic = "force-dynamic";
  * handler), with the date, the quantity and the staff member who recorded it.
  *
  * Query params
- *   period        m | w | y | d      (default: m)
+ *   period        m | w | y | d | r  (default: m)
  *   year          4-digit year       (m / w / y)
  *   month         0-11               (m / w)
  *   week          1-5                (w)
  *   date          YYYY-MM-DD         (d — "Specific Date")
+ *   from / to     YYYY-MM-DD         (r — "Custom Range")
  *   particularId  one particular; omitted / "all" = every particular
  *   movement      all | RESTOCK | DAMAGE (default: all) — narrows the report to
  *                 restocking, to damage reports, or keeps both
@@ -60,6 +61,8 @@ export async function GET(request) {
       month: searchParams.get("month"),
       week: searchParams.get("week"),
       date: searchParams.get("date"),
+      from: searchParams.get("from"),
+      to: searchParams.get("to"),
     });
 
     const [transactions, particulars] = await Promise.all([
