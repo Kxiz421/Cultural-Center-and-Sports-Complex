@@ -40,5 +40,7 @@ export function phMasked(input) {
   const e164 = toE164Ph(input);
   if (!e164) return "";
   const local = `0${e164.slice(3)}`;
-  return `${local.slice(0, 2)}•••${local.slice(-4)}`;
+  // Show the leading 3 and trailing 5 digits (e.g. 099***23235) so the owner
+  // can recognise the number while the middle stays hidden.
+  return `${local.slice(0, 3)}***${local.slice(-5)}`;
 }

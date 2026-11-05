@@ -55,20 +55,6 @@ const LOGIN_ERROR_MESSAGES = {
 
 const EMAIL_IDENTIFIER_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/**
- * Classify what the visitor typed into the single recovery field. An email is
- * recovered straight through email, a mobile number straight through SMS, and
- * anything else (i.e. a username) opens the channel chooser - so the user is
- * only asked where to send the code when the identifier itself is ambiguous.
- */
-function recoveryKind(identifier) {
-  const value = String(identifier ?? "").trim();
-  if (!value) return "unknown";
-  if (EMAIL_IDENTIFIER_RE.test(value)) return "email";
-  if (toE164Ph(value)) return "phone";
-  return "username";
-}
-
 /** Strength rules shared by the forced-change dialog. */
 function passwordProblem(password) {
   if (password.length < 8) return "Password must be at least 8 characters long.";
@@ -88,11 +74,12 @@ export default function LoginPage() {
   const [showNewPassword, setShowNewPassword] = React.useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [fpOpen, setFpOpen] = React.useState(false);
-  const [fpStep, setFpStep] = React.useState("identify");
+  const [fpStep, setFpStep] = React.useState("method");
   const [recoverIdentifier, setRecoverIdentifier] = React.useState("");
   const [recoverChannels, setRecoverChannels] = React.useState([]);
   const [recoverChannel, setRecoverChannel] = React.useState("email");
   const [recoverTargetLabel, setRecoverTargetLabel] = React.useState("");
+  const [recoverConfirmValue, setRecoverConfirmValue] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [otpCells, setOtpCells] = React.useState(() =>
@@ -143,11 +130,12 @@ export default function LoginPage() {
   const handleForgotDialogOpen = (open) => {
     setFpOpen(open);
     if (!open) {
-      setFpStep("identify");
+      setFpStep("method");
       setRecoverIdentifier("");
       setRecoverChannels([]);
       setRecoverChannel("email");
       setRecoverTargetLabel("");
+      setRecoverConfirmValue("");
       setNewPassword("");
       setConfirmPassword("");
       setShowNewPassword(false);
@@ -362,21 +350,41 @@ export default function LoginPage() {
     }
   };
 
-  /** Request a recovery code on a specific channel and advance to the code step. */
-  const sendRecoveryCode = async (identifier, channel) => {
+  /** Start the email or mobile path: show the matching contact input. */
+  const startMethod = (channel) => {
+    setRecoverChannel(channel);
+    setRecoverIdentifier("");
+    setRecoverErrors({});
+    setFpStep("identifier");
+  };
+
+  /** Start the username path: resolve the account, then choose a channel. */
+  const startUsername = () => {
+    setRecoverIdentifier("");
+    setRecoverErrors({});
+    setFpStep("username");
+  };
+
+  /**
+   * Request a recovery code on a specific channel. `target` is the contact the
+   * user typed in the username path; the API refuses to send unless it matches
+   * the account. Returns { ok, error } so the caller can show the message inline.
+   */
+  const sendRecoveryCode = async (identifier, channel, target) => {
     setFpLoading(true);
     try {
+      const payload = { action: "send", identifier, channel };
+      if (target) payload.target = target;
       const res = await fetch("/api/auth/password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", identifier, channel }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || "Failed to send recovery code.");
-        return;
+        return { ok: false, error: data.error || "Failed to send recovery code." };
       }
 
       setRecoverTargetLabel(data.target || "");
@@ -385,8 +393,9 @@ export default function LoginPage() {
       toast.success(
         `A recovery code has been sent to ${data.target || recoverTarget}.`,
       );
+      return { ok: true };
     } catch (err) {
-      toast.error("An error occurred. Please try again.");
+      return { ok: false, error: "An error occurred. Please try again." };
     } finally {
       setFpLoading(false);
     }
@@ -405,60 +414,98 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || "We couldn't find an account with those details.");
-        return;
+        return {
+          ok: false,
+          error: data.error || "We couldn't find an account with those details.",
+        };
       }
 
       const channels = data.channels ?? [];
       if (channels.length === 0) {
-        toast.error(
-          "No recovery method is available for this account. Please contact the administrator.",
-        );
-        return;
+        return {
+          ok: false,
+          error:
+            "No recovery method is available for this account. Please contact the administrator.",
+        };
       }
 
       setRecoverChannels(channels);
       setRecoverChannel(channels[0].type);
       setFpStep("channel");
+      return { ok: true };
     } catch (err) {
-      toast.error("An error occurred. Please try again.");
+      return { ok: false, error: "An error occurred. Please try again." };
     } finally {
       setFpLoading(false);
     }
   };
 
-  /**
-   * Identify step. An email or mobile number is recovered on that same channel
-   * directly; only a username (which maps to both) opens the chooser.
-   */
-  const handleIdentify = async () => {
-    const identifier = recoverIdentifier.trim();
-    if (!identifier) {
+  /** Email / mobile step: send the code straight to the typed contact. */
+  const handleIdentifierSubmit = async () => {
+    const value = recoverIdentifier.trim();
+    const isSms = recoverChannel === "sms";
+    if (!value) {
       setRecoverErrors({
-        identifier: "Enter your email, username, or mobile number.",
+        identifier: isSms ? "Enter your mobile number." : "Enter your email address.",
+      });
+      return;
+    }
+    if (isSms ? !toE164Ph(value) : !EMAIL_IDENTIFIER_RE.test(value)) {
+      setRecoverErrors({
+        identifier: isSms
+          ? "Enter a valid mobile number (e.g. 09171234567)."
+          : "Enter a valid email address.",
       });
       return;
     }
     setRecoverErrors({});
-
-    const kind = recoveryKind(identifier);
-    if (kind === "email") {
-      setRecoverChannel("email");
-      await sendRecoveryCode(identifier, "email");
-      return;
-    }
-    if (kind === "phone") {
-      setRecoverChannel("sms");
-      await sendRecoveryCode(identifier, "sms");
-      return;
-    }
-
-    await lookupRecovery(identifier);
+    const result = await sendRecoveryCode(value, recoverChannel);
+    if (!result.ok) setRecoverErrors({ identifier: result.error });
   };
 
-  /** Channel step / "Resend code": send on the selected channel. */
+  /** Username step: resolve the account, then offer its channels. */
+  const handleUsernameSubmit = async () => {
+    const value = recoverIdentifier.trim();
+    if (!value) {
+      setRecoverErrors({ identifier: "Enter your username." });
+      return;
+    }
+    setRecoverErrors({});
+    const result = await lookupRecovery(value);
+    if (!result.ok) setRecoverErrors({ identifier: result.error });
+  };
+
+  /** Channel step: move on to typing the contact so it can be confirmed. */
+  const handleChannelContinue = () => {
+    setRecoverConfirmValue("");
+    setRecoverErrors({});
+    setFpStep("confirm");
+  };
+
+  /** Confirm step: the typed contact must match before any code is sent. */
+  const handleConfirmSubmit = async () => {
+    const value = recoverConfirmValue.trim();
+    const isSms = recoverChannel === "sms";
+    if (!value) {
+      setRecoverErrors({
+        confirm: isSms
+          ? "Enter the mobile number on file."
+          : "Enter the email address on file.",
+      });
+      return;
+    }
+    setRecoverErrors({});
+    const result = await sendRecoveryCode(
+      recoverIdentifier.trim(),
+      recoverChannel,
+      value,
+    );
+    if (!result.ok) setRecoverErrors({ confirm: result.error });
+  };
+
+  /** "Resend code" on the code step: reuse the identifier/channel/target. */
   const handleSendCode = () =>
-    sendRecoveryCode(recoverIdentifier.trim(), recoverChannel);
+    sendRecoveryCode(recoverIdentifier.trim(), recoverChannel, recoverConfirmValue);
 
   const handleVerifyCode = async () => {
     const code = otpCells.join("");
@@ -694,26 +741,59 @@ export default function LoginPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>
-                    {fpStep === "identify"
+                    {fpStep === "method"
                       ? "Reset access"
-                      : fpStep === "channel"
-                        ? "Choose recovery method"
-                        : fpStep === "code"
-                          ? "Enter recovery code"
-                          : "Create new password"}
+                      : fpStep === "identifier"
+                        ? recoverChannel === "sms"
+                          ? "Reset with your mobile number"
+                          : "Reset with your email"
+                        : fpStep === "username"
+                          ? "Reset with your username"
+                          : fpStep === "channel"
+                            ? "Choose recovery method"
+                            : fpStep === "confirm"
+                              ? recoverChannel === "sms"
+                                ? "Confirm your mobile number"
+                                : "Confirm your email"
+                              : fpStep === "code"
+                                ? "Enter recovery code"
+                                : "Create new password"}
                   </DialogTitle>
                   <DialogDescription>
-                    {fpStep === "identify" && (
+                    {fpStep === "method" && (
                       <>
-                        Enter your email or mobile number and we&apos;ll send
-                        the recovery code straight to it. If you sign in with a
-                        username, you&apos;ll choose where to receive the code.
+                        Choose how you want to receive your recovery code. If
+                        you&apos;ve forgotten both your email address and mobile
+                        number, you can recover with your username instead.
+                      </>
+                    )}
+                    {fpStep === "identifier" && (
+                      <>
+                        {recoverChannel === "sms"
+                          ? "Enter the mobile number on your account and we'll text you a recovery code."
+                          : "Enter the email address on your account and we'll email you a recovery code."}
+                      </>
+                    )}
+                    {fpStep === "username" && (
+                      <>
+                        Enter your username. We&apos;ll show the email and mobile
+                        number on file so you can choose where to receive the
+                        code.
                       </>
                     )}
                     {fpStep === "channel" && (
                       <>
                         Choose where to send your recovery code. Only part of the
                         address is shown, to keep your account private.
+                      </>
+                    )}
+                    {fpStep === "confirm" && (
+                      <>
+                        For your security, enter the{" "}
+                        {recoverChannel === "sms"
+                          ? "mobile number"
+                          : "email address"}{" "}
+                        on file to confirm it&apos;s your account.
                       </>
                     )}
                     {fpStep === "code" && (
@@ -734,13 +814,86 @@ export default function LoginPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
-                  {fpStep === "identify" && (
+                  {fpStep === "method" && (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => startMethod("email")}
+                        className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted"
+                      >
+                        <Mail className="text-muted-foreground size-4 shrink-0" />
+                        <span className="flex-1">
+                          <span className="block text-sm font-medium">Email</span>
+                          <span className="text-muted-foreground block text-xs">
+                            Receive the code in your inbox
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startMethod("sms")}
+                        className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted"
+                      >
+                        <Phone className="text-muted-foreground size-4 shrink-0" />
+                        <span className="flex-1">
+                          <span className="block text-sm font-medium">
+                            Phone number
+                          </span>
+                          <span className="text-muted-foreground block text-xs">
+                            Receive the code by text message (SMS)
+                          </span>
+                        </span>
+                      </button>
+                      <div className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+                        Forgot both your email address and mobile number?{" "}
+                        <button
+                          type="button"
+                          className="text-primary font-medium underline underline-offset-2"
+                          onClick={startUsername}
+                        >
+                          Recover with your username
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {fpStep === "identifier" && (
                     <div className="space-y-2">
                       <Label htmlFor="recover-identifier">
-                        Email, username, or mobile number
+                        {recoverChannel === "sms"
+                          ? "Mobile number"
+                          : "Email address"}
                       </Label>
                       <Input
                         id="recover-identifier"
+                        className="text-foreground placeholder:text-muted-foreground"
+                        type="text"
+                        inputMode={recoverChannel === "sms" ? "tel" : "email"}
+                        value={recoverIdentifier}
+                        onChange={(e) => {
+                          clearError(setRecoverErrors, "identifier");
+                          setRecoverIdentifier(e.target.value);
+                        }}
+                        placeholder={
+                          recoverChannel === "sms" ? "09171234567" : "name@example.com"
+                        }
+                        autoComplete={recoverChannel === "sms" ? "tel" : "email"}
+                        aria-invalid={Boolean(recoverErrors.identifier)}
+                      />
+                      <FieldError>{recoverErrors.identifier}</FieldError>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                        onClick={() => setFpStep("method")}
+                      >
+                        ← Choose a different method
+                      </button>
+                    </div>
+                  )}
+                  {fpStep === "username" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="recover-username">Username</Label>
+                      <Input
+                        id="recover-username"
                         className="text-foreground placeholder:text-muted-foreground"
                         type="text"
                         value={recoverIdentifier}
@@ -748,11 +901,18 @@ export default function LoginPage() {
                           clearError(setRecoverErrors, "identifier");
                           setRecoverIdentifier(e.target.value);
                         }}
-                        placeholder="name@example.com, username, or 09171234567"
+                        placeholder="Enter your username"
                         autoComplete="username"
                         aria-invalid={Boolean(recoverErrors.identifier)}
                       />
                       <FieldError>{recoverErrors.identifier}</FieldError>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                        onClick={() => setFpStep("method")}
+                      >
+                        ← Use email or mobile number instead
+                      </button>
                     </div>
                   )}
                   {fpStep === "channel" && (
@@ -786,6 +946,47 @@ export default function LoginPage() {
                           </span>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {fpStep === "confirm" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="recover-confirm">
+                        {recoverChannel === "sms"
+                          ? "Mobile number"
+                          : "Email address"}
+                      </Label>
+                      <Input
+                        id="recover-confirm"
+                        className="text-foreground placeholder:text-muted-foreground"
+                        type="text"
+                        inputMode={recoverChannel === "sms" ? "tel" : "email"}
+                        value={recoverConfirmValue}
+                        onChange={(e) => {
+                          clearError(setRecoverErrors, "confirm");
+                          setRecoverConfirmValue(e.target.value);
+                        }}
+                        placeholder={
+                          recoverChannel === "sms" ? "09171234567" : "name@example.com"
+                        }
+                        autoComplete="off"
+                        aria-invalid={Boolean(recoverErrors.confirm)}
+                      />
+                      {recoverTarget && (
+                        <p className="text-muted-foreground text-xs">
+                          On file:{" "}
+                          <span className="text-foreground font-medium tabular-nums">
+                            {recoverTarget}
+                          </span>
+                        </p>
+                      )}
+                      <FieldError>{recoverErrors.confirm}</FieldError>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-2"
+                        onClick={() => setFpStep("channel")}
+                      >
+                        ← Choose the other method
+                      </button>
                     </div>
                   )}
                   {fpStep === "code" && (
@@ -939,21 +1140,37 @@ export default function LoginPage() {
                   >
                     Close
                   </Button>
-                  {fpStep === "identify" ? (
+                  {fpStep === "method" ? null : fpStep === "identifier" ? (
                     <Button
                       type="button"
-                      onClick={handleIdentify}
+                      onClick={handleIdentifierSubmit}
                       disabled={fpLoading}
                     >
-                      Continue
+                      {fpLoading ? "Sending…" : "Send recovery code"}
+                    </Button>
+                  ) : fpStep === "username" ? (
+                    <Button
+                      type="button"
+                      onClick={handleUsernameSubmit}
+                      disabled={fpLoading}
+                    >
+                      {fpLoading ? "Checking…" : "Continue"}
                     </Button>
                   ) : fpStep === "channel" ? (
                     <Button
                       type="button"
-                      onClick={handleSendCode}
+                      onClick={handleChannelContinue}
                       disabled={fpLoading}
                     >
-                      Send recovery code
+                      Continue
+                    </Button>
+                  ) : fpStep === "confirm" ? (
+                    <Button
+                      type="button"
+                      onClick={handleConfirmSubmit}
+                      disabled={fpLoading}
+                    >
+                      {fpLoading ? "Sending…" : "Send recovery code"}
                     </Button>
                   ) : fpStep === "code" ? (
                     <Button

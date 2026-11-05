@@ -189,6 +189,30 @@ export async function POST(request) {
       }
     }
 
+    // Username recovery: the user types the contact they believe is on file, and
+    // we refuse to send anything unless it matches. This proves the requester
+    // knows a full contact for the account before a code leaves the building.
+    const suppliedTarget = String(body?.target ?? "").trim();
+    if (suppliedTarget) {
+      const matches =
+        channel === CHANNEL.SMS
+          ? toE164Ph(suppliedTarget) === toE164Ph(account.contactNumber)
+          : suppliedTarget.toLowerCase() ===
+            String(account.email ?? "").trim().toLowerCase();
+
+      if (!matches) {
+        return NextResponse.json(
+          {
+            error:
+              channel === CHANNEL.SMS
+                ? "That mobile number does not match this account. Please enter the number on file."
+                : "That email address does not match this account. Please enter the email on file.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // One code per account per minute. Keyed by the destination so a double-tap
     // on "Send code" / "Resend code" cannot fire several messages.
     const cooldownKey = `${channel}:${target.toLowerCase()}`;
