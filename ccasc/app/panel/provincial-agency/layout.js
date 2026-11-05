@@ -9,6 +9,7 @@ import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { useSessionGuard } from "@/hooks/use-session-guard";
 import {
   Dialog,
@@ -147,6 +148,7 @@ export default function ProvincialAgencyLayout({ children }) {
           <div className="flex-1" />
           <NotificationBell audience="client" />
           <ThemeToggle />
+          <ProfileAvatar endpoint="/api/clients/me" />
         </header>
         <main className="flex-1 p-4 lg:p-6">
           {children}

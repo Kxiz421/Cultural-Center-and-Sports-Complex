@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { useSessionGuard } from "@/hooks/use-session-guard";
 import { PAGE_LOGO } from "@/lib/constants";
 
@@ -24,6 +25,7 @@ export function SiteHeaderCCASC({ title, notificationAudience = "staff", notific
       <div className="ml-auto flex items-center gap-1">
         <NotificationBell audience={notificationAudience} scope={notificationScope} />
         <ThemeToggle />
+        <ProfileAvatar />
       </div>
     </header>
   );
