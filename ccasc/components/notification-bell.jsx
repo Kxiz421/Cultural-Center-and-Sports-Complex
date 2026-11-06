@@ -82,6 +82,12 @@ export function NotificationBell({ audience = "staff", scope = "" }) {
   }, [audience, queryKey, scope]);
 
   React.useEffect(() => {
+    if (!open) return undefined;
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, [open, load]);
+
+  React.useEffect(() => {
     if (!open) return;
     const onPointerDown = (event) => {
       // The details dialog renders in a portal outside this container, so while

@@ -81,8 +81,10 @@ export function PanelNotificationsInbox({
       }
     }
     load();
+    const interval = setInterval(load, 15000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [audience, queryKey, scope]);
 

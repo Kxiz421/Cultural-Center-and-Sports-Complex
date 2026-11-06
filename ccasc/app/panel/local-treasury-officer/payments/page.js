@@ -1243,54 +1243,15 @@ export default function LTOOPaymentsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                  <span className="text-muted-foreground">Original base</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.originalBase)}</span>
-                  <span className="text-muted-foreground">100% Total base (including 10% deposit)</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
-                  {currentBreakdown.totalDiscount > 0 && (
-                    <>
-                      <span className="text-muted-foreground">Discounts applied</span>
-                      <span className="tabular-nums font-medium text-right text-emerald-700">-{formatPhp(currentBreakdown.totalDiscount)}</span>
-                    </>
-                  )}
-                  <span className="text-muted-foreground">New 100% total (includes 10% deposit)</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.totalPayable)}</span>
-                  <span className="text-muted-foreground">10% deposit</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.requiredDeposit)}</span>
-                  <span className="text-muted-foreground">Already paid</span>
-                  <span className="tabular-nums font-medium text-right">{formatPhp(currentBreakdown.paid)}</span>
-                  <span className="text-muted-foreground font-medium">Remaining balance</span>
-                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.remainingBalance)}</span>
-                </div>
-
-                <div className="space-y-1.5 border-t border-border/80 pt-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Paid of 100% total</span>
-                    <span className="tabular-nums font-semibold">{formatPercent(paidPercent)}</span>
-                  </div>
-                  <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="absolute inset-y-0 left-0 bg-primary/30"
-                      style={{ width: `${Math.min(100, projectedPercent)}%` }}
-                    />
-                    <div
-                      className="absolute inset-y-0 left-0 bg-primary"
-                      style={{ width: `${Math.min(100, paidPercent)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    After this entry:{" "}
-                    <span className="tabular-nums font-medium text-foreground">
-                      {formatPercent(paymentAmount ? projectedPercent : paidPercent)}
-                    </span>
-                    {paymentAmount ? (
-                      <span className="tabular-nums">
-                        {" "}
-                        (+{formatPercent(getShareOfTotal(roundMoney(paymentAmount), currentBreakdown.totalPayable))})
-                      </span>
-                    ) : null}
-                  </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                  <span className="text-muted-foreground">Payment selected</span>
+                  <span className="font-medium text-right">{getPaymentTypeLabel(paymentType)}</span>
+                  <span className="text-muted-foreground">Amount to pay now</span>
+                  <span className="tabular-nums font-semibold text-right">{formatPhp(roundMoney(paymentAmount || 0))}</span>
+                  <span className="text-muted-foreground font-medium">Remaining balance after</span>
+                  <span className="tabular-nums font-semibold text-right">
+                    {formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown.remainingBalance)}
+                  </span>
                 </div>
 
                 <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2">

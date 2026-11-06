@@ -2,6 +2,13 @@
 
 import * as React from "react";
 import { PANEL_NOTIFICATIONS_UPDATED } from "@/lib/panel-notifications";
+import {
+  playNotificationSound,
+  primeNotificationSound,
+} from "@/lib/notification-sound";
+
+/** How often the unread count is re-checked (real-time-ish, no server push). */
+const POLL_MS = 15000;
 
 /**
  * @param {"client" | "staff"} audience
@@ -10,6 +17,8 @@ import { PANEL_NOTIFICATIONS_UPDATED } from "@/lib/panel-notifications";
 export function useUnreadNotificationCount(audience, options = {}) {
   const scope = options.scope || "";
   const [unreadCount, setUnreadCount] = React.useState(0);
+  // null until the first response, so the first load never plays the chime.
+  const previousCountRef = React.useRef(null);
 
   const fetchUnreadCount = React.useCallback(async () => {
     const raw = localStorage.getItem("user_id");
@@ -38,7 +47,13 @@ export function useUnreadNotificationCount(audience, options = {}) {
       const res = await fetch(`/api/notifications?${param}`);
       const data = await res.json();
       if (res.ok && typeof data.unreadCount === "number") {
-        setUnreadCount(data.unreadCount);
+        const next = data.unreadCount;
+        // A rising count means a new notification just arrived — play the chime.
+        if (previousCountRef.current !== null && next > previousCountRef.current) {
+          playNotificationSound();
+        }
+        previousCountRef.current = next;
+        setUnreadCount(next);
       }
     } catch (err) {
       console.error("Failed to fetch notification count:", err);
@@ -46,11 +61,13 @@ export function useUnreadNotificationCount(audience, options = {}) {
   }, [audience, scope]);
 
   React.useEffect(() => {
+    const stopPriming = primeNotificationSound();
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+    const interval = setInterval(fetchUnreadCount, POLL_MS);
     const onUpdated = () => fetchUnreadCount();
     window.addEventListener(PANEL_NOTIFICATIONS_UPDATED, onUpdated);
     return () => {
+      stopPriming();
       clearInterval(interval);
       window.removeEventListener(PANEL_NOTIFICATIONS_UPDATED, onUpdated);
     };

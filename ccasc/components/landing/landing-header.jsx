@@ -74,7 +74,8 @@ function LandingHeader() {
           <TransitionLink href="/register">
             <Button
               size="sm"
-              className="bg-black text-white hover:bg-black/90"
+              variant="ghost"
+              className="bg-transparent text-white hover:bg-white/10 hover:text-white"
             >
               Register
             </Button>
@@ -160,7 +161,7 @@ function LandingHero({ facilities: initialFacilities }) {
           <TransitionLink href="/register" className="sm:w-auto">
             <Button
               size="lg"
-              className="h-11 w-full gap-2 rounded-full border-black bg-black px-6 text-base text-white hover:bg-black/90 sm:w-auto"
+              className="h-11 w-full gap-2 rounded-full border border-white/30 bg-transparent px-6 text-base text-white hover:bg-white/10 hover:text-white sm:w-auto"
             >
               <UserPlus className="size-5" aria-hidden />
               Register as client

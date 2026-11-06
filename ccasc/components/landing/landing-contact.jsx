@@ -37,7 +37,10 @@ export function LandingContact() {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <TransitionLink href="/register" className="sm:w-auto">
-                  <Button className="h-11 w-full gap-2 rounded-full bg-black px-6 text-base text-white hover:bg-black/90 sm:w-auto">
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full gap-2 rounded-full border-background/25 bg-transparent px-6 text-base text-background hover:bg-background/10 hover:text-background sm:w-auto"
+                  >
                     Register as client
                   </Button>
                 </TransitionLink>
