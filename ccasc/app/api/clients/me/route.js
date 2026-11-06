@@ -79,9 +79,10 @@ async function loadProfile(clientId) {
         ),
       0
     );
-    const balance = roundMoney(
-      Math.max(0, toNumber(reservation.totalAmount) - paid)
-    );
+    // The remaining balance includes the 10% deposit (base × 1.1), matching the
+    // Order of Payment and the treasury panel.
+    const payable = roundMoney(toNumber(reservation.totalAmount) * 1.1);
+    const balance = roundMoney(Math.max(0, payable - paid));
     if (balance > 0) {
       reservationBalances.push({
         reservationId: reservation.reservationId,

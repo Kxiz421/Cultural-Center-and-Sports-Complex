@@ -100,8 +100,10 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
   const totalAmount = roundMoney(Number(r.totalAmount) || 0);
   const amountPaid = roundMoney(Number(r.amountPaid) || 0);
   const totalPayable = roundMoney(totalAmount * 1.1);
-  const balance = roundMoney(Math.max(0, totalAmount - amountPaid));
   const remainingPayable = roundMoney(Math.max(0, totalPayable - amountPaid));
+  // The balance the client still owes includes the 10% deposit (base × 1.1),
+  // matching the Order of Payment and the treasury panel.
+  const balance = remainingPayable;
   const requiredDownPayment = roundMoney(
     Number(r.requiredDownPayment) || totalAmount * 0.5
   );
@@ -247,7 +249,10 @@ export function computeReservationProgress({ reservation, documentsPhase = null 
     isComplete,
     documentsRequired,
     totals: {
-      totalAmount,
+      // "Total Amount" is what the client pays: base + 10% deposit (same figure
+      // the Local Treasury Operations Officer sees).
+      totalAmount: totalPayable,
+      baseAmount: totalAmount,
       amountPaid,
       balance,
       totalPayable,

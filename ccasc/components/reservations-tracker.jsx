@@ -407,7 +407,7 @@ function ReservationDetail({ reservation, orderOfPaymentHref, documentsHref }) {
 
         {/* Totals */}
         <div className="bg-muted/30 space-y-1.5 rounded-md border p-3 text-sm">
-          <SummaryRow label="Total Amount" value={formatPhp(totals.totalAmount)} />
+          <SummaryRow label="Total Amount (incl. 10% deposit)" value={formatPhp(totals.totalAmount)} />
           <SummaryRow label="Amount Paid" value={formatPhp(totals.amountPaid)} />
           <SummaryRow
             label="Required 50% Down Payment"

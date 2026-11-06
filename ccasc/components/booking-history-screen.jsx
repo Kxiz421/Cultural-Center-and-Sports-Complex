@@ -371,6 +371,7 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
     : [src.eventDate].filter(Boolean);
   const lines = isReservation && item ? buildPaymentLines(src, dateList) : [];
   const totalAmount = isReservation ? Number(src.totalAmount) || 0 : 0;
+  const totalPayable = totalAmount * 1.1;
   const amountPaid = Number(src.amountPaid ?? item?.amount ?? 0);
   const oopHref = item && orderOfPaymentHref ? orderOfPaymentHref(item) : null;
 
@@ -448,8 +449,8 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
 
               <div className="bg-muted/30 space-y-1.5 rounded-md border p-3">
                 <SummaryRow
-                  label="Total Amount"
-                  value={totalAmount ? `₱${formatPeso(totalAmount)}` : "—"}
+                  label="Total Amount (incl. 10% deposit)"
+                  value={totalPayable ? `₱${formatPeso(totalPayable)}` : "—"}
                 />
                 <SummaryRow
                   label="Amount Paid"
@@ -463,7 +464,7 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
                 )}
                 <SummaryRow
                   label="Balance"
-                  value={`₱${formatPeso(Math.max(0, totalAmount - amountPaid))}`}
+                  value={`₱${formatPeso(Math.max(0, totalPayable - amountPaid))}`}
                 />
               </div>
             </div>
