@@ -7,10 +7,10 @@ import {
   Wallet,
   Lock,
   PhilippinePeso,
-  BadgeCheck,
-  ShieldCheck,
   Loader2,
   Camera,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 import {
@@ -21,7 +21,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/ui/field-error";
@@ -59,12 +58,26 @@ function DetailRow({ label, value }) {
   );
 }
 
+/** "Claimable now" once the event has ended, otherwise "Claim after <date>". */
+function claimWhenLabel(dateValue) {
+  if (!dateValue) return "Claimable now";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "Claimable now";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (date <= today) return "Claimable now";
+  return `Claim after ${formatDateOnly(date)}`;
+}
+
 export default function ClientProfilePage() {
   const [profile, setProfile] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState("");
 
   const [accountForm, setAccountForm] = React.useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
     username: "",
     contactNumber: "",
   });
@@ -78,6 +91,9 @@ export default function ClientProfilePage() {
   });
   const [pwErrors, setPwErrors] = React.useState({});
   const [savingPw, setSavingPw] = React.useState(false);
+  const [showCurrentPw, setShowCurrentPw] = React.useState(false);
+  const [showNewPw, setShowNewPw] = React.useState(false);
+  const [showConfirmPw, setShowConfirmPw] = React.useState(false);
 
   const [photoError, setPhotoError] = React.useState("");
   const [photoUploading, setPhotoUploading] = React.useState(false);
@@ -94,6 +110,9 @@ export default function ClientProfilePage() {
       setPhotoBroken(false);
       setProfile(data);
       setAccountForm({
+        firstName: data.firstName || "",
+        middleName: data.middleName || "",
+        lastName: data.lastName || "",
         username: data.username || "",
         contactNumber: data.contactNumber || "",
       });
@@ -112,7 +131,12 @@ export default function ClientProfilePage() {
     e.preventDefault();
     const next = {};
     const username = accountForm.username.trim();
+    const firstName = accountForm.firstName.trim();
+    const middleName = accountForm.middleName.trim();
+    const lastName = accountForm.lastName.trim();
     const digits = accountForm.contactNumber.replace(/\D/g, "");
+    if (!firstName) next.firstName = "First name is required.";
+    if (!lastName) next.lastName = "Last name is required.";
     if (!digits) next.contactNumber = "Contact number is required.";
     else if (digits.length !== 11) {
       next.contactNumber = "Contact number must be exactly 11 digits.";
@@ -127,18 +151,35 @@ export default function ClientProfilePage() {
       const res = await fetch("/api/clients/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, contactNumber: digits }),
+        body: JSON.stringify({
+          username,
+          firstName,
+          middleName,
+          lastName,
+          contactNumber: digits,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 409) {
+        if (res.status === 409 || /username/i.test(data.error || "")) {
           setAccountErrors({ username: data.error });
+          return;
+        }
+        if (/first name/i.test(data.error || "")) {
+          setAccountErrors({ firstName: data.error });
+          return;
+        }
+        if (/last name/i.test(data.error || "")) {
+          setAccountErrors({ lastName: data.error });
           return;
         }
         throw new Error(data.error || "Failed to save your changes");
       }
       setProfile(data.profile);
       setAccountForm({
+        firstName: data.profile.firstName || "",
+        middleName: data.profile.middleName || "",
+        lastName: data.profile.lastName || "",
         username: data.profile.username || "",
         contactNumber: data.profile.contactNumber || "",
       });
@@ -373,17 +414,6 @@ export default function ClientProfilePage() {
                 value={formatDateOnly(profile.createdAt)}
               />
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="gap-1">
-                <ShieldCheck className="size-3" />
-                {profile.accountStatus}
-              </Badge>
-              <Badge variant="outline" className="gap-1">
-                <BadgeCheck className="size-3" />
-                {profile.verificationStatus}
-              </Badge>
-            </div>
           </CardContent>
         </Card>
 
@@ -472,6 +502,38 @@ export default function ClientProfilePage() {
                 </p>
               </div>
             )}
+
+            {roundMoney(profile.depositClaimTotal) > 0 && (
+              <div className="space-y-1 border-t border-border/60 pt-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1 text-emerald-700">
+                    <PhilippinePeso className="size-3.5" />
+                    Deposit to claim
+                  </span>
+                  <span className="tabular-nums font-medium text-emerald-700">
+                    {formatPhp(profile.depositClaimTotal)}
+                  </span>
+                </div>
+                {(profile.depositClaims || []).map((row) => (
+                  <div
+                    key={`claim-${row.reservationId}`}
+                    className="flex items-center justify-between gap-3 text-xs"
+                  >
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      RES-{row.reservationId} · {row.eventType} ·{" "}
+                      {claimWhenLabel(row.claimableFrom)}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {formatPhp(row.amount)}
+                    </span>
+                  </div>
+                ))}
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Claim this at the Local Treasury Operations Office once the
+                  event has ended.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -484,11 +546,64 @@ export default function ClientProfilePage() {
               Account Details
             </CardTitle>
             <CardDescription>
-              Update the username and contact number you use to sign in.
+              Update your name, username and contact number.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={saveAccount} className="space-y-4" noValidate>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="profile-first-name">First name</Label>
+                  <Input
+                    id="profile-first-name"
+                    value={accountForm.firstName}
+                    onChange={(e) => {
+                      setAccountForm((prev) => ({
+                        ...prev,
+                        firstName: e.target.value,
+                      }));
+                      setAccountErrors((prev) => ({ ...prev, firstName: "" }));
+                    }}
+                    aria-invalid={Boolean(accountErrors.firstName)}
+                  />
+                  <FieldError>{accountErrors.firstName}</FieldError>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-last-name">Last name</Label>
+                  <Input
+                    id="profile-last-name"
+                    value={accountForm.lastName}
+                    onChange={(e) => {
+                      setAccountForm((prev) => ({
+                        ...prev,
+                        lastName: e.target.value,
+                      }));
+                      setAccountErrors((prev) => ({ ...prev, lastName: "" }));
+                    }}
+                    aria-invalid={Boolean(accountErrors.lastName)}
+                  />
+                  <FieldError>{accountErrors.lastName}</FieldError>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profile-middle-name">
+                  Middle name{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="profile-middle-name"
+                  value={accountForm.middleName}
+                  onChange={(e) => {
+                    setAccountForm((prev) => ({
+                      ...prev,
+                      middleName: e.target.value,
+                    }));
+                    setAccountErrors((prev) => ({ ...prev, middleName: "" }));
+                  }}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="profile-username">Username</Label>
                 <Input
@@ -550,39 +665,77 @@ export default function ClientProfilePage() {
             <form onSubmit={savePassword} className="space-y-4" noValidate>
               <div className="space-y-2">
                 <Label htmlFor="profile-current-pw">Current password</Label>
-                <Input
-                  id="profile-current-pw"
-                  type="password"
-                  autoComplete="current-password"
-                  value={pwForm.currentPassword}
-                  onChange={(e) => {
-                    setPwForm((prev) => ({
-                      ...prev,
-                      currentPassword: e.target.value,
-                    }));
-                    setPwErrors((prev) => ({ ...prev, currentPassword: "" }));
-                  }}
-                  aria-invalid={Boolean(pwErrors.currentPassword)}
-                />
+                <div className="relative">
+                  <Input
+                    id="profile-current-pw"
+                    type={showCurrentPw ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={pwForm.currentPassword}
+                    onChange={(e) => {
+                      setPwForm((prev) => ({
+                        ...prev,
+                        currentPassword: e.target.value,
+                      }));
+                      setPwErrors((prev) => ({ ...prev, currentPassword: "" }));
+                    }}
+                    className="pr-10"
+                    aria-invalid={Boolean(pwErrors.currentPassword)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                    onClick={() => setShowCurrentPw((v) => !v)}
+                    aria-label={
+                      showCurrentPw ? "Hide current password" : "Show current password"
+                    }
+                    aria-pressed={showCurrentPw}
+                  >
+                    {showCurrentPw ? (
+                      <Eye className="size-4" />
+                    ) : (
+                      <EyeOff className="size-4" />
+                    )}
+                  </Button>
+                </div>
                 <FieldError>{pwErrors.currentPassword}</FieldError>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="profile-new-pw">New password</Label>
-                <Input
-                  id="profile-new-pw"
-                  type="password"
-                  autoComplete="new-password"
-                  value={pwForm.newPassword}
-                  onChange={(e) => {
-                    setPwForm((prev) => ({
-                      ...prev,
-                      newPassword: e.target.value,
-                    }));
-                    setPwErrors((prev) => ({ ...prev, newPassword: "" }));
-                  }}
-                  aria-invalid={Boolean(pwErrors.newPassword)}
-                />
+                <div className="relative">
+                  <Input
+                    id="profile-new-pw"
+                    type={showNewPw ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={pwForm.newPassword}
+                    onChange={(e) => {
+                      setPwForm((prev) => ({
+                        ...prev,
+                        newPassword: e.target.value,
+                      }));
+                      setPwErrors((prev) => ({ ...prev, newPassword: "" }));
+                    }}
+                    className="pr-10"
+                    aria-invalid={Boolean(pwErrors.newPassword)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                    onClick={() => setShowNewPw((v) => !v)}
+                    aria-label={showNewPw ? "Hide new password" : "Show new password"}
+                    aria-pressed={showNewPw}
+                  >
+                    {showNewPw ? (
+                      <Eye className="size-4" />
+                    ) : (
+                      <EyeOff className="size-4" />
+                    )}
+                  </Button>
+                </div>
                 <FieldError>{pwErrors.newPassword}</FieldError>
                 <p className="text-xs text-muted-foreground">
                   At least 8 characters with 1 uppercase, 1 lowercase, 1 number,
@@ -592,20 +745,42 @@ export default function ClientProfilePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="profile-confirm-pw">Confirm new password</Label>
-                <Input
-                  id="profile-confirm-pw"
-                  type="password"
-                  autoComplete="new-password"
-                  value={pwForm.confirmPassword}
-                  onChange={(e) => {
-                    setPwForm((prev) => ({
-                      ...prev,
-                      confirmPassword: e.target.value,
-                    }));
-                    setPwErrors((prev) => ({ ...prev, confirmPassword: "" }));
-                  }}
-                  aria-invalid={Boolean(pwErrors.confirmPassword)}
-                />
+                <div className="relative">
+                  <Input
+                    id="profile-confirm-pw"
+                    type={showConfirmPw ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={pwForm.confirmPassword}
+                    onChange={(e) => {
+                      setPwForm((prev) => ({
+                        ...prev,
+                        confirmPassword: e.target.value,
+                      }));
+                      setPwErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                    }}
+                    className="pr-10"
+                    aria-invalid={Boolean(pwErrors.confirmPassword)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-1 z-10 my-auto size-8"
+                    onClick={() => setShowConfirmPw((v) => !v)}
+                    aria-label={
+                      showConfirmPw
+                        ? "Hide confirm password"
+                        : "Show confirm password"
+                    }
+                    aria-pressed={showConfirmPw}
+                  >
+                    {showConfirmPw ? (
+                      <Eye className="size-4" />
+                    ) : (
+                      <EyeOff className="size-4" />
+                    )}
+                  </Button>
+                </div>
                 <FieldError>{pwErrors.confirmPassword}</FieldError>
               </div>
 

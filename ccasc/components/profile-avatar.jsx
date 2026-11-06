@@ -14,7 +14,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DEFAULT_AVATAR } from "@/lib/constants";
+import { formatPhp } from "@/lib/utils";
 import { uploadProfilePhoto } from "@/lib/upload-profile-photo";
+
+/** "Claimable now" once the event has passed, else "Claim after <date>". */
+function claimWhen(value) {
+  if (!value) return "Claimable now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Claimable now";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (date <= today) return "Claimable now";
+  return `Claim after ${date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+}
 
 /**
  * A clickable profile avatar for panels without a dedicated profile page.
@@ -192,6 +208,47 @@ export function ProfileAvatar({ endpoint = "/api/staff/me" }) {
             <DetailRow label="Organization" value={profile?.organization} />
             <DetailRow label="Role" value={profile?.roleLabel || profile?.roleName} />
           </div>
+
+          {typeof profile?.remainingBalance === "number" && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Remaining balance</span>
+                <span
+                  className={`tabular-nums font-semibold ${
+                    profile.remainingBalance > 0
+                      ? "text-destructive"
+                      : "text-emerald-600"
+                  }`}
+                >
+                  {formatPhp(profile.remainingBalance)}
+                </span>
+              </div>
+
+              {profile.depositClaimTotal > 0 && (
+                <>
+                  <div className="mt-1 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Deposit to claim</span>
+                    <span className="tabular-nums font-medium text-emerald-700">
+                      {formatPhp(profile.depositClaimTotal)}
+                    </span>
+                  </div>
+                  {(profile.depositClaims || []).map((row) => (
+                    <div
+                      key={`claim-${row.reservationId}`}
+                      className="mt-0.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        RES-{row.reservationId} · {claimWhen(row.claimableFrom)}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatPhp(row.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

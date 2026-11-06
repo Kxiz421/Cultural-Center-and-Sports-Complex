@@ -6,6 +6,7 @@ import prisma from "@/lib/prisma";
 import { roundMoney } from "@/lib/utils";
 import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 import { clientRoleDisplayName } from "@/lib/auth-roles";
+import { usernameProblem } from "@/lib/profanity";
 
 const ACTIVE_RESERVATION_EXCLUSIONS = ["Cancelled"];
 
@@ -48,9 +49,12 @@ async function loadProfile(clientId) {
           bookings: {
             select: {
               payments: { select: { amountPaid: true } },
-              deposit: { select: { amountAfterDeductions: true } },
+              deposit: {
+                select: { amountAfterDeductions: true, pulledOutAt: true },
+              },
             },
           },
+          additionalDates: { select: { eventDate: true } },
         },
         orderBy: { reservationId: "desc" },
       },
@@ -60,8 +64,10 @@ async function loadProfile(clientId) {
 
   const reservationBalances = [];
   const depositDebts = [];
+  const depositClaims = [];
   let reservationBalanceTotal = 0;
   let depositDebtTotal = 0;
+  let depositClaimTotal = 0;
 
   for (const reservation of client.reservations) {
     const paid = (reservation.bookings || []).reduce(
@@ -97,6 +103,29 @@ async function loadProfile(clientId) {
           amount: owed,
         });
         depositDebtTotal = roundMoney(depositDebtTotal + owed);
+      } else if (
+        after != null &&
+        toNumber(after) > 0 &&
+        !booking.deposit?.pulledOutAt
+      ) {
+        // A 10% deposit that is still held (not pulled out). The client can
+        // claim it back once the event has ended.
+        const amount = roundMoney(toNumber(after));
+        const eventDates = [
+          reservation.eventDate,
+          ...(reservation.additionalDates || []).map((d) => d.eventDate),
+        ].filter(Boolean);
+        const claimableFrom = eventDates.length
+          ? new Date(Math.max(...eventDates.map((d) => new Date(d).getTime())))
+          : null;
+        depositClaims.push({
+          reservationId: reservation.reservationId,
+          eventType: reservation.eventType,
+          eventDate: reservation.eventDate,
+          claimableFrom,
+          amount,
+        });
+        depositClaimTotal = roundMoney(depositClaimTotal + amount);
       }
     }
   }
@@ -141,8 +170,10 @@ async function loadProfile(clientId) {
     remainingBalance: roundMoney(reservationBalanceTotal + depositDebtTotal),
     reservationBalanceTotal,
     depositDebtTotal,
+    depositClaimTotal,
     reservationBalances,
     depositDebts,
+    depositClaims,
   };
 }
 
@@ -192,6 +223,10 @@ export async function PATCH(request) {
     if (body.username !== undefined) {
       const username = String(body.username ?? "").trim();
       if (username) {
+        const nameProblem = usernameProblem(username);
+        if (nameProblem) {
+          return NextResponse.json({ error: nameProblem }, { status: 400 });
+        }
         const takenByClient = await prisma.client.findUnique({
           where: { username },
           select: { clientId: true },
@@ -232,6 +267,51 @@ export async function PATCH(request) {
       if (digits !== existing.contactNumber) {
         data.contactNumber = digits;
         changedLabels.push("contact number");
+      }
+    }
+
+    // Editable name — first and last are required, middle is optional.
+    if (
+      body.firstName !== undefined ||
+      body.middleName !== undefined ||
+      body.lastName !== undefined
+    ) {
+      const firstName = String(body.firstName ?? existing.firstName ?? "").trim();
+      const middleName = String(body.middleName ?? existing.middleName ?? "").trim();
+      const lastName = String(body.lastName ?? existing.lastName ?? "").trim();
+      if (!firstName) {
+        return NextResponse.json(
+          { error: "Enter your first name." },
+          { status: 400 }
+        );
+      }
+      if (!lastName) {
+        return NextResponse.json(
+          { error: "Enter your last name." },
+          { status: 400 }
+        );
+      }
+      if (
+        firstName.length > 100 ||
+        middleName.length > 100 ||
+        lastName.length > 100
+      ) {
+        return NextResponse.json(
+          { error: "Names must be 100 characters or fewer." },
+          { status: 400 }
+        );
+      }
+      if (firstName !== existing.firstName) {
+        data.firstName = firstName;
+        changedLabels.push("first name");
+      }
+      if (middleName !== (existing.middleName || "")) {
+        data.middleName = middleName || null;
+        changedLabels.push("middle name");
+      }
+      if (lastName !== existing.lastName) {
+        data.lastName = lastName;
+        changedLabels.push("last name");
       }
     }
 
