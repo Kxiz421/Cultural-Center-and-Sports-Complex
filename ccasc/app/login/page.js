@@ -55,6 +55,11 @@ const LOGIN_ERROR_MESSAGES = {
 
 const EMAIL_IDENTIFIER_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Mobile-number inputs accept digits only, capped at 11 (PH mobile length). */
+function limitPhoneDigits(value) {
+  return String(value ?? "").replace(/\D/g, "").slice(0, 11);
+}
+
 /** Strength rules shared by the forced-change dialog. */
 function passwordProblem(password) {
   if (password.length < 8) return "Password must be at least 8 characters long.";
@@ -871,8 +876,12 @@ export default function LoginPage() {
                         value={recoverIdentifier}
                         onChange={(e) => {
                           clearError(setRecoverErrors, "identifier");
-                          setRecoverIdentifier(e.target.value);
+                          const value = e.target.value;
+                          setRecoverIdentifier(
+                            recoverChannel === "sms" ? limitPhoneDigits(value) : value
+                          );
                         }}
+                        maxLength={recoverChannel === "sms" ? 11 : undefined}
                         placeholder={
                           recoverChannel === "sms" ? "09171234567" : "name@example.com"
                         }
@@ -963,8 +972,12 @@ export default function LoginPage() {
                         value={recoverConfirmValue}
                         onChange={(e) => {
                           clearError(setRecoverErrors, "confirm");
-                          setRecoverConfirmValue(e.target.value);
+                          const value = e.target.value;
+                          setRecoverConfirmValue(
+                            recoverChannel === "sms" ? limitPhoneDigits(value) : value
+                          );
                         }}
+                        maxLength={recoverChannel === "sms" ? 11 : undefined}
                         placeholder={
                           recoverChannel === "sms" ? "09171234567" : "name@example.com"
                         }
