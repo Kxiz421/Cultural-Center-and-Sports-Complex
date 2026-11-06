@@ -1,14 +1,19 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { PANEL_NOTIFICATIONS_UPDATED } from "@/lib/panel-notifications";
 import {
   playNotificationSound,
   primeNotificationSound,
 } from "@/lib/notification-sound";
 
-/** How often the unread count is re-checked (real-time-ish, no server push). */
-const POLL_MS = 15000;
+/**
+ * How often the unread count is re-checked. 5s keeps notification sounds
+ * near-instant (a payment confirmed by the LTOO reaches the client's open panel
+ * within a few seconds) without a paid push service.
+ */
+const POLL_MS = 5000;
 
 /**
  * @param {"client" | "staff"} audience
@@ -48,9 +53,14 @@ export function useUnreadNotificationCount(audience, options = {}) {
       const data = await res.json();
       if (res.ok && typeof data.unreadCount === "number") {
         const next = data.unreadCount;
-        // A rising count means a new notification just arrived — play the chime.
+        // A rising count means a new notification just arrived — play the chime
+        // and show the notification's message so it is seen as well as heard.
         if (previousCountRef.current !== null && next > previousCountRef.current) {
           playNotificationSound();
+          const message = String(data.latest?.message || "").trim();
+          if (message) {
+            toast(message.length > 160 ? `${message.slice(0, 157)}…` : message);
+          }
         }
         previousCountRef.current = next;
         setUnreadCount(next);

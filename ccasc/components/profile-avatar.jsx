@@ -16,6 +16,7 @@ import {
 import { DEFAULT_AVATAR } from "@/lib/constants";
 import { formatPhp } from "@/lib/utils";
 import { uploadProfilePhoto } from "@/lib/upload-profile-photo";
+import { NotificationSoundPicker } from "@/components/notification-sound-picker";
 
 /** "Claimable now" once the event has passed, else "Claim after <date>". */
 function claimWhen(value) {
@@ -249,6 +250,10 @@ export function ProfileAvatar({ endpoint = "/api/staff/me" }) {
               )}
             </div>
           )}
+
+          <div className="border-t pt-3">
+            <NotificationSoundPicker compact />
+          </div>
 
           <div className="flex justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

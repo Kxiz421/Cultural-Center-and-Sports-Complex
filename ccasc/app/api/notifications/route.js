@@ -104,20 +104,34 @@ export async function GET(request) {
               ? { staffId: { notIn: coordinatorIds } }
               : {}),
           },
-          select: { type: true, message: true },
+          select: { notificationId: true, type: true, message: true, sentAt: true },
+          orderBy: { sentAt: "desc" },
         });
-        return noCacheJson({ unreadCount: new Set(unread.map(keyOf)).size });
+        const latest = unread[0] || null;
+        return noCacheJson({
+          unreadCount: new Set(unread.map(keyOf)).size,
+          latest: latest
+            ? { id: latest.notificationId, type: latest.type, message: latest.message }
+            : null,
+        });
       }
       if (staffId) {
         const unread = await prisma.notification.findMany({
           where: { staffId: parseInt(staffId, 10), isRead: false },
-          select: { type: true, message: true },
+          select: { notificationId: true, type: true, message: true, sentAt: true },
+          orderBy: { sentAt: "desc" },
         });
         const visibleUnread =
           scope === "coordinator"
             ? unread.filter(isCoordinatorInboxNotification)
             : unread;
-        return noCacheJson({ unreadCount: new Set(visibleUnread.map(keyOf)).size });
+        const latest = visibleUnread[0] || null;
+        return noCacheJson({
+          unreadCount: new Set(visibleUnread.map(keyOf)).size,
+          latest: latest
+            ? { id: latest.notificationId, type: latest.type, message: latest.message }
+            : null,
+        });
       }
     }
 

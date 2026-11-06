@@ -83,7 +83,7 @@ export function NotificationBell({ audience = "staff", scope = "" }) {
 
   React.useEffect(() => {
     if (!open) return undefined;
-    const interval = setInterval(load, 15000);
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, [open, load]);
 

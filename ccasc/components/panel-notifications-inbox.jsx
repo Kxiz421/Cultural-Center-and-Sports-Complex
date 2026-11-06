@@ -81,7 +81,7 @@ export function PanelNotificationsInbox({
       }
     }
     load();
-    const interval = setInterval(load, 15000);
+    const interval = setInterval(load, 5000);
     return () => {
       cancelled = true;
       clearInterval(interval);
