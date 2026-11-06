@@ -55,7 +55,7 @@ export function NavUserCCASC() {
           <DialogFooter className="gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
-              variant="outline"
+              variant="destructive"
               onClick={() => setLogoutOpen(false)}
             >
               Cancel

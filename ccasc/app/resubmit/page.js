@@ -379,7 +379,7 @@ export default function ResubmitPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+            <Button variant="destructive" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSubmit}>

@@ -2159,10 +2159,11 @@ const renderPerDateFacilities = (date, cust) => {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmSubmitOpen(false)}>
+            <Button variant="destructive" onClick={() => setConfirmSubmitOpen(false)}>
               Cancel
             </Button>
             <Button
+              variant="success"
               onClick={() => {
                 setConfirmSubmitOpen(false);
                 handleSubmit();

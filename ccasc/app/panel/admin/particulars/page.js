@@ -634,7 +634,7 @@ export default function ParticularsPage() {
             </div>
             <DialogFooter>
               <Button
-                variant="outline"
+                variant="destructive"
                 onClick={() => {
                   resetAddForm();
                   setAddOpen(false);
@@ -1034,7 +1034,7 @@ export default function ParticularsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditOpen(false); setEditItem(null); setEditErrors({}); }}>
+            <Button variant="destructive" onClick={() => { setEditOpen(false); setEditItem(null); setEditErrors({}); }}>
               Cancel
             </Button>
             <Button
@@ -1091,7 +1091,7 @@ export default function ParticularsPage() {
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}
             >
               Cancel
@@ -1136,8 +1136,8 @@ export default function ParticularsPage() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setAddConfirmOpen(false); handleAddParticular(); }} disabled={saving}>
+            <Button variant="destructive" onClick={() => setAddConfirmOpen(false)}>Cancel</Button>
+            <Button variant="success" onClick={() => { setAddConfirmOpen(false); handleAddParticular(); }} disabled={saving}>
               {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
@@ -1179,8 +1179,8 @@ export default function ParticularsPage() {
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setEditConfirmOpen(false); handleSaveItem(); }} disabled={saving}>
+            <Button variant="destructive" onClick={() => setEditConfirmOpen(false)}>Cancel</Button>
+            <Button variant="success" onClick={() => { setEditConfirmOpen(false); handleSaveItem(); }} disabled={saving}>
               {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
@@ -1252,7 +1252,7 @@ export default function ParticularsPage() {
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}
             >
               Cancel

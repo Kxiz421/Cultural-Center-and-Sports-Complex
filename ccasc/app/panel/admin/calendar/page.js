@@ -562,7 +562,7 @@ export default function CalendarPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setAddOpen(false); resetBlockForm(); }}>
+              <Button type="button" variant="destructive" onClick={() => { setAddOpen(false); resetBlockForm(); }}>
                 Cancel
               </Button>
               <Button type="button" onClick={handleAddBlock} disabled={addingBlock}>

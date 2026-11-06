@@ -1945,10 +1945,10 @@ export default function CoordinatorReservationsPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOrder(false)}>
+            <Button variant="destructive" onClick={() => setShowOrder(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmitReservation} disabled={submitting}>
+            <Button variant="success" onClick={handleSubmitReservation} disabled={submitting}>
               {submitting ? "Saving..." : "Confirm & Save Reservation"}
             </Button>
           </DialogFooter>

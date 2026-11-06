@@ -1435,6 +1435,7 @@ export default function RegisterPage() {
                   <Button
                     type="button"
                     size="lg"
+                    variant="success"
                     disabled={loading}
                     onClick={requestConfirm}
                   >

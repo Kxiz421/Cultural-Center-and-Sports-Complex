@@ -258,7 +258,7 @@ export default function CoordinatorAmenitiesPage() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   className="flex-1"
                   onClick={() => {
                     setEditOpen(false);

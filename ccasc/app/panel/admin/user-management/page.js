@@ -967,7 +967,7 @@ export default function UserManagementPage() {
             <DialogFooter>
               <Button
                 type="button"
-                variant="outline"
+                variant="destructive"
                 onClick={() => {
                   resetForm();
                   setAddOpen(false);
@@ -1033,7 +1033,7 @@ export default function UserManagementPage() {
               </div>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setConfirmSaveOpen(false)}>
+              <Button variant="destructive" onClick={() => setConfirmSaveOpen(false)}>
                 Cancel
               </Button>
               <Button onClick={() => { setConfirmSaveOpen(false); handleSaveUser(); }}>
@@ -1111,7 +1111,7 @@ export default function UserManagementPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setConfirmOpen(false); setConfirmUser(null); }}>
+            <Button variant="destructive" onClick={() => { setConfirmOpen(false); setConfirmUser(null); }}>
               Cancel
             </Button>
             <Button
@@ -1386,7 +1386,7 @@ export default function UserManagementPage() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setProfileOpen(false); setSelectedUser(null); setProfileErrors({}); }}>
+            <Button variant="destructive" onClick={() => { setProfileOpen(false); setSelectedUser(null); setProfileErrors({}); }}>
               Cancel
             </Button>
             <Button onClick={() => setSaveConfirmOpen(true)} disabled={saving}>
@@ -1423,7 +1423,7 @@ export default function UserManagementPage() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSaveConfirmOpen(false)}>
+            <Button variant="destructive" onClick={() => setSaveConfirmOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSaveProfile} disabled={saving}>

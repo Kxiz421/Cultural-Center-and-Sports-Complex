@@ -1286,7 +1286,7 @@ export default function LoginPage() {
             <DialogFooter className="gap-2 sm:justify-between">
               <Button
                 type="button"
-                variant="outline"
+                variant="destructive"
                 onClick={() => setPwChangeOpen(false)}
               >
                 Cancel

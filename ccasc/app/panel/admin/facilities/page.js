@@ -800,7 +800,7 @@ export default function FacilitiesPage() {
             </div>
             <DialogFooter>
               <Button
-                variant="outline"
+                variant="destructive"
                 onClick={() => {
                   resetAddForm();
                   setAddOpen(false);
@@ -1070,7 +1070,7 @@ export default function FacilitiesPage() {
 
           <DialogFooter className="gap-2">
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={() => {
                 setEditOpen(false);
                 setEditFacility(null);
@@ -1218,7 +1218,7 @@ export default function FacilitiesPage() {
           )}
           <DialogFooter className="gap-2">
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={() => {
                 setConfirmOpen(false);
                 setConfirmAction(null);
@@ -1228,7 +1228,7 @@ export default function FacilitiesPage() {
             </Button>
             <Button
               variant={
-                confirmAction?.type === "archive" ? "destructive" : "default"
+                confirmAction?.type === "archive" ? "destructive" : "success"
               }
               onClick={() => {
                 setConfirmOpen(false);

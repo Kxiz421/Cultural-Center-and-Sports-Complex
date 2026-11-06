@@ -488,7 +488,7 @@ export default function PackagesPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { resetAddForm(); setAddOpen(false); }}>Cancel</Button>
+              <Button variant="destructive" onClick={() => { resetAddForm(); setAddOpen(false); }}>Cancel</Button>
               <Button onClick={() => setAddPkgConfirmOpen(true)} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
             </DialogFooter>
           </DialogContent>
@@ -665,7 +665,7 @@ export default function PackagesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditOpen(false); setEditPkg(null); }}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { setEditOpen(false); setEditPkg(null); }}>Cancel</Button>
             <Button onClick={() => { setConfirmAction({ type: "save", item: editPkg }); setConfirmOpen(true); }} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
@@ -688,8 +688,8 @@ export default function PackagesPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}>Cancel</Button>
-            <Button variant={confirmAction?.type === "archive" ? "destructive" : "default"} onClick={handleToggleArchive} disabled={saving}>
+            <Button variant="destructive" onClick={() => { setConfirmOpen(false); setConfirmAction(null); }}>Cancel</Button>
+            <Button variant={confirmAction?.type === "archive" ? "destructive" : "success"} onClick={handleToggleArchive} disabled={saving}>
               {saving ? "Processing..." : confirmAction?.type === "archive" ? "Archive" : "Restore"}
             </Button>
           </DialogFooter>
@@ -720,8 +720,8 @@ export default function PackagesPage() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setAddPkgConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setAddPkgConfirmOpen(false); handleAddPackage(); }} disabled={saving}>
+            <Button variant="destructive" onClick={() => setAddPkgConfirmOpen(false)}>Cancel</Button>
+            <Button variant="success" onClick={() => { setAddPkgConfirmOpen(false); handleAddPackage(); }} disabled={saving}>
               {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
@@ -736,8 +736,8 @@ export default function PackagesPage() {
             <DialogDescription>Are you sure you want to save the changes to &ldquo;{editPkg?.packageName}&rdquo;?</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={handleSavePackage} disabled={saving}>{saving ? "Saving..." : "Confirm"}</Button>
+            <Button variant="destructive" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button variant="success" onClick={handleSavePackage} disabled={saving}>{saving ? "Saving..." : "Confirm"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

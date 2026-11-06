@@ -450,7 +450,7 @@ export function CoordinatorParticularsScreen({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeAction} disabled={saving}>
+            <Button variant="destructive" onClick={closeAction} disabled={saving}>
               Cancel
             </Button>
             <Button

@@ -1738,6 +1738,7 @@ export default function LTOOPaymentsPage() {
               <Button
                 type="button"
                 size="lg"
+                variant="success"
                 onClick={() => handleRecordPayment(false)}
                 disabled={saving}
               >
@@ -2259,8 +2260,8 @@ export default function LTOOPaymentsPage() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setConfirmOpen(false); setDiscountOnlySubmission(false); }}>Cancel</Button>
-            <Button onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>
+            <Button variant="destructive" onClick={() => { setConfirmOpen(false); setDiscountOnlySubmission(false); }}>Cancel</Button>
+            <Button variant="success" onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>
               {saving ? "Saving..." : (discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Confirm Discount") : "Confirm")}
             </Button>
           </DialogFooter>
@@ -2288,8 +2289,9 @@ export default function LTOOPaymentsPage() {
             This records the full payment and notifies the client via email and SMS.
           </p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSettleConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => setSettleConfirmOpen(false)}>Cancel</Button>
             <Button
+              variant="success"
               onClick={() => { setSettleConfirmOpen(false); handleSettleDeposit(); }}
               disabled={depositSaving}
             >

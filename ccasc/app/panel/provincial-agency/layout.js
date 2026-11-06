@@ -165,7 +165,7 @@ export default function ProvincialAgencyLayout({ children }) {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" onClick={() => setLogoutOpen(false)}>
+          <Button type="button" variant="destructive" onClick={() => setLogoutOpen(false)}>
             Cancel
           </Button>
           <Button type="button" variant="destructive" onClick={confirmLogout}>

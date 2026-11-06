@@ -323,7 +323,7 @@ export default function CoordinatorReschedulingPage() {
                   )}
                   <div className="flex gap-2 pt-1">
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       className="flex-1"
                       onClick={cancelConfirm}
                       disabled={actionLoading}
@@ -331,7 +331,7 @@ export default function CoordinatorReschedulingPage() {
                       Cancel
                     </Button>
                     <Button
-                      variant={confirmAction === "approve" ? "default" : "destructive"}
+                      variant={confirmAction === "approve" ? "success" : "destructive"}
                       className="flex-1"
                       onClick={handleConfirmAction}
                       disabled={actionLoading}

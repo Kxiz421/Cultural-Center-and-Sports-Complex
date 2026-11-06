@@ -844,6 +844,7 @@ function CoordinatorBookingsContent() {
                         Cancel Booking
                       </Button>
                       <Button
+                        variant="success"
                         className="flex-1"
                         disabled={saving || !requiredDocsVerified(selectedRes)}
                         onClick={() =>
@@ -923,7 +924,7 @@ function CoordinatorBookingsContent() {
 
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   className="flex-1"
                   disabled={saving}
                   onClick={() => setConfirmDialog(null)}
@@ -1012,7 +1013,7 @@ function CoordinatorBookingsContent() {
 
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   className="flex-1"
                   onClick={() => setVerifyDoc(null)}
                 >
@@ -1060,7 +1061,7 @@ function CoordinatorBookingsContent() {
             <FieldError>{errors.resubmitMessage}</FieldError>
             <div className="flex gap-2 justify-end">
               <Button
-                variant="outline"
+                variant="destructive"
                 onClick={() => {
                   setResubmitDoc(null);
                   setErrors({});
