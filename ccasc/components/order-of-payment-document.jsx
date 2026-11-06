@@ -571,6 +571,17 @@ function SportsComplexOrderOfPayment({
   // reservation's own total when no line could be charged.
   const grandTotal = bookedTotal || Number(totalAmount) || 0;
 
+  // Only the sections/rows the booking actually charged are printed, so the
+  // form lists the facilities and particulars that were selected instead of the
+  // whole A–F rate card.
+  const filledSections = SCSC_RATE_CARD.map((section, sectionIndex) => ({
+    section,
+    sectionIndex,
+    rows: section.rows
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter(({ rowIndex }) => charges.has(`${sectionIndex}::${rowIndex}`)),
+  })).filter((entry) => entry.rows.length > 0);
+
   /** One rate-card row: particulars / fee / booked amount / date remark. */
   const renderRow = (row, sectionIndex, rowIndex) => {
     const entry = charges.get(`${sectionIndex}::${rowIndex}`);
@@ -719,7 +730,7 @@ function SportsComplexOrderOfPayment({
           </tr>
         </thead>
         <tbody>
-          {SCSC_RATE_CARD.map((section, sectionIndex) => (
+          {filledSections.map(({ section, sectionIndex, rows }) => (
             <React.Fragment key={section.section}>
               <tr>
                 <td className="border border-black px-1.5 py-0.5 font-semibold">
@@ -731,11 +742,22 @@ function SportsComplexOrderOfPayment({
                 <td className="border border-black px-1.5 py-0.5" />
                 <td className="border border-black px-1.5 py-0.5" />
               </tr>
-              {section.rows.map((row, rowIndex) =>
+              {rows.map(({ row, rowIndex }) =>
                 renderRow(row, sectionIndex, rowIndex)
               )}
             </React.Fragment>
           ))}
+
+          {filledSections.length === 0 && extras.length === 0 && (
+            <tr>
+              <td
+                colSpan={4}
+                className="border border-black px-1.5 py-2 text-center italic"
+              >
+                No facilities or particulars selected.
+              </td>
+            </tr>
+          )}
 
           {/* Booking charges that fit no printed row still have to be billed */}
           {extras.length > 0 && (
