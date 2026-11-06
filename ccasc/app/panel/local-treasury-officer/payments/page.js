@@ -1252,6 +1252,10 @@ export default function LTOOPaymentsPage() {
                     <span className="text-muted-foreground">Base + 10%</span>
                     <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
                   </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">10% Deposit</span>
+                    <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.requiredDeposit)}</span>
+                  </div>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border/80 pt-2">
                     <span className="text-muted-foreground">
                       Payment selected:{" "}
