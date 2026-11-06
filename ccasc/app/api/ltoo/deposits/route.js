@@ -240,17 +240,25 @@ export async function POST(request) {
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
 
-      await prisma.auditLog.create({
-        data: {
-          action: "DEPOSIT_BALANCE_SETTLED",
-          targetUserId: `DEP-${result.deposit.depositId}`,
-          targetName: booking.reservation?.eventType || "Deposit",
-          performedById: acting.performedBy,
-          performedByName: recordedBy,
-          details: `Settled outstanding deposit balance of ${formatPhp(result.settledAmount)}.`,
-        },
-      });
+      // Record the audit entry, but never let a failure here block the client
+      // notification below — the deposit is already settled at this point.
+      try {
+        await prisma.auditLog.create({
+          data: {
+            action: "DEPOSIT_BALANCE_SETTLED",
+            targetUserId: `DEP-${result.deposit.depositId}`,
+            targetName: booking.reservation?.eventType || "Deposit",
+            performedById: acting.performedBy,
+            performedByName: recordedBy,
+            details: `Settled outstanding deposit balance of ${formatPhp(result.settledAmount)}.`,
+          },
+        });
+      } catch (auditError) {
+        console.error("Failed to write settle audit log:", auditError);
+      }
 
+      // Notify the client that the negative (over-consumed) deposit was settled:
+      // in-app inbox + email + SMS, best-effort on every channel.
       const clientId = booking.reservation?.clientId;
       if (clientId) {
         const outstanding = getDepositOutstanding(result.deposit);
