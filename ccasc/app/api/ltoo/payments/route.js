@@ -24,6 +24,10 @@ import { notifyClientEvent } from "@/lib/client-progress-notifications";
 import { getPackageBillingRate } from "@/lib/reservation-package-select";
 import { getBasketballPrice } from "@/lib/particular-options";
 import { noCacheJson } from "@/lib/api-cache-control";
+import {
+  extractChargeBreakdownFromNotes,
+  sumChargeLineAmounts,
+} from "@/lib/reservation-charge-breakdown";
 
 import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
@@ -68,6 +72,31 @@ function billedBreakdownForReservation(originalBase, bookings, depositRecord = n
     depositRecord ?? getBookingDeposit(bookings),
     { originalBase, totalDiscount }
   );
+}
+
+/**
+ * The base amount owed for a reservation.
+ *
+ * Prefer the itemised bill saved with the reservation — the lines the client saw
+ * and printed on the Order of Payment. Recomputing from "package rate for the
+ * reservation's time slot + every particular" overcharges events that are
+ * booked per-date (e.g. Venue Rental in the morning plus a package at night)
+ * because a Whole Day package rate already covers both halves, so the morning
+ * rental is added twice.
+ *
+ * Older reservations with no saved charge lines fall back to the stored total,
+ * then to the recomputed figure.
+ */
+function reservationBaseTotal({ totalAmount, notes, calculatedBase }) {
+  const savedLinesTotal = roundMoney(
+    sumChargeLineAmounts(extractChargeBreakdownFromNotes(notes) || [])
+  );
+  if (savedLinesTotal > 0) return savedLinesTotal;
+
+  const stored = totalAmount ? Number(totalAmount) : 0;
+  if (stored > 0) return stored;
+
+  return roundMoney(calculatedBase || 0);
 }
 
 const PACKAGE_RATE_SELECT = {
@@ -164,11 +193,11 @@ export async function GET(request) {
             return sum + unitCost * rp.quantity;
           }, 0);
           const calculatedBase = roundMoney(pkgTotal + particularsTotal);
-          const storedBase = r.totalAmount ? Number(r.totalAmount) : 0;
-          const totalAmount =
-            calculatedBase > 0
-              ? roundMoney(Math.max(storedBase, calculatedBase))
-              : storedBase;
+          const totalAmount = reservationBaseTotal({
+            totalAmount: r.totalAmount,
+            notes: r.notes,
+            calculatedBase,
+          });
           const breakdown = billedBreakdownForReservation(
             totalAmount,
             r.bookings,
@@ -575,11 +604,12 @@ export async function POST(request) {
         return sum + unitCost * rp.quantity;
       }, 0);
       const calculatedBase = roundMoney(pkgTotal + particularsTotal);
-      const storedBase = reservation.totalAmount ? Number(reservation.totalAmount) : 0;
-      const totalAmt =
-        calculatedBase > 0
-          ? roundMoney(Math.max(storedBase, calculatedBase))
-          : storedBase;
+      // Use the saved itemised bill when present (see reservationBaseTotal).
+      const totalAmt = reservationBaseTotal({
+        totalAmount: reservation.totalAmount,
+        notes: reservation.notes,
+        calculatedBase,
+      });
 
       const currentBreakdown = billedBreakdownForReservation(
         totalAmt,
@@ -1009,11 +1039,12 @@ export async function PATCH(request) {
       return sum + unitCost * rp.quantity;
     }, 0);
     const calculatedBase = roundMoney(pkgTotal + particularsTotal);
-    const storedBase = reservation.totalAmount ? Number(reservation.totalAmount) : 0;
-    const totalAmt =
-      calculatedBase > 0
-        ? roundMoney(Math.max(storedBase, calculatedBase))
-        : storedBase;
+    // Use the saved itemised bill when present (see reservationBaseTotal).
+    const totalAmt = reservationBaseTotal({
+      totalAmount: reservation.totalAmount,
+      notes: reservation.notes,
+      calculatedBase,
+    });
 
     const currentBreakdown = billedBreakdownForReservation(
       totalAmt,
