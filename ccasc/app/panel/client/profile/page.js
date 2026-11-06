@@ -315,7 +315,7 @@ export default function ClientProfilePage() {
                   {profile.fullName}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {profile.roleName || "Client"}
+                  {profile.roleLabel || profile.roleName || "Client"}
                   {profile.organization ? ` · ${profile.organization}` : ""}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">

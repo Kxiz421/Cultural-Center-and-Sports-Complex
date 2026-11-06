@@ -5,6 +5,7 @@ import { noCacheJson } from "@/lib/api-cache-control";
 import prisma from "@/lib/prisma";
 import { roundMoney } from "@/lib/utils";
 import { requireApiAuth, actingAs, ownClientId } from "@/lib/api-auth";
+import { clientRoleDisplayName } from "@/lib/auth-roles";
 
 const ACTIVE_RESERVATION_EXCLUSIONS = ["Cancelled"];
 
@@ -131,6 +132,8 @@ async function loadProfile(clientId) {
     address,
     profilePhoto: client.profilePhoto,
     roleName: client.clientRole?.roleName || null,
+    // Friendly label: "Client" / "Provincial Department Agencies".
+    roleLabel: clientRoleDisplayName(client.clientRole?.roleName),
     organization: client.clientOrg?.organizationName || null,
     accountStatus: client.accountStatus,
     verificationStatus: client.verificationStatus,

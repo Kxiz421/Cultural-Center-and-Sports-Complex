@@ -133,6 +133,7 @@ export async function POST(request) {
   const acting = actingAs(guard.user);
 
   try {
+    // STEP 1 — Read the request (which booking to cancel).
     const body = await request.json();
     const { bookingId } = body;
 
@@ -143,6 +144,7 @@ export async function POST(request) {
       );
     }
 
+    // STEP 2 — Load the booking with its reservation, client and payments.
     const booking = await prisma.booking.findUnique({
       where: { bookingId: parseInt(bookingId) },
       include: {
@@ -164,6 +166,7 @@ export async function POST(request) {
       ? `${booking.reservation.client.firstName} ${booking.reservation.client.lastName}`
       : "Unknown";
 
+    // STEP 3 — Apply the 30-day forfeiture rule.
     // Check 30-day forfeiture rule
     const eventDate = booking.reservation?.eventDate;
     const today = new Date();
@@ -179,6 +182,7 @@ export async function POST(request) {
       }
     }
 
+    // STEP 4 — Mark both the booking and its reservation as Cancelled.
     // Update booking status to Cancelled (id resolved by name).
     const cancelledStatusId = await getBookingStatusId(BOOKING_STATUS.CANCELLED);
     if (cancelledStatusId != null) {
@@ -194,6 +198,7 @@ export async function POST(request) {
       data: { reservationStatus: "Cancelled" },
     });
 
+    // STEP 5 — Record an entry in the activity log.
     // Create audit log
     await prisma.auditLog.create({
       data: {
@@ -208,6 +213,7 @@ export async function POST(request) {
       },
     });
 
+    // STEP 6 — Tell the client on all channels.
     // Notify the client on all channels (in-app + email + SMS).
     const cancelledReservation = booking.reservation;
     if (cancelledReservation?.clientId) {
@@ -239,6 +245,7 @@ export async function POST(request) {
       });
     }
 
+    // STEP 7 — Reply to the screen with the outcome (and whether it forfeited).
     return NextResponse.json({
       success: true,
       isForfeiture,

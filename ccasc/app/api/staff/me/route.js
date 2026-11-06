@@ -61,6 +61,7 @@ async function loadProfile(staffId) {
     province: staff.province,
     profilePhoto: staff.profilePhoto,
     roleName: staff.staffRole?.roleName || null,
+    roleLabel: staff.staffRole?.roleName || null,
     organization: staff.staffOrg?.orgName || null,
     status: staff.status,
     createdAt: staff.createdAt,

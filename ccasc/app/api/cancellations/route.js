@@ -29,6 +29,7 @@ export async function POST(request) {
   const acting = actingAs(guard.user);
 
   try {
+    // STEP 1 — Read the request and check the reservation id is usable.
     const body = await request.json();
     const { reservationId, reason } = body;
 
@@ -50,7 +51,7 @@ export async function POST(request) {
       );
     }
 
-    // Fetch the reservation with client and venue info
+    // STEP 2 — Load the reservation (with its client and venue).
     const reservation = await prisma.reservation.findUnique({
       where: { reservationId: parsedReservationId },
       include: {
@@ -73,6 +74,7 @@ export async function POST(request) {
       );
     }
 
+    // STEP 3 — Confirm the caller may cancel this reservation.
     // Client-role sessions may only cancel their own reservation.
     const ownCancelClientId = ownClientId(guard.user);
     if (
@@ -85,6 +87,7 @@ export async function POST(request) {
       );
     }
 
+    // STEP 4 — Apply the cancellation rule and decide if money is forfeited.
     // Cancellation rule (lib/cancellation-policy): accepted until 2 days before
     // the event; inside the 30-day window the payments are forfeited.
     const eventDate = reservation.eventDate
@@ -118,6 +121,7 @@ export async function POST(request) {
     const performerName =
       acting.performedByName || clientName || "Client";
 
+    // STEP 5 — Mark it cancelled and record an entry in the activity log.
     // Mirror the LTOO cancellation: the reservation and its booking row both go
     // to Cancelled, so every panel and the facility calendar read one status.
     const cancelledBookingStatusId = await getBookingStatusId(
@@ -160,6 +164,7 @@ export async function POST(request) {
       ? "As the cancellation was made less than 30 days before the event, the 50% down payment, 10% deposit and remaining balance are forfeited in favor of the Provincial Government."
       : "Since the cancellation was made at least 30 days before the event, any payments made are eligible for refund.";
 
+    // STEP 6 — Tell the client on all channels (inbox + email + text).
     // Notify the client on all channels.
     const eventDateKey = eventDate
       ? eventDate.toISOString().split("T")[0]
@@ -185,6 +190,7 @@ export async function POST(request) {
       sms: `CSASC: Your reservation for "${cancelledEventType}" on ${eventDateKey} at ${reservation.venue.venue} has been CANCELLED. Reason: ${reason || "No reason provided"}.`,
     });
 
+    // STEP 7 — Reply to the screen with the outcome (and whether it forfeited).
     return NextResponse.json({
       success: true,
       message: "Reservation cancelled successfully. " + clientOutcome,

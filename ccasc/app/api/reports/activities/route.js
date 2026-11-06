@@ -41,9 +41,11 @@ export async function GET(request) {
   if (guard.response) return guard.response;
 
   try {
+    // STEP 1 — Read the choices made on the report screen (period and venue).
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "m";
     const venue = searchParams.get("venue") || "all";
+    // STEP 2 — Turn those choices into a single start and end date.
     const range = resolvePeriodRange({
       period,
       year: searchParams.get("year"),
@@ -53,6 +55,8 @@ export async function GET(request) {
       to: searchParams.get("to"),
     });
 
+    // STEP 3 — Build the database filter (the date window plus the statuses we
+    // never report) and narrow it to the venues this user is allowed to see.
     const where = {
       eventDate: { gte: range.startDate, lte: range.endDate },
       reservationStatus: { notIn: EXCLUDED_STATUSES },
@@ -70,6 +74,7 @@ export async function GET(request) {
       where.venueId = { in: scope };
     }
 
+    // STEP 4 — Load the reservations and everything the rows need.
     const reservations = await prisma.reservation.findMany({
       where,
       include: {
@@ -101,6 +106,7 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
+    // STEP 5 — Turn the reservations into printable report rows and totals.
     const rows = reservations
       .filter(isReservationReportEligible)
       .flatMap((reservation) =>
@@ -123,6 +129,7 @@ export async function GET(request) {
       },
     });
 
+    // STEP 6 — Return the finished document to the screen.
     return noCacheJson(report);
   } catch (error) {
     console.error("Activities report GET error:", error);

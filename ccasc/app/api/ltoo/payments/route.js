@@ -463,6 +463,7 @@ export async function POST(request) {
   const acting = actingAs(guard.user);
 
   try {
+    // STEP 1 — Read the request (who is paying, how much, and for what).
     const body = await request.json();
     const {
       clientType,
@@ -524,6 +525,8 @@ export async function POST(request) {
     let discountAmount = 0;
     let discountPercentValue = null;
 
+    // STEP 2 — If this is against an existing reservation, load it and
+    // recompute exactly how much is owed.
     // If recording against an existing reservation, validate the amount server-side.
     if (reservationId) {
       const reservation = await prisma.reservation.findFirst({
@@ -585,6 +588,7 @@ export async function POST(request) {
       );
       const totalPaid = currentBreakdown.paid;
 
+      // STEP 3 — Apply any discount and check the amount is allowed.
       if (applyDiscount) {
         const isFullDiscount = discountMode === "full";
         discountAmount = computeDiscountPeso(currentBreakdown.totalPayable, {
@@ -695,6 +699,8 @@ export async function POST(request) {
       resolvedPaymentType = normalizedPaymentType;
     }
 
+    // STEP 4 — No reservation selected: create a placeholder one for the walk-in
+    // style recording.
     // If no reservation selected, create one
     if (!reservationId) {
       let tempClient = await prisma.client.findFirst({
@@ -724,6 +730,7 @@ export async function POST(request) {
       notifyEventDate = activityDate || "";
     }
 
+    // STEP 5 — Find the booking for this reservation, or create it (first payment).
     // Find or create a booking for this reservation
     let existingBooking = await prisma.booking.findFirst({
       where: { reservationId: reservationId },
@@ -758,6 +765,7 @@ export async function POST(request) {
       }
     }
 
+    // STEP 6 — Resolve the payment status that this payment results in.
     // Find or create payment status based on the derived cumulative status.
     let paymentStatusRecord = await prisma.paymentStatus.findFirst({
       where: { status: statusToUse },
@@ -768,6 +776,7 @@ export async function POST(request) {
       });
     }
 
+    // STEP 7 — Save the payment (and any discount applied with it).
     // Create payment
     if (!reservationId && amount <= 0 && !(applyDiscount && discountAmount > 0)) {
       return NextResponse.json(
@@ -795,6 +804,8 @@ export async function POST(request) {
       ? parseInt(String(acting.performedBy).replace("STF-", ""), 10) || null
       : null;
 
+    // STEP 8 — Handle the 10% deposit: hold it, or mark it paid when this
+    // payment covers it.
     let linkedDeposit = null;
     if (depositRequiredAmount > 0 && !skipDepositHold) {
       linkedDeposit = await ensurePendingDeposit(prisma, {
@@ -819,6 +830,7 @@ export async function POST(request) {
       });
     }
 
+    // STEP 9 — Write the money entry (the receipt line) for this payment.
     if (!isDiscountOnly) {
       // Create transaction record (no OR number), linked to Deposit when applicable
       await prisma.transaction.create({
@@ -839,6 +851,7 @@ export async function POST(request) {
       maximumFractionDigits: 2,
     });
 
+    // STEP 10 — Record who did it, in the activity log.
     // Create audit log
     await prisma.auditLog.create({
       data: {
@@ -855,6 +868,7 @@ export async function POST(request) {
       },
     });
 
+    // STEP 11 — Tell the client about the payment or discount (inbox + email + text).
     // Notify the client about the recorded payment or discount
     if (notifyClientId) {
       const reservationBits = [
@@ -910,6 +924,7 @@ export async function POST(request) {
       });
     }
 
+    // STEP 12 — Reply to the screen with the new payment id.
     return NextResponse.json({ success: true, paymentId: payment.paymentId });
   } catch (error) {
     console.error("Payments POST error:", error);

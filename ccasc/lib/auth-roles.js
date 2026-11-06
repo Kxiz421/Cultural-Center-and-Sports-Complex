@@ -191,6 +191,20 @@ export function apiTypesAllowed(pathname) {
   return rule.types;
 }
 
+/**
+ * Friendly display name for a client-role account.
+ *
+ * The database stores "Public Client" and "Provincial Government"; the profile
+ * screens show "Client" and "Provincial Department Agencies" instead.
+ */
+export function clientRoleDisplayName(roleName) {
+  const name = String(roleName || "").trim();
+  if (!name) return "Client";
+  if (/provincial/i.test(name)) return "Provincial Department Agencies";
+  if (/public client/i.test(name)) return "Client";
+  return name;
+}
+
 /** True when the path/method pair may be called without a session. */
 export function isPublicApiRequest(pathname, method) {
   if (apiTypesAllowed(pathname) !== PUBLIC_API) return false;

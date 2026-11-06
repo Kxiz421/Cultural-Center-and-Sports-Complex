@@ -351,6 +351,7 @@ export async function POST(request) {
   if (guard.response) return guard.response;
 
   try {
+    // STEP 1 — Read the request and the details the form sent.
     const body = await request.json();
     const { venueId, eventType, eventDate, eventDates, timeSlotId, packageId, clientId, notes, clientName, clientContact, clientEmail, particulars, chargeLines: rawChargeLines } = body;
 
@@ -365,6 +366,7 @@ export async function POST(request) {
       );
     }
 
+    // STEP 2 — Refuse a client who still owes money from a past event.
     // A registered client with an unpaid balance left over from a previous
     // event (damages/overtime beyond the 10% deposit) must settle it with the
     // Local Treasury Operations Officer before reserving again.
@@ -390,6 +392,8 @@ export async function POST(request) {
       }
     }
 
+    // STEP 3 — Validate the dates and work out the venue, dates and facilities.
+    // The rule is that an event must be booked at least 7 days in advance.
     const advanceCheck = validateAdvanceBookingDates(
       [eventDate, ...(eventDates || [])].filter(Boolean)
     );
@@ -417,6 +421,7 @@ export async function POST(request) {
       ...new Set(Object.values(facilityAssignments).flat().map((id) => parseInt(id, 10))),
     ].filter((id) => Number.isFinite(id) && id > 0);
 
+    // STEP 4 — Check the requested dates are actually free.
     // Conflict check — Cultural Center blocks whole days; Sports Complex blocks by facility.
     const conflictingReservations = await prisma.reservation.findMany({
       where: {
@@ -515,6 +520,7 @@ export async function POST(request) {
     const parsedClientId =
       clientId != null && clientId !== "" ? parseInt(clientId, 10) : null;
 
+    // STEP 5 — Confirm the caller is allowed to book for this client.
     // Client-role sessions may only create reservations for their own account;
     // a walk-in reservation (no client) is never allowed from a client session.
     const ownReservationClientId = ownClientId(guard.user);
@@ -530,7 +536,7 @@ export async function POST(request) {
     const venueNames = { 1: "Cultural Center", 2: "Sports Complex" };
     const venueName = venueNames[parsedVenueId] || "Unknown Venue";
 
-    // Calculate total
+    // STEP 6 — Work out the price (package, chosen particulars and charge lines).
     let totalAmount = 0;
     const packageCatalog = await prisma.package.findMany({
       select: {
@@ -614,6 +620,8 @@ export async function POST(request) {
       });
     }
 
+    // STEP 7 — Save the reservation and everything attached to it (dates,
+    // chosen extras and facilities) in one go, so they are created together.
     const reservation = await prisma.reservation.create({
       data: {
         venueId: parsedVenueId,
@@ -648,6 +656,8 @@ export async function POST(request) {
 
     const reservationId = `RES-${reservation.reservationId}`;
 
+    // STEP 8 — Notify people: the treasury officers (who act on it) and, by
+    // inbox + email + text, the client who made the booking.
     // Notify the Local Treasury Operations Officer about a new reservation
     // submitted by a client or a provincial agency, with the details they need
     // to act on it.
@@ -760,6 +770,7 @@ export async function POST(request) {
       }
     }
 
+    // STEP 9 — Reply with the reference number, the total and the deadlines.
     return NextResponse.json({
       id: reservationId,
       totalAmount,

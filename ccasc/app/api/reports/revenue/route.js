@@ -63,12 +63,14 @@ export async function GET(request) {
   if (guard.response) return guard.response;
 
   try {
+    // STEP 1 — Read the choices from the report screen.
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "m";
     const particularId = parseInt(searchParams.get("particularId"), 10);
     const facilityId = parseInt(searchParams.get("facilityId"), 10);
     const packageId = parseInt(searchParams.get("packageId"), 10);
 
+    // STEP 2 — Turn the period into a single start and end date.
     const range = resolvePeriodRange({
       period,
       year: searchParams.get("year"),
@@ -78,6 +80,8 @@ export async function GET(request) {
       to: searchParams.get("to"),
     });
 
+    // STEP 3 — Work out the venue scope and which groupings (per particular /
+    // venue / package / facility) this user may report on.
     // Venue scope: the panel hint is used when present, and the session's own
     // restriction always wins over whatever the request asked for.
     const requestedVenueIds = parseIds(searchParams.get("venueIds"));
@@ -97,6 +101,8 @@ export async function GET(request) {
 
     // Facilities a report may show: those of the venues in scope, so a Sports
     // Complex report can never list or total a Cultural Center facility.
+    // STEP 4 — Load the facilities in scope (their names and day rates are
+    // needed to price the per-facility rows).
     const facilities = await prisma.facility.findMany({
       where: scope ? { venueId: { in: scope } } : {},
       select: {
@@ -114,6 +120,8 @@ export async function GET(request) {
       facilities.map((facility) => String(facility.facilityId))
     );
 
+    // STEP 5 — Load the reservations of the period with everything the revenue
+    // lines need.
     const where = {
       eventDate: { gte: range.startDate, lte: range.endDate },
       reservationStatus: { notIn: EXCLUDED_STATUSES },
@@ -150,6 +158,7 @@ export async function GET(request) {
       orderBy: { eventDate: "asc" },
     });
 
+    // STEP 6 — Turn the reservations into revenue rows and total them up.
     const rows = reservations
       .filter(isReservationReportEligible)
       .map((r) => {
@@ -234,6 +243,7 @@ export async function GET(request) {
       },
     });
 
+    // STEP 7 — Return the finished document to the screen.
     return noCacheJson(report);
   } catch (error) {
     console.error("Revenue report GET error:", error);

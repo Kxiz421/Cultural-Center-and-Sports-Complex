@@ -136,14 +136,14 @@ export function ProfileAvatar({ endpoint = "/api/staff/me" }) {
               src={photoUrl}
               alt={profile?.fullName || "Profile"}
               onError={() => setPhotoBroken(true)}
-              className="size-24 shrink-0 rounded-full bg-muted object-cover"
+              className="size-28 shrink-0 rounded-full bg-primary/10 object-cover"
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-base font-semibold">
                 {profile?.fullName || "—"}
               </p>
               <p className="text-muted-foreground text-sm">
-                {[profile?.roleName, profile?.organization]
+                {[profile?.roleLabel || profile?.roleName, profile?.organization]
                   .filter(Boolean)
                   .join(" · ") || "Account"}
               </p>
@@ -185,12 +185,12 @@ export function ProfileAvatar({ endpoint = "/api/staff/me" }) {
             </div>
           </div>
 
-          <div className="space-y-1 text-sm">
+          <div className="space-y-1 border-t pt-3 text-sm">
             <DetailRow label="Email" value={profile?.email} />
             <DetailRow label="Contact number" value={profile?.contactNumber} />
             <DetailRow label="Username" value={profile?.username} />
             <DetailRow label="Organization" value={profile?.organization} />
-            <DetailRow label="Role" value={profile?.roleName} />
+            <DetailRow label="Role" value={profile?.roleLabel || profile?.roleName} />
           </div>
 
           <div className="flex justify-end">
