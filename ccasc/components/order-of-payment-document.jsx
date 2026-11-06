@@ -19,8 +19,8 @@ import { useCurrentUser } from "@/hooks/use-current-user";
  *                            (Standard Day Package, Standard Night Package,
  *                             LED Wall Day/Night Package …)
  *
- * In both tables CHARGES carries the price/rate as a numeral and AMOUNT
- * carries the extended line total.
+ * In both tables the DESCRIPTION names the line and AMOUNT carries the price
+ * for that line, so the amount always sits in the amount column.
  *
  * Used by both the client reservation flow and the accounting clerk walk-in
  * reservation flow so the two produce an identical document.
@@ -445,7 +445,7 @@ function ChargeRows({ lines, emptyText }) {
     return (
       <tr>
         <td
-          colSpan={3}
+          colSpan={2}
           className="border border-black px-1.5 py-2 text-center italic"
         >
           {emptyText}
@@ -459,27 +459,21 @@ function ChargeRows({ lines, emptyText }) {
       {group.date && (
         <tr>
           <td
-            colSpan={3}
+            colSpan={2}
             className="border border-black bg-neutral-100 px-1.5 py-0.5 font-semibold"
           >
             {formatDisplayDate(group.date)}
           </td>
         </tr>
       )}
-      {group.rows.map((line, index) => {
-        const { charges, amount } = chargeAndAmount(line);
-        return (
-          <tr key={`${line.label}-${index}`}>
-            <td className="border border-black px-1.5 py-0.5">{line.label}</td>
-            <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
-              {formatPeso(charges)}
-            </td>
-            <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
-              {formatPeso(amount)}
-            </td>
-          </tr>
-        );
-      })}
+      {group.rows.map((line, index) => (
+        <tr key={`${line.label}-${index}`}>
+          <td className="border border-black px-1.5 py-0.5">{line.label}</td>
+          <td className="border border-black px-1.5 py-0.5 text-right tabular-nums">
+            {formatPeso(Number(line.amount) || 0)}
+          </td>
+        </tr>
+      ))}
     </React.Fragment>
   ));
 }
@@ -974,7 +968,7 @@ export default function OrderOfPaymentDocument({
 
       {/* Title */}
       <h3 className="mt-4 text-center text-[13px] font-bold uppercase underline">
-        Order of Payment
+        Order of Payment — Cultural Center
       </h3>
 
       {/* Header fields */}
@@ -1000,10 +994,7 @@ export default function OrderOfPaymentDocument({
                 <th className="border border-black px-1.5 py-0.5 text-left font-bold uppercase">
                   Description
                 </th>
-                <th className="w-[80px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
-                  Charges
-                </th>
-                <th className="w-[85px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
+                <th className="w-[110px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
                   Amount
                 </th>
               </tr>
@@ -1016,25 +1007,19 @@ export default function OrderOfPaymentDocument({
             </tbody>
             <tfoot>
               <tr>
-                <td
-                  colSpan={2}
-                  className="border border-black px-1.5 py-0.5 text-right font-bold uppercase"
-                >
-                  Total Amount (including 10% deposit)
-                </td>
-                <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
-                  {formatPeso(total)}
-                </td>
-              </tr>
-              <tr>
-                <td
-                  colSpan={2}
-                  className="border border-black px-1.5 py-0.5 text-right font-bold uppercase"
-                >
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
                   10% Deposit of Total Payment (Required)
                 </td>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
                   {formatPeso(deposit)}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
+                  Total Amount (including 10% deposit)
+                </td>
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
+                  {formatPeso(total)}
                 </td>
               </tr>
             </tfoot>
@@ -1050,10 +1035,7 @@ export default function OrderOfPaymentDocument({
                 <th className="border border-black px-1.5 py-0.5 text-left font-bold uppercase">
                   Description
                 </th>
-                <th className="w-[80px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
-                  Charges
-                </th>
-                <th className="w-[85px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
+                <th className="w-[110px] border border-black px-1.5 py-0.5 text-right font-bold uppercase">
                   Amount
                 </th>
               </tr>
@@ -1066,10 +1048,7 @@ export default function OrderOfPaymentDocument({
             </tbody>
             <tfoot>
               <tr>
-                <td
-                  colSpan={2}
-                  className="border border-black px-1.5 py-0.5 text-right font-bold uppercase"
-                >
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
                   Total Amount Charge
                 </td>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
