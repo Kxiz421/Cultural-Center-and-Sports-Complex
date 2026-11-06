@@ -1243,27 +1243,31 @@ export default function LTOOPaymentsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                <div className="grid grid-cols-2 items-center gap-x-3 gap-y-2 text-base">
+                  <span className="text-muted-foreground">Base total</span>
+                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.originalBase)}</span>
+                  <span className="text-muted-foreground">Base + 10%</span>
+                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
                   <span className="text-muted-foreground">Payment selected</span>
-                  <span className="font-medium text-right">{getPaymentTypeLabel(paymentType)}</span>
+                  <span className="font-semibold text-right">{getPaymentTypeLabel(paymentType)}</span>
                   <span className="text-muted-foreground">Amount to pay now</span>
-                  <span className="tabular-nums font-semibold text-right">{formatPhp(roundMoney(paymentAmount || 0))}</span>
+                  <span className="tabular-nums text-lg font-bold text-right">{formatPhp(roundMoney(paymentAmount || 0))}</span>
                   <span className="text-muted-foreground font-medium">Remaining balance after</span>
-                  <span className="tabular-nums font-semibold text-right">
+                  <span className="tabular-nums text-lg font-bold text-right">
                     {formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown.remainingBalance)}
                   </span>
                 </div>
 
-                <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2 text-sm">
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
                     {getPaymentCheckIcon(currentBreakdown.downPaymentMet)}
                     50% down {formatPhp(currentBreakdown.requiredDownPayment)}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
                     {getPaymentCheckIcon(currentBreakdown.depositMet)}
                     10% deposit {formatPhp(currentBreakdown.requiredDeposit)}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
                     {getPaymentCheckIcon(currentBreakdown.balanceSettled)}
                     Balance {currentBreakdown.balanceSettled ? "settled" : "pending"}
                   </span>

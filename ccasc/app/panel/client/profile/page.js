@@ -27,7 +27,6 @@ import { FieldError } from "@/components/ui/field-error";
 import { cn, formatPhp, roundMoney } from "@/lib/utils";
 import { DEFAULT_AVATAR } from "@/lib/constants";
 import { uploadProfilePhoto } from "@/lib/upload-profile-photo";
-import { NotificationSoundPicker } from "@/components/notification-sound-picker";
 
 function passwordProblem(password) {
   if (password.length < 8) return "Password must be at least 8 characters long.";
@@ -792,18 +791,6 @@ export default function ClientProfilePage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>Notification Sound</CardTitle>
-          <CardDescription>
-            Preview and choose the chime played when a new notification arrives.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NotificationSoundPicker />
-        </CardContent>
-      </Card>
     </div>
   );
 }
