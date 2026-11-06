@@ -1243,19 +1243,28 @@ export default function LTOOPaymentsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 items-center gap-x-3 gap-y-2 text-base">
-                  <span className="text-muted-foreground">Base total</span>
-                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.originalBase)}</span>
-                  <span className="text-muted-foreground">Base + 10%</span>
-                  <span className="tabular-nums font-semibold text-right">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
-                  <span className="text-muted-foreground">Payment selected</span>
-                  <span className="font-semibold text-right">{getPaymentTypeLabel(paymentType)}</span>
-                  <span className="text-muted-foreground">Amount to pay now</span>
-                  <span className="tabular-nums text-lg font-bold text-right">{formatPhp(roundMoney(paymentAmount || 0))}</span>
-                  <span className="text-muted-foreground font-medium">Remaining balance after</span>
-                  <span className="tabular-nums text-lg font-bold text-right">
-                    {formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown.remainingBalance)}
-                  </span>
+                <div className="space-y-2 text-base">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Base total</span>
+                    <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalBase)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Base + 10%</span>
+                    <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border/80 pt-2">
+                    <span className="text-muted-foreground">
+                      Payment selected:{" "}
+                      <span className="font-semibold text-foreground">{getPaymentTypeLabel(paymentType)}</span>
+                    </span>
+                    <span className="tabular-nums text-lg font-bold">{formatPhp(roundMoney(paymentAmount || 0))}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground font-medium">Remaining balance after</span>
+                    <span className="tabular-nums text-lg font-bold">
+                      {formatPhp(projectedBreakdown?.remainingBalance ?? currentBreakdown.remainingBalance)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="border-t border-border/80 pt-2 flex flex-wrap gap-2 text-sm">
