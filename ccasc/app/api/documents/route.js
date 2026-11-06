@@ -579,9 +579,13 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const documentTypeId = searchParams.get("documentTypeId");
-    const clientId = parseId(searchParams.get("clientId"));
+    const requestedClientId = parseId(searchParams.get("clientId"));
     const reservationId = parseId(searchParams.get("reservationId"));
     const bookingId = parseId(searchParams.get("bookingId"));
+    // Client-role sessions (client / provincial agency) may only read their own
+    // events and documents, whatever `clientId` the URL asks for.
+    const scopedClientId = ownClientId(guard.user);
+    const clientId = scopedClientId != null ? scopedClientId : requestedClientId;
 
     if (searchParams.get("eligibleBookings") === "true") {
       if (!clientId) {
@@ -662,14 +666,16 @@ export async function GET(request) {
 
     if (bookingId) {
       where.bookingId = bookingId;
-    } else if (reservationId || clientId) {
-      where.booking = {};
-      if (reservationId) {
-        where.booking.reservationId = reservationId;
-      }
-      if (clientId) {
-        where.booking.reservation = { clientId };
-      }
+    }
+
+    // Scope to the client's own events. A client-role session always carries its
+    // own clientId here, so it can never read another client's documents by
+    // passing their bookingId or reservationId.
+    const reservationFilter = {};
+    if (reservationId) reservationFilter.reservationId = reservationId;
+    if (clientId) reservationFilter.clientId = clientId;
+    if (Object.keys(reservationFilter).length > 0) {
+      where.booking = { reservation: reservationFilter };
     }
 
     const documents = await prisma.document.findMany({
