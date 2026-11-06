@@ -181,7 +181,7 @@ export async function GET(request) {
       end: null,
       venue: b.venue.venue,
       venueId: b.venueId,
-      status: b.blockType === "Holiday" ? "Holiday" : "Maintenance",
+      status: b.blockType === "Maintenance" ? "Maintenance" : "Holiday",
       type: "block",
       clientName: null,
       packageName: null,

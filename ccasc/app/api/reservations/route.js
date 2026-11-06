@@ -25,6 +25,7 @@ import {
 import { noCacheJson } from "@/lib/api-cache-control";
 import { isWalkInReservation, walkInDisplayName } from "@/lib/walk-in";
 import { notifyClientEvent } from "@/lib/client-progress-notifications";
+import { isBlockingBlockType } from "@/lib/calendar-blocks";
 import { processUnpaidReservationRule } from "@/lib/reservation-unpaid-cleanup";
 import { processBalanceDeadlineReminders } from "@/lib/reservation-deadline-reminders";
 
@@ -445,11 +446,14 @@ export async function POST(request) {
         venueId: parsedVenueId,
         blockDate: { in: allDates },
       },
-      select: { blockDate: true },
+      select: { blockDate: true, blockType: true },
     });
 
     const blockedByCalendar = new Set();
-    for (const b of calendarBlocks) blockedByCalendar.add(formatDbDate(b.blockDate));
+    for (const b of calendarBlocks) {
+      if (!isBlockingBlockType(b.blockType)) continue;
+      blockedByCalendar.add(formatDbDate(b.blockDate));
+    }
 
     if (blockedByCalendar.size > 0) {
       return NextResponse.json({

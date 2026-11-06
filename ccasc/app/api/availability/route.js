@@ -6,6 +6,7 @@ import {
   ADVANCE_BOOKING_REASON,
 } from "@/lib/reservation-advance-booking";
 import { noCacheJson } from "@/lib/api-cache-control";
+import { isBlockingBlockType } from "@/lib/calendar-blocks";
 import { requireApiAuth } from "@/lib/api-auth";
 import {
   ACTIVE_STATUSES,
@@ -133,7 +134,7 @@ export async function GET(request) {
         venueId: parsedVenueId,
         blockDate: { gte: startDate, lte: endDate },
       },
-      select: { blockDate: true, title: true },
+      select: { blockDate: true, title: true, blockType: true },
     });
 
     // Build blocked dates set
@@ -156,6 +157,7 @@ export async function GET(request) {
     }
 
     for (const b of calendarBlocks) {
+      if (!isBlockingBlockType(b.blockType)) continue;
       const key = formatDbDate(b.blockDate);
       blockedDates.set(key, b.title || "Unavailable");
     }

@@ -19,6 +19,15 @@ const prisma = new PrismaClient();
 /** 1 = South Cotabato Gymnasium and Cultural Center, 2 = Sports Complex. */
 const VENUE_IDS = [1, 2];
 
+/** Holidays that close the venues. Every other holiday stays bookable. */
+const BLOCKING_TITLES = new Set([
+  "New Year's Day",
+  "Christmas Eve",
+  "Christmas Day",
+  "Last Day of the Year",
+]);
+const BOOKABLE_BLOCK_TYPE = "Holiday (Bookable)";
+
 const HOLIDAYS = [
   // ---- 2026 (Proclamation No. 1006) -------------------------------------
   { date: "2026-01-01", title: "New Year's Day", notes: "Regular Holiday" },
@@ -89,20 +98,39 @@ const HOLIDAYS = [
 
 async function main() {
   let created = 0;
+  let updated = 0;
   let skipped = 0;
 
   for (const holiday of HOLIDAYS) {
     // Midnight UTC, exactly how the calendar-blocks API stores a picked date.
     const blockDate = new Date(holiday.date);
+    const blockType = BLOCKING_TITLES.has(holiday.title)
+      ? "Holiday"
+      : BOOKABLE_BLOCK_TYPE;
 
     for (const venueId of VENUE_IDS) {
       const existing = await prisma.calendarBlock.findFirst({
-        where: { blockDate, blockType: "Holiday", venueId },
-        select: { blockId: true },
+        where: {
+          blockDate,
+          venueId,
+          blockType: { in: ["Holiday", BOOKABLE_BLOCK_TYPE] },
+        },
+        select: { blockId: true, blockType: true },
       });
 
       if (existing) {
-        skipped += 1;
+        if (existing.blockType !== blockType) {
+          await prisma.calendarBlock.update({
+            where: { blockId: existing.blockId },
+            data: { blockType },
+          });
+          updated += 1;
+          console.log(
+            `updated : ${holiday.date}  ${holiday.title}  (venue ${venueId}) -> ${blockType}`
+          );
+        } else {
+          skipped += 1;
+        }
         continue;
       }
 
@@ -110,18 +138,20 @@ async function main() {
         data: {
           title: holiday.title,
           blockDate,
-          blockType: "Holiday",
+          blockType,
           venueId,
           notes: holiday.notes,
         },
       });
       created += 1;
-      console.log(`created : ${holiday.date}  ${holiday.title}  (venue ${venueId})`);
+      console.log(
+        `created : ${holiday.date}  ${holiday.title}  (venue ${venueId}) -> ${blockType}`
+      );
     }
   }
 
   console.log(
-    `\n${HOLIDAYS.length} holidays x ${VENUE_IDS.length} venues — created ${created}, skipped ${skipped}.`
+    `\n${HOLIDAYS.length} holidays x ${VENUE_IDS.length} venues — created ${created}, updated ${updated}, skipped ${skipped}.`
   );
 }
 
