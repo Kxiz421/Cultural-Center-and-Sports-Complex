@@ -1,11 +1,28 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isCoordinatorInboxNotification } from "@/lib/panel-notifications";
-import { getProgramCoordinatorStaffIds } from "@/lib/coordinator-notifications";
+import {
+  getProgramCoordinatorStaffIds,
+  SYSTEM_NOTIFICATION_STAFF_ID,
+} from "@/lib/coordinator-notifications";
 import { noCacheJson } from "@/lib/api-cache-control";
 
 
 import { requireApiAuth, resolveClientScope, isClientRole } from "@/lib/api-auth";
+
+/**
+ * Coordinator staff ids whose staff-targeted rows must be kept out of a client's
+ * inbox.
+ *
+ * The system sender id is never excluded: client-facing notifications are
+ * written with it, and in some databases that id points at a staff row that is
+ * also a Program Coordinator. Excluding it would hide every client notification
+ * (reservation, payment, cancellation, …) written by the system.
+ */
+function coordinatorIdsToHide(ids) {
+  return (ids || []).filter((id) => id !== SYSTEM_NOTIFICATION_STAFF_ID);
+}
+
 // Send notification
 export async function POST(request) {
   const guard = await requireApiAuth();
@@ -59,7 +76,9 @@ export async function GET(request) {
       whereClause.clientId = clientId;
       // Staff-targeted rows (addressed to a Program Coordinator) can sit on the
       // same client; keep them out of the client's own inbox.
-      const coordinatorIds = await getProgramCoordinatorStaffIds();
+      const coordinatorIds = coordinatorIdsToHide(
+        await getProgramCoordinatorStaffIds()
+      );
       if (coordinatorIds.length > 0) {
         whereClause.staffId = { notIn: coordinatorIds };
       }
@@ -74,7 +93,9 @@ export async function GET(request) {
         if (isNaN(parsedClientId)) {
           return noCacheJson({ unreadCount: 0 });
         }
-        const coordinatorIds = await getProgramCoordinatorStaffIds();
+        const coordinatorIds = coordinatorIdsToHide(
+          await getProgramCoordinatorStaffIds()
+        );
         const unread = await prisma.notification.findMany({
           where: {
             clientId: parsedClientId,
