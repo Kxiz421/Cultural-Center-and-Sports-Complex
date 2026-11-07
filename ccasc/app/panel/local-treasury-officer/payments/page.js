@@ -1717,7 +1717,10 @@ export default function LTOOPaymentsPage() {
                 type="button"
                 size="lg"
                 variant="success"
-                onClick={() => handleRecordPayment(false)}
+                onClick={() => {
+                  setDiscountOnlySubmission(false);
+                  setConfirmOpen(true);
+                }}
                 disabled={saving}
               >
                 {saving ? "Saving…" : "Confirm & Save Payment"}
