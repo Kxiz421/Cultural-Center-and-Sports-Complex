@@ -20,15 +20,17 @@ export function isReservationReportEligible(reservation) {
     (sum, payment) => sum + Number(payment.amountPaid || 0),
     0
   );
-  if (paid <= 0) return false;
-
-  const originalBase = Number(reservation?.totalAmount || 0);
-  if (originalBase <= 0) return true;
-
   const totalDiscount = payments.reduce(
     (sum, payment) => sum + Number(payment.discountAmount || 0),
     0
   );
+  // A fully discounted booking collects ₱0, but the discount is what settles
+  // it — so it still belongs on the reports (as an amount charged to PGO).
+  if (paid <= 0 && totalDiscount <= 0) return false;
+
+  const originalBase = Number(reservation?.totalAmount || 0);
+  if (originalBase <= 0) return true;
+
   const breakdown = computePaymentBreakdown(originalBase, paid, null, {
     originalBase,
     totalDiscount,
