@@ -1192,6 +1192,25 @@ export default function UserManagementPage() {
                 </Badge>
               </div>
 
+              {/* ID uploaded during client registration */}
+              {selectedUser.idProof && (
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-xs">Uploaded ID</p>
+                  <a
+                    href={selectedUser.idProof}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={selectedUser.idProof}
+                      alt="Uploaded ID"
+                      className="max-h-64 w-full rounded-lg border bg-muted object-contain"
+                    />
+                  </a>
+                </div>
+              )}
+
               {/* Account ID and Type */}
               <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-3 text-sm">
                 <div>

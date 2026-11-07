@@ -78,6 +78,8 @@ export async function GET() {
         rolePriority: roleOrder[c.clientRole.roleName === "Public Client" ? "Client" : c.clientRole.roleName] ?? 99,
         verificationStatus: c.verificationStatus,
         profilePhoto: c.profilePhoto,
+        // ID uploaded during client registration, shown in the admin detail.
+        idProof: c.idProof,
         gender: c.gender,
         birthday: c.birthday,
         addressLine: c.addressLine,
