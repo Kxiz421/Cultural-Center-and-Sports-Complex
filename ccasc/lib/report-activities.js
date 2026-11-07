@@ -75,8 +75,9 @@ export function dateCell(date, additionalDates = []) {
 }
 
 /**
- * Splits one reservation into its report line(s): the activity itself plus an
- * itemised "charged to PGO" line whenever a discount was granted.
+ * Turns one reservation into its single report line. Any discount the LTOO
+ * granted rides on the row (and is counted as an amount charged to PGO by the
+ * summary) instead of being printed as a second row.
  */
 export function buildActivityRows(reservation) {
   const client = reservation.client || {};
@@ -84,15 +85,24 @@ export function buildActivityRows(reservation) {
   const amount = Number(reservation.totalAmount || 0);
   const dayLabel = dateCell(reservation.eventDate, reservation.additionalDates || []);
 
-  const rows = [
+  const discounts = (reservation.bookings || []).flatMap((b) => b.payments || []);
+  const discountTotal = discounts.reduce(
+    (sum, p) => sum + Number(p.discountAmount || 0),
+    0
+  );
+
+  return [
     {
       date: reservation.eventDate,
       dayLabel,
       activities: reservation.eventType || "—",
       time: timeRange(reservation.timeSlot),
       amount,
+      discountAmount: discountTotal,
       chargeType: isProvincial ? CHARGE_PGSC : CHARGE_PRIVATE,
-      chargeLabel: isProvincial ? CHARGE_LABELS[CHARGE_PGSC] : CHARGE_LABELS[CHARGE_PRIVATE],
+      chargeLabel: isProvincial
+        ? CHARGE_LABELS[CHARGE_PGSC]
+        : CHARGE_LABELS[CHARGE_PRIVATE],
       venue: reservation.venue?.venue || "",
       clientName:
         [client.firstName, client.lastName].filter(Boolean).join(" ") ||
@@ -100,29 +110,6 @@ export function buildActivityRows(reservation) {
       organization: client.clientOrg?.organizationName || "",
     },
   ];
-
-  // Discounted amounts are shouldered by the provincial government and are
-  // itemised on their own line, exactly like the printed form.
-  const discounts = (reservation.bookings || []).flatMap((b) => b.payments || []);
-  const discountTotal = discounts.reduce((sum, p) => sum + Number(p.discountAmount || 0), 0);
-  if (discountTotal > 0) {
-    rows.push({
-      date: reservation.eventDate,
-      dayLabel,
-      activities: `${reservation.eventType || "—"}; discounted amount charged to PGO`,
-      time: timeRange(reservation.timeSlot),
-      amount: discountTotal,
-      chargeType: CHARGE_PGO,
-      chargeLabel: CHARGE_LABELS[CHARGE_PGO],
-      venue: reservation.venue?.venue || "",
-      clientName:
-        [client.firstName, client.lastName].filter(Boolean).join(" ") ||
-        walkInDisplayName(reservation.notes),
-      organization: client.clientOrg?.organizationName || "",
-    });
-  }
-
-  return rows;
 }
 
 /**
@@ -159,10 +146,17 @@ export function buildTotals(rows) {
   let privateSectors = 0;
 
   for (const row of rows) {
-    totalAmount += row.amount;
-    if (row.chargeType === CHARGE_PGO) chargedToPgo += row.amount;
-    else if (row.chargeType === CHARGE_PGSC) pgscFoc += row.amount;
-    else privateSectors += row.amount;
+    const amount = Number(row.amount) || 0;
+    const discount = Number(row.discountAmount) || 0;
+    totalAmount += amount;
+    // Every discount the LTOO granted is shouldered by the PGO.
+    chargedToPgo += discount;
+    if (row.chargeType === CHARGE_PGSC) {
+      pgscFoc += amount;
+    } else {
+      // Private events only pay the amount left after their discount.
+      privateSectors += Math.max(0, amount - discount);
+    }
   }
 
   return {
