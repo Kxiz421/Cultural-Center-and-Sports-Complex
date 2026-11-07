@@ -15,6 +15,7 @@ const TITLES = {
   "/panel/accounting-clerk/walk-in": "Walk-In Reservation",
   "/panel/accounting-clerk/notifications": "Notifications",
   "/panel/accounting-clerk/reports": "Report Generation",
+  "/panel/accounting-clerk/profile": "Profile",
 };
 
 function AccountingAuthShell({ children }) {

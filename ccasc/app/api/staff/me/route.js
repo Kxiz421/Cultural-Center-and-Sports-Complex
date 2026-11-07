@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 
 import { noCacheJson } from "@/lib/api-cache-control";
 import prisma from "@/lib/prisma";
 import { requireApiAuth, actingAs } from "@/lib/api-auth";
+import { usernameProblem } from "@/lib/profanity";
 
 export const dynamic = "force-dynamic";
+
+function passwordProblem(password) {
+  if (password.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter.";
+  if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter.";
+  if (!/[0-9]/.test(password)) return "Password must contain at least one number.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character (e.g., @, #, $).";
+  return null;
+}
 
 /** The signed-in staff row's id, from the `STF-<id>` session userId. */
 function staffIdFromUser(user) {
@@ -41,6 +52,16 @@ async function loadProfile(staffId) {
   });
   if (!staff) return null;
 
+  const address = [
+    staff.addressLine,
+    staff.barangay,
+    staff.city,
+    staff.province,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
   return {
     staffId: staff.staffId,
     username: staff.username,
@@ -59,6 +80,7 @@ async function loadProfile(staffId) {
     barangay: staff.barangay,
     city: staff.city,
     province: staff.province,
+    address,
     profilePhoto: staff.profilePhoto,
     roleName: staff.staffRole?.roleName || null,
     roleLabel: staff.staffRole?.roleName || null,
@@ -111,6 +133,84 @@ export async function PATCH(request) {
     const data = {};
     const changedLabels = [];
 
+    if (body.username !== undefined) {
+      const username = String(body.username ?? "").trim();
+      if (username) {
+        const nameProblem = usernameProblem(username);
+        if (nameProblem) {
+          return NextResponse.json({ error: nameProblem }, { status: 400 });
+        }
+        const takenByStaff = await prisma.staff.findUnique({
+          where: { username },
+          select: { staffId: true },
+        });
+        const takenByClient = await prisma.client.findUnique({
+          where: { username },
+          select: { clientId: true },
+        });
+        if (
+          (takenByStaff && takenByStaff.staffId !== staffId) ||
+          takenByClient
+        ) {
+          return NextResponse.json(
+            { error: "That username is already taken." },
+            { status: 409 }
+          );
+        }
+        if (username !== existing.username) {
+          data.username = username;
+          changedLabels.push("username");
+        }
+      } else if (existing.username) {
+        data.username = null;
+        changedLabels.push("username");
+      }
+    }
+
+    if (
+      body.firstName !== undefined ||
+      body.middleName !== undefined ||
+      body.lastName !== undefined
+    ) {
+      const firstName = String(body.firstName ?? existing.firstName ?? "").trim();
+      const middleName = String(body.middleName ?? existing.middleName ?? "").trim();
+      const lastName = String(body.lastName ?? existing.lastName ?? "").trim();
+      if (!firstName) {
+        return NextResponse.json(
+          { error: "Enter your first name." },
+          { status: 400 }
+        );
+      }
+      if (!lastName) {
+        return NextResponse.json(
+          { error: "Enter your last name." },
+          { status: 400 }
+        );
+      }
+      if (
+        firstName.length > 100 ||
+        middleName.length > 100 ||
+        lastName.length > 100
+      ) {
+        return NextResponse.json(
+          { error: "Names must be 100 characters or fewer." },
+          { status: 400 }
+        );
+      }
+      if (firstName !== existing.firstName) {
+        data.firstName = firstName;
+        changedLabels.push("first name");
+      }
+      if (middleName !== (existing.middleName || "")) {
+        data.middleName = middleName || null;
+        changedLabels.push("middle name");
+      }
+      if (lastName !== existing.lastName) {
+        data.lastName = lastName;
+        changedLabels.push("last name");
+      }
+    }
+
     if (body.contactNumber !== undefined) {
       const digits = String(body.contactNumber ?? "")
         .replace(/\D/g, "")
@@ -151,6 +251,40 @@ export async function PATCH(request) {
         data.profilePhoto = null;
         changedLabels.push("profile photo");
       }
+    }
+
+    if (body.newPassword) {
+      const currentPassword = String(body.currentPassword ?? "");
+      if (!currentPassword) {
+        return NextResponse.json(
+          { error: "Enter your current password." },
+          { status: 400 }
+        );
+      }
+      const matches =
+        existing.password &&
+        (await bcrypt
+          .compare(currentPassword, existing.password)
+          .catch(() => false));
+      if (!matches) {
+        return NextResponse.json(
+          { error: "Your current password is incorrect." },
+          { status: 400 }
+        );
+      }
+      if (String(body.newPassword) !== String(body.confirmPassword ?? "")) {
+        return NextResponse.json(
+          { error: "The new passwords do not match." },
+          { status: 400 }
+        );
+      }
+      const problem = passwordProblem(String(body.newPassword));
+      if (problem) {
+        return NextResponse.json({ error: problem }, { status: 400 });
+      }
+      data.password = await bcrypt.hash(String(body.newPassword), 12);
+      data.mustChangePassword = false;
+      changedLabels.push("password");
     }
 
     if (Object.keys(data).length === 0) {

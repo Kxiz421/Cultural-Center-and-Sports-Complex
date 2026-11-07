@@ -17,6 +17,7 @@ const TITLES = {
   "/panel/program-coordinator/particulars": "Particulars Management",
   "/panel/program-coordinator/particulars/reports": "Particulars Report",
   "/panel/program-coordinator/reservations": "Reservations",
+  "/panel/program-coordinator/profile": "Profile",
 };
 
 function CoordinatorAuthShell({ children }) {
