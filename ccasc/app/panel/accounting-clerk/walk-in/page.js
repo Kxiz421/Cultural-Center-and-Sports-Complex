@@ -589,7 +589,11 @@ export default function WalkInReservationPage() {
       venueId &&
       eventType
   );
-  stepValid[STEP_SELECT] = selectedDates.size > 0;
+  stepValid[STEP_SELECT] =
+    selectedDates.size > 0 &&
+    (isSportsComplex
+      ? customizePerDate || selectedFacilityIds.length > 0
+      : Boolean(packageId) && packageId !== "0");
   stepValid[STEP_REVIEW] = true;
   const stepErrors = (s) => {
     if (s === STEP_CLIENT) {
@@ -605,7 +609,20 @@ export default function WalkInReservationPage() {
       };
     }
     if (s === STEP_SELECT) {
-      return { dates: "Please select at least one date." };
+      if (selectedDates.size === 0) {
+        return { dates: "Please select at least one date." };
+      }
+      if (
+        isSportsComplex &&
+        !customizePerDate &&
+        selectedFacilityIds.length === 0
+      ) {
+        return { facilities: "Please select at least one facility." };
+      }
+      if (!isSportsComplex && !(packageId && packageId !== "0")) {
+        return { package: "Please select a package." };
+      }
+      return {};
     }
     return {};
   };
@@ -2319,7 +2336,7 @@ const renderPerDateFacilities = (date, cust) => {
         }
         onNext={goNext}
         nextLabel="Next"
-        nextDisabled={!stepValid[step]}
+        nextDisabled={false}
         hideNext={step === WIZARD_STEPS.length - 1}
       />
 

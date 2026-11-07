@@ -923,7 +923,7 @@ export default function ClientNewReservationPage() {
     selectedDates.size > 0 &&
     (isSportsComplex
       ? customizePerDate || selectedFacilityIds.length > 0
-      : true);
+      : Boolean(form.packageId) && form.packageId !== "0");
   stepValid[STEP_REVIEW] = true;
   const stepErrors = (s) => {
     if (s === STEP_DETAILS) {
@@ -2019,7 +2019,7 @@ const renderPerDateFacilities = (date, cust) => {
         onBack={step > 0 ? () => setStep(step - 1) : undefined}
         onNext={goNext}
         nextLabel="Next"
-        nextDisabled={!stepValid[step]}
+        nextDisabled={false}
         hideNext={step === WIZARD_STEPS.length - 1}
       />
 
