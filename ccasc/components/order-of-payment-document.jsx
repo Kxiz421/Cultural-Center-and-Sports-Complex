@@ -857,17 +857,26 @@ function SportsComplexOrderOfPayment({
           .no-print {
             display: none !important;
           }
-          /* The Order of Payment is often shown inside a scrollable dialog
-             (e.g. right after a client reservation). Neutralise the dialog's
-             fixed height and overflow so the whole form prints instead of just
-             the first screen. */
+          /* The Order of Payment is shown inside a centred, scrollable dialog
+             (e.g. right after a client reservation). Its fixed max-height and
+             overflow clipped the printout, and a static position pushed it onto
+             a later page. Anchor it to the top-left of the page so the whole
+             form prints on the first page. */
           [role="dialog"] {
-            position: static !important;
-            inset: auto !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: auto !important;
+            bottom: auto !important;
             transform: none !important;
+            width: 100% !important;
+            max-width: none !important;
             max-height: none !important;
             height: auto !important;
+            margin: 0 !important;
             overflow: visible !important;
+            border: 0 !important;
+            border-radius: 0 !important;
             box-shadow: none !important;
           }
           .oop-document tr {
@@ -1150,17 +1159,26 @@ export default function OrderOfPaymentDocument({
           .no-print {
             display: none !important;
           }
-          /* The Order of Payment is often shown inside a scrollable dialog
-             (e.g. right after a client reservation). Neutralise the dialog's
-             fixed height and overflow so the whole form prints instead of just
-             the first screen. */
+          /* The Order of Payment is shown inside a centred, scrollable dialog
+             (e.g. right after a client reservation). Its fixed max-height and
+             overflow clipped the printout, and a static position pushed it onto
+             a later page. Anchor it to the top-left of the page so the whole
+             form prints on the first page. */
           [role="dialog"] {
-            position: static !important;
-            inset: auto !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: auto !important;
+            bottom: auto !important;
             transform: none !important;
+            width: 100% !important;
+            max-width: none !important;
             max-height: none !important;
             height: auto !important;
+            margin: 0 !important;
             overflow: visible !important;
+            border: 0 !important;
+            border-radius: 0 !important;
             box-shadow: none !important;
           }
           @page {

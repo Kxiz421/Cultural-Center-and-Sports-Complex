@@ -1919,7 +1919,20 @@ export default function CoordinatorReservationsPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-muted-foreground text-xs">DATE</p>
-                  <p className="font-medium">{eventDate || "TBD"}</p>
+                  <p className="font-medium">
+                    {selectedDates.size > 0
+                      ? [...selectedDates]
+                          .sort()
+                          .map((d) =>
+                            new Date(`${d}T00:00:00`).toLocaleDateString("en-US", {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          )
+                          .join(", ")
+                      : "TBD"}
+                  </p>
                   <p className="text-muted-foreground text-xs">VENUE</p>
                   <p className="font-medium">
                     {venueId ? VENUES.find(v => String(v.id) === venueId)?.name : "TBD"}
