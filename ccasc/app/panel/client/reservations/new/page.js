@@ -923,7 +923,8 @@ export default function ClientNewReservationPage() {
     selectedDates.size > 0 &&
     (isSportsComplex
       ? customizePerDate || selectedFacilityIds.length > 0
-      : Boolean(form.packageId) && form.packageId !== "0");
+      : customizePerDate ||
+        (Boolean(form.packageId) && form.packageId !== "0"));
   stepValid[STEP_REVIEW] = true;
   const stepErrors = (s) => {
     if (s === STEP_DETAILS) {
@@ -940,7 +941,10 @@ export default function ClientNewReservationPage() {
       ) {
         return { facilities: "Please select at least one facility." };
       }
-      return { package: "Please complete your package selection." };
+      if (!isSportsComplex && !customizePerDate) {
+        return { package: "Please complete your package selection." };
+      }
+      return {};
     }
     return {};
   };
@@ -1582,7 +1586,6 @@ const renderPerDateFacilities = (date, cust) => {
                 <Select
                   value={form.packageId}
                   onValueChange={handlePackageSelect}
-                  disabled={customizePerDate}
                 >
                   <SelectTrigger id="package" className="w-full min-w-0" aria-invalid={Boolean(errors.package)}>
                     <SelectValue placeholder={loading ? "Loading packages..." : "Select package"} />
@@ -1592,11 +1595,7 @@ const renderPerDateFacilities = (date, cust) => {
                     <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={form.timeSlotId} facilities={facilities} venueId={form.venueId} />
                   </SelectContent>
                 </Select>
-                {customizePerDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Locked while using per-date settings. Edit each date in Per-Date Details.
-                  </p>
-                )}
+                <FieldError>{errors.package}</FieldError>
               </div>
               )}
             </div>

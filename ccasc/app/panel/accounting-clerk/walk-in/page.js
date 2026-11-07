@@ -593,7 +593,7 @@ export default function WalkInReservationPage() {
     selectedDates.size > 0 &&
     (isSportsComplex
       ? customizePerDate || selectedFacilityIds.length > 0
-      : Boolean(packageId) && packageId !== "0");
+      : customizePerDate || (Boolean(packageId) && packageId !== "0"));
   stepValid[STEP_REVIEW] = true;
   const stepErrors = (s) => {
     if (s === STEP_CLIENT) {
@@ -619,7 +619,7 @@ export default function WalkInReservationPage() {
       ) {
         return { facilities: "Please select at least one facility." };
       }
-      if (!isSportsComplex && !(packageId && packageId !== "0")) {
+      if (!isSportsComplex && !customizePerDate) {
         return { package: "Please select a package." };
       }
       return {};
@@ -1912,7 +1912,7 @@ const renderPerDateFacilities = (date, cust) => {
             {!isSportsComplex && (
               <div className="space-y-2">
                 <Label>Package</Label>
-                <Select value={packageId} onValueChange={handlePackageSelect} disabled={customizePerDate}>
+                <Select value={packageId} onValueChange={handlePackageSelect}>
                   <SelectTrigger className="w-full min-w-0" aria-invalid={Boolean(errors.package)}>
                     <SelectValue placeholder={packagesLoading ? "Loading packages..." : "Select package"} />
                   </SelectTrigger>
@@ -1921,11 +1921,7 @@ const renderPerDateFacilities = (date, cust) => {
                     <ReservationPackageSelectItems packages={packages} particulars={particulars} timeSlotId={timeSlotId} facilities={facilities} venueId={venueId} />
                   </SelectContent>
                 </Select>
-                {customizePerDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Locked while using per-date settings. Edit each date in Per-Date Details.
-                  </p>
-                )}
+                <FieldError>{errors.package}</FieldError>
               </div>
               )}
 {/* Conditional: Package Inclusions, virtual packages, particulars, or Facilities */}
