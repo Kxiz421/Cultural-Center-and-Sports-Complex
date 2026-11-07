@@ -111,6 +111,7 @@ function OrderOfPaymentContent() {
         totalAmount={totalAmount}
         eventDates={dateList}
         venueName={data.venue}
+        clientIsPda={Boolean(data.clientIsPda)}
       />
     </div>
   );

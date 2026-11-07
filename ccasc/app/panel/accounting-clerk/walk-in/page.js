@@ -1265,6 +1265,9 @@ export default function WalkInReservationPage() {
         chargeLines: summaryLines,
         totalAmount: total,
         eventDates: sortedDates,
+        clientIsPda: Boolean(
+          isExistingUser && selectedClient?.clientRoleId === "PROV"
+        ),
         venueName:
           VENUES.find((v) => String(v.id) === String(venueId))?.name || "",
       });
@@ -1606,6 +1609,7 @@ const renderPerDateFacilities = (date, cust) => {
             totalAmount={savedOrder.totalAmount}
             eventDates={savedOrder.eventDates}
             venueName={savedOrder.venueName}
+            clientIsPda={Boolean(savedOrder.clientIsPda)}
           />
         </div>
       )}

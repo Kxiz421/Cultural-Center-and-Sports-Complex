@@ -205,6 +205,7 @@ export async function GET(request) {
       where: { clientId: { in: distinctClientIds } },
       select: {
         clientId: true,
+        clientRoleId: true,
         firstName: true,
         lastName: true,
         contactNumber: true,
@@ -282,6 +283,8 @@ export async function GET(request) {
         return {
           id: `RES-${r.reservationId}`,
           clientId: r.clientId,
+          // Provincial Department Agency bookings are billed to the PGO.
+          clientIsPda: client?.clientRoleId === "PROV",
           clientName: client
             ? `${client.firstName} ${client.lastName}`
             : walkInDisplayName(r.notes),

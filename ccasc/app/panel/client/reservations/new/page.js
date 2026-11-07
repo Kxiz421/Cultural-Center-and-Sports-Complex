@@ -219,6 +219,8 @@ export default function ClientNewReservationPage() {
           email: data.email || prev.email || "",
           contactNumber: data.contactNumber || "",
           address: data.address || "",
+          // Provincial Department Agency clients bill the PGO.
+          isDepartment: Boolean(data.isDepartment),
         }));
       })
       .catch(() => {});
@@ -2213,6 +2215,7 @@ const renderPerDateFacilities = (date, cust) => {
               totalAmount={savedOrder.totalAmount}
               eventDates={savedOrder.eventDates}
               venueName={savedOrder.venueName}
+              clientIsPda={Boolean(clientInfo.isDepartment)}
             />
           )}
           <DialogFooter className="no-print gap-2 sm:flex-row sm:justify-end">

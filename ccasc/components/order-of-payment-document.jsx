@@ -555,6 +555,7 @@ function SportsComplexOrderOfPayment({
   participants = "",
   chargeLines = [],
   totalAmount = 0,
+  clientIsPda = false,
 }) {
   const { charges, extras } = React.useMemo(
     () =>
@@ -799,6 +800,17 @@ function SportsComplexOrderOfPayment({
               {formatPeso(grandTotal)}
             </td>
           </tr>
+          <tr>
+            <td
+              colSpan={3}
+              className="border border-black px-1.5 py-1 text-right font-bold uppercase"
+            >
+              Charged to PGO
+            </td>
+            <td className="border border-black px-1.5 py-1 text-right font-bold tabular-nums">
+              {formatPeso(clientIsPda ? grandTotal : 0)}
+            </td>
+          </tr>
         </tfoot>
       </table>
 
@@ -915,6 +927,9 @@ export default function OrderOfPaymentDocument({
   // The "Prepared by" line. Defaults to the currently signed-in user so the
   // printed form shows whoever generated it, with their role underneath.
   preparedBy,
+  // Provincial Department Agency bookings are billed to the Provincial
+  // Government Office, so their total prints as "Charged to PGO".
+  clientIsPda = false,
 }) {
   const currentUser = useCurrentUser();
   const prepared = preparedBy || currentUser;
@@ -977,6 +992,7 @@ export default function OrderOfPaymentDocument({
         participants={participants}
         chargeLines={lines}
         totalAmount={totalAmount}
+        clientIsPda={clientIsPda}
       />
     );
   }
@@ -1064,6 +1080,14 @@ export default function OrderOfPaymentDocument({
                 </td>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
                   {formatPeso(total)}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
+                  Charged to PGO
+                </td>
+                <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
+                  {formatPeso(clientIsPda ? total : 0)}
                 </td>
               </tr>
             </tfoot>

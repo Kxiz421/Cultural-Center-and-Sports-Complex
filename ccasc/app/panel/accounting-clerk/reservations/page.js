@@ -75,6 +75,7 @@ function buildOrderOfPayment(reservation) {
     totalAmount: Number(reservation.totalAmount) || 0,
     eventDates: dateList,
     venueName: reservation.venue,
+    clientIsPda: Boolean(reservation.clientIsPda),
   };
 }
 
@@ -181,6 +182,7 @@ export default function AccountingReservationsPage() {
             totalAmount={orderOfPayment.totalAmount}
             eventDates={orderOfPayment.eventDates}
             venueName={orderOfPayment.venueName}
+            clientIsPda={Boolean(orderOfPayment.clientIsPda)}
           />
         </div>
       )}
