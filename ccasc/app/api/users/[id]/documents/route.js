@@ -19,60 +19,24 @@ export async function GET(request, { params }) {
     let documents = [];
 
     if (prefix === "CLT") {
-      // First: check if the client has an idProof (Certificate of Employment) on their record
+      // Only the Certificate of Employment the client uploaded (during
+      // registration / resubmission) is shown — not the booking documents.
       const client = await prisma.client.findUnique({
         where: { clientId: userId },
         select: { idProof: true, firstName: true, lastName: true },
       });
 
-      // Add idProof as a document if it exists
       if (client?.idProof) {
         documents.push({
           documentId: 0,
           documentType: { type: "Certificate of Employment (ID)" },
           filePath: client.idProof,
           documentStatus: "Submitted",
-          remarks: `Submitted during registration by ${client.firstName} ${client.lastName}`,
+          remarks: `Uploaded by ${client.firstName} ${client.lastName}`,
           submittedAt: new Date(),
           booking: null,
         });
       }
-
-      // Then: find their reservations -> bookings -> submitted documents
-      const reservations = await prisma.reservation.findMany({
-        where: { clientId: userId },
-        select: { reservationId: true },
-      });
-
-      const reservationIds = reservations.map((r) => r.reservationId);
-
-      const bookings = await prisma.booking.findMany({
-        where: { reservationId: { in: reservationIds } },
-        select: { bookingId: true },
-      });
-
-      const bookingIds = bookings.map((b) => b.bookingId);
-
-      const bookingDocs = await prisma.document.findMany({
-        where: { bookingId: { in: bookingIds } },
-        include: {
-          documentType: { select: { type: true } },
-          booking: {
-            select: {
-              bookingId: true,
-              reservation: {
-                select: {
-                  eventType: true,
-                  eventDate: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { submittedAt: "desc" },
-      });
-
-      documents = [...documents, ...bookingDocs];
     } else if (prefix === "STF") {
       // For staff: find documents where staffId matches
       documents = await prisma.document.findMany({
