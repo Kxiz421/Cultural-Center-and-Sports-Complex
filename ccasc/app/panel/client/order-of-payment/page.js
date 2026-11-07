@@ -56,6 +56,14 @@ function OrderOfPaymentContent() {
     };
   }, [reservationId]);
 
+  // Opened with ?autoprint=1 from the reservation dialog's Print button.
+  const autoprint = searchParams.get("autoprint") === "1";
+  React.useEffect(() => {
+    if (!autoprint || !data) return;
+    const timer = setTimeout(() => window.print(), 500);
+    return () => clearTimeout(timer);
+  }, [autoprint, data]);
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">

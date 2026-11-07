@@ -2219,7 +2219,21 @@ const renderPerDateFacilities = (date, cust) => {
             />
           )}
           <DialogFooter className="no-print gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => window.print()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                // Print from the standalone Order of Payment page so the output
+                // is identical to every other Order of Payment; the dialog's
+                // scroll container otherwise interferes with the printout.
+                const id = savedOrder?.controlNumber || "";
+                const opened = window.open(
+                  `/panel/client/order-of-payment?id=${encodeURIComponent(id)}&autoprint=1`,
+                  "_blank"
+                );
+                if (!opened) window.print();
+              }}
+            >
               <Printer className="mr-2 size-4" />
               Print Order of Payment
             </Button>
