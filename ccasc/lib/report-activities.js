@@ -90,6 +90,9 @@ export function buildActivityRows(reservation) {
     (sum, p) => sum + Number(p.discountAmount || 0),
     0
   );
+  // The recorded discount can include the 10% deposit (base × 1.1). Reports
+  // report the base only, so the amount charged to PGO never exceeds it.
+  const chargedToPgo = Math.min(discountTotal, amount);
 
   return [
     {
@@ -98,7 +101,7 @@ export function buildActivityRows(reservation) {
       activities: reservation.eventType || "—",
       time: timeRange(reservation.timeSlot),
       amount,
-      discountAmount: discountTotal,
+      discountAmount: chargedToPgo,
       chargeType: isProvincial ? CHARGE_PGSC : CHARGE_PRIVATE,
       chargeLabel: isProvincial
         ? CHARGE_LABELS[CHARGE_PGSC]
@@ -149,8 +152,9 @@ export function buildTotals(rows) {
     const amount = Number(row.amount) || 0;
     const discount = Number(row.discountAmount) || 0;
     totalAmount += amount;
-    // Every discount the LTOO granted is shouldered by the PGO.
-    chargedToPgo += discount;
+    // Every discount the LTOO granted is shouldered by the PGO, but never more
+    // than the reservation itself (the recorded discount can include the 10%).
+    chargedToPgo += Math.min(discount, amount);
     if (row.chargeType === CHARGE_PGSC) {
       pgscFoc += amount;
     } else {
