@@ -4,6 +4,11 @@ import { noCacheJson } from "@/lib/api-cache-control";
 
 
 import { requireApiAuth } from "@/lib/api-auth";
+import {
+  encodeFacilityScope,
+  parseFacilityScope,
+  stripFacilityScope,
+} from "@/lib/calendar-blocks";
 /**
  * Formats a Date as YYYY-MM-DD in the server's local timezone, avoiding the UTC
  * shift `toISOString()` would introduce. Shared by GET and POST.
@@ -36,7 +41,8 @@ export async function GET() {
       blockType: b.blockType,
       venueId: b.venueId,
       venue: b.venue.venue,
-      notes: b.notes,
+      notes: stripFacilityScope(b.notes),
+      facilityIds: parseFacilityScope(b.notes),
     }));
 
     return noCacheJson(formatted);
@@ -54,7 +60,8 @@ export async function POST(request) {
   if (guard.response) return guard.response;
 
   try {
-    const { title, blockDate, blockType, venueId, notes } = await request.json();
+    const { title, blockDate, blockType, venueId, notes, facilityIds } =
+      await request.json();
 
     if (!title || !blockDate || !blockType || !venueId) {
       return NextResponse.json(
@@ -85,12 +92,21 @@ export async function POST(request) {
 
     const parsedVenueId = parseInt(venueId, 10);
     const venueIds = parsedVenueId === 3 ? [1, 2] : [parsedVenueId];
+    // Sports Complex maintenance can target individual facilities.
+    const scope = Array.isArray(facilityIds)
+      ? facilityIds
+          .map((n) => parseInt(n, 10))
+          .filter((n) => Number.isInteger(n))
+      : [];
 
     const blockDateValue = new Date(blockDate);
     const conflictingReservation = await prisma.reservation.findFirst({
       where: {
         venueId: { in: venueIds },
         reservationStatus: { notIn: ["Cancelled", "Declined"] },
+        ...(scope.length > 0
+          ? { schedules: { some: { facilityId: { in: scope } } } }
+          : {}),
         OR: [
           { eventDate: blockDateValue },
           { additionalDates: { some: { eventDate: blockDateValue } } },
@@ -133,7 +149,7 @@ export async function POST(request) {
             blockDate: new Date(blockDate),
             blockType,
             venueId: vid,
-            notes: notes || null,
+            notes: encodeFacilityScope(notes, vid === 2 ? scope : []),
           },
           include: {
             venue: {
@@ -152,7 +168,8 @@ export async function POST(request) {
         blockType: b.blockType,
         venueId: b.venueId,
         venue: b.venue.venue,
-        notes: b.notes,
+        notes: stripFacilityScope(b.notes),
+        facilityIds: parseFacilityScope(b.notes),
       }))
     );
   } catch (error) {

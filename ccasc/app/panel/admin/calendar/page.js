@@ -283,12 +283,15 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [blocks, setBlocks] = useState([]);
+  // Sports Complex facilities — maintenance can target individual ones.
+  const [sportsFacilities, setSportsFacilities] = useState([]);
   const [blockForm, setBlockForm] = useState({
     title: "",
     blockDate: "",
     blockType: null,
     venueId: null,
     notes: "",
+    facilityIds: [],
   });
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [sportsDay, setSportsDay] = useState(null);
@@ -356,8 +359,53 @@ export default function CalendarPage() {
       blockType: null,
       venueId: null,
       notes: "",
+      facilityIds: [],
     });
     setErrors({});
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/facilities")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : data?.facilities || [];
+        setSportsFacilities(list.filter((f) => Number(f.venueId) === 2));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleFacility = (facilityId) => {
+    setErrors((prev) => ({ ...prev, facilityIds: "" }));
+    setBlockForm((f) => {
+      const current = f.facilityIds || [];
+      return {
+        ...f,
+        facilityIds: current.includes(facilityId)
+          ? current.filter((id) => id !== facilityId)
+          : [...current, facilityId],
+      };
+    });
+  };
+
+  const allSportsSelected =
+    sportsFacilities.length > 0 &&
+    sportsFacilities.every((f) =>
+      (blockForm.facilityIds || []).includes(f.facilityId)
+    );
+
+  const toggleAllSportsFacilities = () => {
+    setErrors((prev) => ({ ...prev, facilityIds: "" }));
+    setBlockForm((f) => ({
+      ...f,
+      facilityIds: allSportsSelected
+        ? []
+        : sportsFacilities.map((s) => s.facilityId),
+    }));
   };
 
   const handleAddBlock = async () => {
@@ -381,6 +429,13 @@ export default function CalendarPage() {
     }
     if (!blockType) next.blockType = "Please select a type.";
     if (!venueId) next.venueId = "Please select a venue.";
+    if (
+      blockType === "Maintenance" &&
+      String(venueId) === "2" &&
+      (blockForm.facilityIds || []).length === 0
+    ) {
+      next.facilityIds = "Select at least one facility to block.";
+    }
 
     if (Object.keys(next).length > 0) {
       setErrors(next);
@@ -393,7 +448,17 @@ export default function CalendarPage() {
       const res = await fetch("/api/calendar/blocks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, blockDate, blockType, venueId: parseInt(venueId, 10), notes: notes || null }),
+        body: JSON.stringify({
+          title,
+          blockDate,
+          blockType,
+          venueId: parseInt(venueId, 10),
+          notes: notes || null,
+          facilityIds:
+            blockType === "Maintenance" && String(venueId) === "2"
+              ? blockForm.facilityIds
+              : [],
+        }),
       });
 
       if (!res.ok) {
@@ -551,6 +616,52 @@ export default function CalendarPage() {
                 </Select>
                 <FieldError>{errors.venueId}</FieldError>
               </div>
+
+              {blockForm.blockType === "Maintenance" &&
+                String(blockForm.venueId) === "2" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Facilities to block</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAllSportsFacilities}
+                      >
+                        {allSportsSelected ? "Clear all" : "Select all"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Only the selected facilities are unavailable — the rest stay
+                      open for reservation.
+                    </p>
+                    <div className="grid max-h-48 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">
+                      {sportsFacilities.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No Sports Complex facilities found.
+                        </p>
+                      ) : (
+                        sportsFacilities.map((facility) => (
+                          <label
+                            key={facility.facilityId}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={(blockForm.facilityIds || []).includes(
+                                facility.facilityId
+                              )}
+                              onChange={() => toggleFacility(facility.facilityId)}
+                            />
+                            <span>{facility.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    <FieldError>{errors.facilityIds}</FieldError>
+                  </div>
+                )}
               <div className="space-y-2">
                 <Label htmlFor="block-notes">Notes (optional)</Label>
                 <Input

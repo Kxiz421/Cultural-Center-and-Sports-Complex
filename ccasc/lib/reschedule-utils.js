@@ -61,10 +61,18 @@ export async function validateRescheduleAvailability(reservation, changes) {
     return { error: uniqueCheck.error, status: 400 };
   }
 
+  const { schedules } =
+    (await prisma.reservation.findUnique({
+      where: { reservationId: reservation.reservationId },
+      select: { schedules: { select: { facilityId: true } } },
+    })) || {};
+  const facilityIds = (schedules || []).map((s) => s.facilityId);
+
   const conflicts = await findVenueDateConflicts({
     venueId: reservation.venueId,
     dateKeys: target.allNextDates,
     excludeReservationId: reservation.reservationId,
+    facilityIds,
   });
 
   if (conflicts.conflictDates.length > 0) {

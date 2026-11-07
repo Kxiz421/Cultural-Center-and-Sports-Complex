@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { formatDbDate } from "@/lib/utils";
+import { blockAppliesToReservation } from "@/lib/calendar-blocks";
 
 /**
  * Find venue dates that conflict with existing reservations or calendar blocks.
@@ -9,6 +10,7 @@ export async function findVenueDateConflicts({
   venueId,
   dateKeys,
   excludeReservationId,
+  facilityIds,
 }) {
   const uniqueKeys = [...new Set(dateKeys.filter(Boolean))];
   if (uniqueKeys.length === 0) {
@@ -46,7 +48,7 @@ export async function findVenueDateConflicts({
       venueId: venueIdInt,
       blockDate: { in: allDates },
     },
-    select: { blockDate: true },
+    select: { blockDate: true, notes: true },
   });
 
   const bookedDates = new Set();
@@ -61,7 +63,9 @@ export async function findVenueDateConflicts({
   }
 
   const blockedDates = new Set(
-    calendarBlocks.map((b) => formatDbDate(b.blockDate))
+    calendarBlocks
+      .filter((b) => blockAppliesToReservation(b, facilityIds))
+      .map((b) => formatDbDate(b.blockDate))
   );
 
   const conflictDates = [...new Set([...bookedDates, ...blockedDates])].sort();
