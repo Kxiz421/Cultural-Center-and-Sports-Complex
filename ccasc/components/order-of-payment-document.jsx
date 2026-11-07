@@ -866,6 +866,12 @@ function SportsComplexOrderOfPayment({
             box-shadow: none !important;
             --tw-ring-shadow: 0 0 #0000 !important;
           }
+          /* Radix portals the dialog into a wrapper div on <body>; make sure it
+             (and the app root) don't clip or offset the printed sheet. */
+          body > div {
+            position: static !important;
+            overflow: visible !important;
+          }
           .no-print {
             display: none !important;
           }
@@ -1179,6 +1185,12 @@ export default function OrderOfPaymentDocument({
             padding: 12mm;
             box-shadow: none !important;
             --tw-ring-shadow: 0 0 #0000 !important;
+          }
+          /* Radix portals the dialog into a wrapper div on <body>; make sure it
+             (and the app root) don't clip or offset the printed sheet. */
+          body > div {
+            position: static !important;
+            overflow: visible !important;
           }
           .no-print {
             display: none !important;

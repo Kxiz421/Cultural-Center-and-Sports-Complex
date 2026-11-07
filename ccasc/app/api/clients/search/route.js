@@ -31,6 +31,7 @@ export async function GET(request) {
       },
       select: {
         clientId: true,
+        clientRoleId: true,
         firstName: true,
         middleName: true,
         lastName: true,
@@ -44,6 +45,7 @@ export async function GET(request) {
     const formatted = clients.map((c) => ({
       id: `CLT-${c.clientId}`,
       clientId: c.clientId,
+      clientRoleId: c.clientRoleId,
       firstName: c.firstName,
       middleName: c.middleName,
       lastName: c.lastName,
