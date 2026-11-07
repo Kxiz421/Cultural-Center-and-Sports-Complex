@@ -857,6 +857,19 @@ function SportsComplexOrderOfPayment({
           .no-print {
             display: none !important;
           }
+          /* The Order of Payment is often shown inside a scrollable dialog
+             (e.g. right after a client reservation). Neutralise the dialog's
+             fixed height and overflow so the whole form prints instead of just
+             the first screen. */
+          [role="dialog"] {
+            position: static !important;
+            inset: auto !important;
+            transform: none !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+          }
           .oop-document tr {
             break-inside: avoid;
           }
@@ -1136,6 +1149,19 @@ export default function OrderOfPaymentDocument({
           }
           .no-print {
             display: none !important;
+          }
+          /* The Order of Payment is often shown inside a scrollable dialog
+             (e.g. right after a client reservation). Neutralise the dialog's
+             fixed height and overflow so the whole form prints instead of just
+             the first screen. */
+          [role="dialog"] {
+            position: static !important;
+            inset: auto !important;
+            transform: none !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            box-shadow: none !important;
           }
           @page {
             size: A4 portrait;
