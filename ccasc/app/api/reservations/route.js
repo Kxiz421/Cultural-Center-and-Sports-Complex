@@ -659,6 +659,7 @@ export async function POST(request) {
     });
 
     const reservationId = `RES-${reservation.reservationId}`;
+    const isSportsVenue = parsedVenueId === 2;
 
     // STEP 8 — Notify people: the treasury officers (who act on it) and, by
     // inbox + email + text, the client who made the booking.
@@ -698,7 +699,7 @@ export async function POST(request) {
       if (treasuryOfficers.length > 0) {
         await prisma.notification.createMany({
           data: treasuryOfficers.map((staff) => ({
-            message: `New reservation ${reservationId} — ${clientLabel} (${clientTypeLabel}) · ${eventType} · ${dateLabel}.`,
+            message: `New reservation ${reservationId} — ${clientLabel} (${clientTypeLabel}) · ${eventType} · ${dateLabel} · ${venueName}.`,
             type: "Reservation",
             isRead: false,
             sentAt: new Date(),
@@ -710,13 +711,17 @@ export async function POST(request) {
       }
 
       if (parsedClientId != null) {
-        const message = `Your reservation ${reservationId} for "${eventType}" on ${dateLabel} at ${venueName} has been submitted. A 50% down payment and 10% deposit are required by ${downPaymentDeadline}.`;
+        const message = isSportsVenue
+          ? `Your Sports Complex reservation ${reservationId} for "${eventType}" on ${dateLabel} has been submitted. The Program Coordinator will review and confirm it — please wait for the confirmation.`
+          : `Your reservation ${reservationId} for "${eventType}" on ${dateLabel} at ${venueName} has been submitted. A 50% down payment and 10% deposit are required by ${downPaymentDeadline}.`;
         await notifyClientEvent({
           clientId: parsedClientId,
           type: "reservation",
           message,
           email: {
-            subject: "Reservation Submitted - CSASC",
+            subject: isSportsVenue
+              ? "Sports Complex Reservation Submitted - CSASC"
+              : "Reservation Submitted - CSASC",
             heading: "Reservation Submitted",
             accent: "#2563eb",
             intro: "We have received your reservation.",
@@ -726,9 +731,13 @@ export async function POST(request) {
               { label: "Date(s)", value: dateLabel },
               { label: "Venue", value: venueName },
               { label: "Total", value: formatPhp(totalAmount) },
-              { label: "Pay by", value: downPaymentDeadline },
+              ...(isSportsVenue
+                ? [{ label: "Status", value: "Pending coordinator confirmation" }]
+                : [{ label: "Pay by", value: downPaymentDeadline }]),
             ],
-            note: "A 50% down payment and 10% deposit are required to secure your slot.",
+            note: isSportsVenue
+              ? "The Program Coordinator will review and confirm your reservation."
+              : "A 50% down payment and 10% deposit are required to secure your slot.",
           },
           sms: message,
         });
@@ -745,7 +754,9 @@ export async function POST(request) {
       });
 
       const dateList = allDates.map((d) => d.toISOString().split("T")[0]).join(", ");
-      const pdaNotificationMessage = `New walk-in reservation: ${displayName} booked ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}).`;
+      const pdaNotificationMessage = isSportsVenue
+        ? `New walk-in Sports Complex reservation: ${displayName} booked ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}). The Program Coordinator will confirm it.`
+        : `New walk-in reservation: ${displayName} booked ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}).`;
 
       for (const agency of provincialAgencies) {
         await prisma.notification.create({
@@ -764,7 +775,9 @@ export async function POST(request) {
       if (parsedClientId != null) {
         await prisma.notification.create({
           data: {
-            message: `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(totalAmount * 0.5 || 0).toLocaleString()}) + 10% deposit (₱${(totalAmount * 0.1 || 0).toLocaleString()}) is required by ${downPaymentDeadline}.`,
+            message: isSportsVenue
+              ? `Your walk-in Sports Complex reservation for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. The Program Coordinator will confirm it.`
+              : `Your walk-in reservation at ${venueName} for "${eventType}" on ${dateList} (${timeSlotName}) has been submitted successfully. Reference: ${reservationId}. A 50% down payment (₱${(totalAmount * 0.5 || 0).toLocaleString()}) + 10% deposit (₱${(totalAmount * 0.1 || 0).toLocaleString()}) is required by ${downPaymentDeadline}.`,
             type: "booking",
             staffId: 1,
             clientId: parsedClientId,
@@ -789,7 +802,9 @@ export async function POST(request) {
         name: rp.particular.particularName,
         quantity: rp.quantity,
       })),
-      message: `Reservation created successfully. Note: A 50% down payment and 10% deposit must be paid by ${downPaymentDeadline}. Final balance must be settled by ${balanceDeadline}.`,
+      message: isSportsVenue
+        ? "Reservation created successfully at the Sports Complex. The Program Coordinator will review and confirm it."
+        : `Reservation created successfully. Note: A 50% down payment and 10% deposit must be paid by ${downPaymentDeadline}. Final balance must be settled by ${balanceDeadline}.`,
     }, { status: 201 });
   } catch (error) {
     console.error("Failed to create reservation:", error);
