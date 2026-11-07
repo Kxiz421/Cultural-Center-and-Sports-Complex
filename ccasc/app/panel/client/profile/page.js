@@ -135,8 +135,13 @@ export default function ClientProfilePage() {
     const middleName = accountForm.middleName.trim();
     const lastName = accountForm.lastName.trim();
     const digits = accountForm.contactNumber.replace(/\D/g, "");
-    if (!firstName) next.firstName = "First name is required.";
-    if (!lastName) next.lastName = "Last name is required.";
+    const isDepartment = Boolean(profile?.isDepartment);
+    if (!firstName) {
+      next.firstName = isDepartment
+        ? "Department name is required."
+        : "First name is required.";
+    }
+    if (!lastName && !isDepartment) next.lastName = "Last name is required.";
     if (!digits) next.contactNumber = "Contact number is required.";
     else if (digits.length !== 11) {
       next.contactNumber = "Contact number must be exactly 11 digits.";
@@ -398,6 +403,9 @@ export default function ClientProfilePage() {
             </div>
 
             <div>
+              {profile.isDepartment && (
+                <DetailRow label="Department Name" value={profile.firstName} />
+              )}
               <DetailRow label="Username" value={profile.username} />
               <DetailRow label="Email" value={profile.email} />
               <DetailRow label="Contact number" value={profile.contactNumber} />
@@ -553,7 +561,9 @@ export default function ClientProfilePage() {
             <form onSubmit={saveAccount} className="space-y-4" noValidate>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="profile-first-name">First name</Label>
+                  <Label htmlFor="profile-first-name">
+                    {profile?.isDepartment ? "Department Name" : "First name"}
+                  </Label>
                   <Input
                     id="profile-first-name"
                     value={accountForm.firstName}
@@ -568,41 +578,45 @@ export default function ClientProfilePage() {
                   />
                   <FieldError>{accountErrors.firstName}</FieldError>
                 </div>
+                {!profile?.isDepartment && (
+                  <div className="space-y-2">
+                    <Label htmlFor="profile-last-name">Last name</Label>
+                    <Input
+                      id="profile-last-name"
+                      value={accountForm.lastName}
+                      onChange={(e) => {
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          lastName: e.target.value,
+                        }));
+                        setAccountErrors((prev) => ({ ...prev, lastName: "" }));
+                      }}
+                      aria-invalid={Boolean(accountErrors.lastName)}
+                    />
+                    <FieldError>{accountErrors.lastName}</FieldError>
+                  </div>
+                )}
+              </div>
+
+              {!profile?.isDepartment && (
                 <div className="space-y-2">
-                  <Label htmlFor="profile-last-name">Last name</Label>
+                  <Label htmlFor="profile-middle-name">
+                    Middle name{" "}
+                    <span className="text-muted-foreground">(optional)</span>
+                  </Label>
                   <Input
-                    id="profile-last-name"
-                    value={accountForm.lastName}
+                    id="profile-middle-name"
+                    value={accountForm.middleName}
                     onChange={(e) => {
                       setAccountForm((prev) => ({
                         ...prev,
-                        lastName: e.target.value,
+                        middleName: e.target.value,
                       }));
-                      setAccountErrors((prev) => ({ ...prev, lastName: "" }));
+                      setAccountErrors((prev) => ({ ...prev, middleName: "" }));
                     }}
-                    aria-invalid={Boolean(accountErrors.lastName)}
                   />
-                  <FieldError>{accountErrors.lastName}</FieldError>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="profile-middle-name">
-                  Middle name{" "}
-                  <span className="text-muted-foreground">(optional)</span>
-                </Label>
-                <Input
-                  id="profile-middle-name"
-                  value={accountForm.middleName}
-                  onChange={(e) => {
-                    setAccountForm((prev) => ({
-                      ...prev,
-                      middleName: e.target.value,
-                    }));
-                    setAccountErrors((prev) => ({ ...prev, middleName: "" }));
-                  }}
-                />
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="profile-username">Username</Label>

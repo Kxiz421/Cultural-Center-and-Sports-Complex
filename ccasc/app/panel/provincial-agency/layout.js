@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { Calendar, FileText, CalendarRange, History, LayoutDashboard, LogOut, Menu, X, UserRound } from "lucide-react";
 import { useLogout } from "@/hooks/use-logout";
 import { PAGE_LOGO } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   // `wrap` lets this longer label break onto a second line instead of running
   // past the fixed-width rail and overlapping the page content.
   { href: "/panel/provincial-agency/history", label: "Booking & Reservation History", icon: History, wrap: true },
+  { href: "/panel/provincial-agency/profile", label: "Profile", icon: UserRound },
 ];
 
 export default function ProvincialAgencyLayout({ children }) {

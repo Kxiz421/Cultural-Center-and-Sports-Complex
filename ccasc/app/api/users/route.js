@@ -113,8 +113,15 @@ export async function POST(request) {
   try {
     const data = await request.json();
 
-    // Validate required fields
-    if (!data.firstName || !data.lastName || !data.email || !data.roleType) {
+    // Validate required fields. A Provincial Department Agency has no surname —
+    // its single "department name" is stored in firstName.
+    const isDepartment = data.roleId === "PROV";
+    if (
+      !data.firstName ||
+      (!isDepartment && !data.lastName) ||
+      !data.email ||
+      !data.roleType
+    ) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -142,7 +149,10 @@ export async function POST(request) {
       barangay: data.barangay || null,
     };
 
-    const autoUsername = (data.username || `${data.firstName}.${data.lastName}`)
+    const autoUsername = (
+      data.username ||
+      (isDepartment ? data.firstName : `${data.firstName}.${data.lastName}`)
+    )
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, "");
 

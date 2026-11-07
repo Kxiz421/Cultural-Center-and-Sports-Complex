@@ -340,11 +340,16 @@ export default function UserManagementPage() {
   const handleSaveUser = async () => {
     const fn = form.firstName.trim();
     const ln = form.lastName.trim();
+    const isDepartment = form.role === "provincial-agency";
     const email = form.email.trim();
 
     const next = {};
-    if (!fn) next.firstName = "First name is required.";
-    if (!ln) next.lastName = "Last name is required.";
+    if (!fn) {
+      next.firstName = isDepartment
+        ? "Department name is required."
+        : "First name is required.";
+    }
+    if (!ln && !isDepartment) next.lastName = "Last name is required.";
     if (!form.role) next.role = "Please select a role.";
 
     // Validate contact number if provided
@@ -394,8 +399,8 @@ export default function UserManagementPage() {
         body: JSON.stringify({
           username: form.username.trim(),
           firstName: fn,
-          middleName: form.middleName.trim(),
-          lastName: ln,
+          middleName: isDepartment ? "" : form.middleName.trim(),
+          lastName: isDepartment ? "" : ln,
           email: email,
           contact: form.contact.trim() || "N/A",
           password: form.password,
@@ -753,9 +758,17 @@ export default function UserManagementPage() {
                 <h3 className="text-sm font-semibold">Personal information</h3>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-2">
-                    <Label>First name</Label>
+                    <Label>
+                      {form.role === "provincial-agency"
+                        ? "Department Name"
+                        : "First name"}
+                    </Label>
                     <Input
-                      placeholder="Given name"
+                      placeholder={
+                        form.role === "provincial-agency"
+                          ? "e.g. Provincial Agriculture Office"
+                          : "Given name"
+                      }
                       value={form.firstName}
                       onChange={(e) => {
                         clearError("firstName");
@@ -768,32 +781,36 @@ export default function UserManagementPage() {
                     />
                     <FieldError>{errors.firstName}</FieldError>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Middle name</Label>
-                    <Input
-                      placeholder="Optional"
-                      value={form.middleName}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, middleName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Last name</Label>
-                    <Input
-                      placeholder="Surname"
-                      value={form.lastName}
-                      onChange={(e) => {
-                        clearError("lastName");
-                        setForm((f) => ({
-                          ...f,
-                          lastName: e.target.value.replace(/[^a-zA-Z\s]/g, ""),
-                        }));
-                      }}
-                      aria-invalid={Boolean(errors.lastName)}
-                    />
-                    <FieldError>{errors.lastName}</FieldError>
-                  </div>
+                  {form.role !== "provincial-agency" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Middle name</Label>
+                        <Input
+                          placeholder="Optional"
+                          value={form.middleName}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, middleName: e.target.value.replace(/[^a-zA-Z\s]/g, "") }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Last name</Label>
+                        <Input
+                          placeholder="Surname"
+                          value={form.lastName}
+                          onChange={(e) => {
+                            clearError("lastName");
+                            setForm((f) => ({
+                              ...f,
+                              lastName: e.target.value.replace(/[^a-zA-Z\s]/g, ""),
+                            }));
+                          }}
+                          aria-invalid={Boolean(errors.lastName)}
+                        />
+                        <FieldError>{errors.lastName}</FieldError>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -978,9 +995,14 @@ export default function UserManagementPage() {
               <Button type="button" onClick={() => {
                 const fn = form.firstName.trim();
                 const ln = form.lastName.trim();
+                const isDepartment = form.role === "provincial-agency";
                 const next = {};
-                if (!fn) next.firstName = "First name is required.";
-                if (!ln) next.lastName = "Last name is required.";
+                if (!fn) {
+                  next.firstName = isDepartment
+                    ? "Department name is required."
+                    : "First name is required.";
+                }
+                if (!ln && !isDepartment) next.lastName = "Last name is required.";
                 if (!form.email.trim()) next.email = "Email is required.";
                 if (!form.role) next.role = "Please select a role.";
                 // Password is optional: blank means the default 12345.

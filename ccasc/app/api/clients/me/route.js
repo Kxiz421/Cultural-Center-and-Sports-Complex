@@ -37,7 +37,7 @@ async function loadProfile(clientId) {
   const client = await prisma.client.findUnique({
     where: { clientId },
     include: {
-      clientRole: { select: { roleName: true } },
+      clientRole: { select: { roleName: true, clientRoleId: true } },
       clientOrg: { select: { organizationName: true } },
       reservations: {
         where: { reservationStatus: { notIn: ACTIVE_RESERVATION_EXCLUSIONS } },
@@ -162,6 +162,7 @@ async function loadProfile(clientId) {
     address,
     profilePhoto: client.profilePhoto,
     roleName: client.clientRole?.roleName || null,
+    isDepartment: client.clientRole?.clientRoleId === "PROV",
     // Friendly label: "Client" / "Provincial Department Agencies".
     roleLabel: clientRoleDisplayName(client.clientRole?.roleName),
     organization: client.clientOrg?.organizationName || null,
@@ -280,13 +281,18 @@ export async function PATCH(request) {
       const firstName = String(body.firstName ?? existing.firstName ?? "").trim();
       const middleName = String(body.middleName ?? existing.middleName ?? "").trim();
       const lastName = String(body.lastName ?? existing.lastName ?? "").trim();
+      const isDepartment = existing.clientRoleId === "PROV";
       if (!firstName) {
         return NextResponse.json(
-          { error: "Enter your first name." },
+          {
+            error: isDepartment
+              ? "Enter the department name."
+              : "Enter your first name.",
+          },
           { status: 400 }
         );
       }
-      if (!lastName) {
+      if (!lastName && !isDepartment) {
         return NextResponse.json(
           { error: "Enter your last name." },
           { status: 400 }
