@@ -66,7 +66,7 @@ function buildOrderOfPayment(reservation) {
       year: "numeric",
     }),
     clientName: reservation.clientName,
-    address: "",
+    address: reservation.clientAddress || "",
     contactNumber: reservation.contactNumber || "",
     activityName: reservation.eventType,
     activityDate: dateList.map(formatActivityDate).join(", "),
