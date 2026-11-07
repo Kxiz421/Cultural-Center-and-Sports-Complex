@@ -818,6 +818,29 @@ export default function CalendarPage() {
                             ? "Sports Complex"
                             : block.venue}
                       </span>
+                      {Array.isArray(block.facilityIds) &&
+                        block.facilityIds.length > 0 && (
+                          <span
+                            className="hidden max-w-[240px] shrink-0 truncate text-xs text-muted-foreground sm:inline"
+                            title={block.facilityIds
+                              .map(
+                                (id) =>
+                                  sportsFacilities.find(
+                                    (f) => f.facilityId === id
+                                  )?.name || `Facility ${id}`
+                              )
+                              .join(", ")}
+                          >
+                            {block.facilityIds
+                              .map(
+                                (id) =>
+                                  sportsFacilities.find(
+                                    (f) => f.facilityId === id
+                                  )?.name || `Facility ${id}`
+                              )
+                              .join(", ")}
+                          </span>
+                        )}
                       <button
                         onClick={() => handleDeleteBlock(block.id)}
                         className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
