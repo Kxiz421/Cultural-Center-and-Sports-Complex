@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -10,6 +12,9 @@ import { PAGE_LOGO } from "@/lib/constants";
 
 export function SiteHeaderCCASC({ title, notificationAudience = "staff", notificationScope = "" }) {
   useSessionGuard();
+  const pathname = usePathname();
+  const panel = pathname?.match(/^\/panel\/([^/]+)/)?.[1];
+  const profileHref = panel ? `/panel/${panel}/profile` : null;
 
   return (
     <header className="navbar-surface flex h-14 shrink-0 items-center gap-2 border-b border-white/20 px-4 text-white lg:px-6">
@@ -25,7 +30,7 @@ export function SiteHeaderCCASC({ title, notificationAudience = "staff", notific
       <div className="ml-auto flex items-center gap-1">
         <NotificationBell audience={notificationAudience} scope={notificationScope} />
         <ThemeToggle />
-        <ProfileAvatar />
+        <ProfileAvatar href={profileHref} />
       </div>
     </header>
   );

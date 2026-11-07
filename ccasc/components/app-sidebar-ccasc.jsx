@@ -12,7 +12,6 @@ import {
   Warehouse,
   Megaphone,
   FileBarChart,
-  UserRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -77,11 +76,6 @@ const navMain = [
     title: "Reports",
     url: "/panel/admin/reports",
     icon: FileBarChart,
-  },
-  {
-    title: "Profile",
-    url: "/panel/admin/profile",
-    icon: UserRound,
   },
 ];
 

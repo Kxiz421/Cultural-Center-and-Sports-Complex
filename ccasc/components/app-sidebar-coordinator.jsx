@@ -8,7 +8,6 @@ import {
   FileBarChart,
   Calendar,
   Package,
-  UserRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,11 +58,6 @@ const navMain = [
     title: "Particulars Management",
     url: "/panel/program-coordinator/particulars",
     icon: Package,
-  },
-  {
-    title: "Profile",
-    url: "/panel/program-coordinator/profile",
-    icon: UserRound,
   },
 ];
 

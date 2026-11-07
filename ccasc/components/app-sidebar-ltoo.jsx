@@ -5,7 +5,6 @@ import {
   Wallet,
   XCircle,
   FileBarChart,
-  UserRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,11 +39,6 @@ const navMain = [
     title: "Report Generation",
     url: "/panel/local-treasury-officer/reports",
     icon: FileBarChart,
-  },
-  {
-    title: "Profile",
-    url: "/panel/local-treasury-officer/profile",
-    icon: UserRound,
   },
 ];
 

@@ -7,7 +7,6 @@ import {
   UserPlus,
   FileBarChart,
   Trophy,
-  UserRound,
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,11 +46,6 @@ const navMain = [
     title: "Report Generation",
     url: "/panel/accounting-clerk/reports",
     icon: FileBarChart,
-  },
-  {
-    title: "Profile",
-    url: "/panel/accounting-clerk/profile",
-    icon: UserRound,
   },
 ];
 
