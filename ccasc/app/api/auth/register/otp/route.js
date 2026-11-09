@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import prisma from "@/lib/prisma";
 import { maskEmail, sendOtpEmail } from "@/lib/email";
 import { isSmsEnabled, sendOtpSms } from "@/lib/sms";
-import { phMasked } from "@/lib/phone";
+import { phMasked, registrationNetworkProblem } from "@/lib/phone";
 import { isValidEmailFormat } from "@/lib/email-validation";
 import {
   REGISTER_CHANNEL,
@@ -50,6 +50,13 @@ async function handleSend(channel, rawTarget) {
       },
       { status: 400 },
     );
+  }
+
+  if (channel === REGISTER_CHANNEL.SMS) {
+    const networkProblem = registrationNetworkProblem(rawTarget);
+    if (networkProblem) {
+      return NextResponse.json({ error: networkProblem }, { status: 400 });
+    }
   }
 
   // Early duplicate check for emails so a registrant learns immediately that

@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import { LOGIN_PAGE_BACKGROUND, PAGE_LOGO, PAGE_LOGO_2 } from "@/lib/constants";
 import { fetchBarangays, fetchCities, fetchProvinces } from "@/lib/ph-address";
+import {
+  detectPhMobileNetwork,
+  registrationNetworkProblem,
+} from "@/lib/phone";
 import { uploadIdProof } from "@/lib/upload-id-proof";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -89,6 +93,8 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
   const [error, setError] = useState("");
 
   const code = cells.join("");
+  const smsNetworkProblem =
+    channel === "sms" ? registrationNetworkProblem(target) : null;
 
   const focusCell = (index) => {
     const el = cellRefs.current[index];
@@ -152,6 +158,13 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
           : "Enter your mobile number first.",
       );
       return;
+    }
+    if (channel === "sms") {
+      const networkProblem = registrationNetworkProblem(target);
+      if (networkProblem) {
+        setError(networkProblem);
+        return;
+      }
     }
     setError("");
     setSending(true);
@@ -228,7 +241,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
           type="button"
           variant="outline"
           onClick={sendCode}
-          disabled={sending}
+          disabled={sending || Boolean(smsNetworkProblem)}
         >
           {sending ? (
             <>
@@ -281,7 +294,7 @@ function ContactVerifier({ channel, target, verified, onVerified }) {
           ))}
         </div>
       )}
-      <FieldError>{error}</FieldError>
+      <FieldError>{error || smsNetworkProblem}</FieldError>
     </div>
   );
 }
@@ -551,6 +564,9 @@ export default function RegisterPage() {
       }
       if (digits && digits.length !== 11) {
         next.contactNumber = "Contact number must be exactly 11 digits.";
+      } else if (digits) {
+        const networkProblem = registrationNetworkProblem(digits);
+        if (networkProblem) next.contactNumber = networkProblem;
       }
     }
 
@@ -573,6 +589,12 @@ export default function RegisterPage() {
 
   const hasEmail = Boolean(formData.email.trim());
   const hasPhone = Boolean(formData.contactNumber.replace(/\D/g, ""));
+
+  const phoneDigits = formData.contactNumber.replace(/\D/g, "");
+  const phoneNetwork =
+    phoneDigits.length >= 10 ? detectPhMobileNetwork(phoneDigits) : null;
+  const phoneNetworkProblem =
+    phoneDigits.length === 11 ? registrationNetworkProblem(phoneDigits) : null;
   const effectiveChannel =
     verifyChannel === "email"
       ? hasEmail
@@ -1118,6 +1140,17 @@ export default function RegisterPage() {
                         aria-invalid={Boolean(errors.contactNumber)}
                       />
                       <FieldError>{errors.contactNumber}</FieldError>
+                      {!errors.contactNumber && phoneNetworkProblem ? (
+                        <p className="text-sm text-destructive">
+                          {phoneNetworkProblem}
+                        </p>
+                      ) : !errors.contactNumber &&
+                        phoneNetwork &&
+                        phoneNetwork.key !== "unknown" ? (
+                        <p className="text-sm text-muted-foreground">
+                          Detected network: {phoneNetwork.label}
+                        </p>
+                      ) : null}
                     </div>
                   </section>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { toE164Ph } from "@/lib/phone";
+import { toE164Ph, registrationNetworkProblem } from "@/lib/phone";
 import {
   REGISTER_CHANNEL,
   clearRegistrationVerifications,
@@ -104,6 +104,13 @@ export async function POST(request) {
         { error: "Enter a valid mobile number (e.g., 09171234567)." },
         { status: 400 }
       );
+    }
+
+    if (contactNumber) {
+      const networkProblem = registrationNetworkProblem(contactNumber);
+      if (networkProblem) {
+        return NextResponse.json({ error: networkProblem }, { status: 400 });
+      }
     }
 
     // Personal details collected at registration.
