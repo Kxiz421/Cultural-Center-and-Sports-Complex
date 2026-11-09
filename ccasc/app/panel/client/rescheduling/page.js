@@ -33,7 +33,7 @@ const PAGE_SIZE = 10;
 export default function ClientReschedulingPage() {
   const [reservations, setReservations] = React.useState([]);
   const [selectedReservation, setSelectedReservation] = React.useState("");
-  const [dateDrafts, setDateDrafts] = React.useState({});
+  const [selectedDates, setSelectedDates] = React.useState([]);
   const [reason, setReason] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
@@ -161,47 +161,42 @@ export default function ClientReschedulingPage() {
     load();
   }, []);
 
-  React.useEffect(() => {
-    if (!selected) {
-      setDateDrafts({});
+  const handleToggleDate = (dateStr) => {
+    clearError("eventDates");
+    if (
+      !selectedDates.includes(dateStr) &&
+      selectedDates.length >= eventEntries.length
+    ) {
+      toast.error(`You can select up to ${eventEntries.length} date(s).`);
       return;
     }
-    const next = {};
-    for (const entry of eventEntries) {
-      const key = entry.isPrimary
-        ? "primary"
-        : `rd-${entry.reservationDateId ?? entry.date}`;
-      next[key] = entry.date;
-    }
-    setDateDrafts(next);
-  }, [selectedReservation, eventEntries]);
+    setSelectedDates((prev) =>
+      prev.includes(dateStr)
+        ? prev.filter((d) => d !== dateStr)
+        : [...prev, dateStr]
+    );
+  };
 
-  function entryKey(entry) {
-    return entry.isPrimary
-      ? "primary"
-      : `rd-${entry.reservationDateId ?? entry.date}`;
-  }
-
-  const handleDateDraftChange = (key, dateStr) => {
+  const handleClearDates = () => {
     clearError("eventDates");
-    setDateDrafts((prev) => ({ ...prev, [key]: dateStr }));
+    setSelectedDates([]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const sortedSelected = [...selectedDates].sort();
     const dateChanges = [];
-    for (const entry of eventEntries) {
-      const key = entryKey(entry);
-      const requestedDate = dateDrafts[key];
-      if (!requestedDate || requestedDate === entry.date) continue;
+    eventEntries.forEach((entry, idx) => {
+      const requestedDate = sortedSelected[idx];
+      if (!requestedDate || requestedDate === entry.date) return;
       dateChanges.push({
         originalDate: entry.date,
         requestedDate,
         reservationDateId: entry.isPrimary ? null : entry.reservationDateId ?? null,
         isPrimary: Boolean(entry.isPrimary),
       });
-    }
+    });
 
     const next = {};
     if (!selected) next.reservation = "Please select a reservation.";
@@ -238,14 +233,9 @@ export default function ClientReschedulingPage() {
         const errData = await res.json();
         const msg = errData.error || "Failed to submit rescheduling request";
         if (errData.conflictDates?.length) {
-          const next = { ...dateDrafts };
-          for (const entry of eventEntries) {
-            const key = entryKey(entry);
-            if (errData.conflictDates.includes(dateDrafts[key])) {
-              next[key] = entry.date;
-            }
-          }
-          setDateDrafts(next);
+          setSelectedDates((prev) =>
+            prev.filter((d) => !errData.conflictDates.includes(d))
+          );
         }
         throw new Error(msg);
       }
@@ -253,7 +243,7 @@ export default function ClientReschedulingPage() {
       toast.success("Rescheduling request submitted successfully!");
       setSelectedReservation("");
       setReason("");
-      setDateDrafts({});
+      setSelectedDates([]);
 
       const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
       if (clientId) {
@@ -297,7 +287,7 @@ export default function ClientReschedulingPage() {
       setCancelDialogOpen(false);
       setCancelReason("");
       setSelectedReservation("");
-      setDateDrafts({});
+      setSelectedDates([]);
 
       // Reload data
       const clientId = localStorage.getItem("user_id")?.replace("CLT-", "");
@@ -334,8 +324,7 @@ export default function ClientReschedulingPage() {
         <CardHeader>
           <CardTitle>Submit Rescheduling Request</CardTitle>
           <CardDescription>
-            Select a reservation, then choose new dates from the availability calendar for each
-            scheduled event day.
+            Select a reservation, then pick the new dates on the colored availability calendar.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -350,6 +339,7 @@ export default function ClientReschedulingPage() {
                   value={selectedReservation}
                   onChange={(e) => {
                     setSelectedReservation(e.target.value);
+                    setSelectedDates([]);
                     clearError("reservation", "eventDates");
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -387,9 +377,9 @@ export default function ClientReschedulingPage() {
                   <RescheduleEventDatesPanel
                     reservation={selected}
                     eventEntries={eventEntries}
-                    dateDrafts={dateDrafts}
-                    onDateDraftChange={handleDateDraftChange}
-                    entryKey={entryKey}
+                    selectedDates={selectedDates}
+                    onToggleDate={handleToggleDate}
+                    onClearDates={handleClearDates}
                   />
                   <FieldError>{errors.eventDates}</FieldError>
                 </>

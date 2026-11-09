@@ -42,7 +42,7 @@ export default function ProvincialReschedulingPage() {
   );
   const [loading, setLoading] = React.useState(true);
   const [selectedReservation, setSelectedReservation] = React.useState("");
-  const [dateDrafts, setDateDrafts] = React.useState({});
+  const [selectedDates, setSelectedDates] = React.useState([]);
   const [reason, setReason] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const minDate = getMinEventDateKey();
@@ -160,47 +160,42 @@ export default function ProvincialReschedulingPage() {
     loadAll();
   }, []);
 
-  React.useEffect(() => {
-    if (!selected) {
-      setDateDrafts({});
+  const handleToggleDate = (dateStr) => {
+    clearError("eventDates");
+    if (
+      !selectedDates.includes(dateStr) &&
+      selectedDates.length >= eventEntries.length
+    ) {
+      toast.error(`You can select up to ${eventEntries.length} date(s).`);
       return;
     }
-    const next = {};
-    for (const entry of eventEntries) {
-      const key = entry.isPrimary
-        ? "primary"
-        : `rd-${entry.reservationDateId ?? entry.date}`;
-      next[key] = entry.date;
-    }
-    setDateDrafts(next);
-  }, [selectedReservation, eventEntries]);
+    setSelectedDates((prev) =>
+      prev.includes(dateStr)
+        ? prev.filter((d) => d !== dateStr)
+        : [...prev, dateStr]
+    );
+  };
 
-  function entryKey(entry) {
-    return entry.isPrimary
-      ? "primary"
-      : `rd-${entry.reservationDateId ?? entry.date}`;
-  }
-
-  const handleDateDraftChange = (key, dateStr) => {
+  const handleClearDates = () => {
     clearError("eventDates");
-    setDateDrafts((prev) => ({ ...prev, [key]: dateStr }));
+    setSelectedDates([]);
   };
 
   async function handleSubmitRequest(e) {
     e.preventDefault();
 
+    const sortedSelected = [...selectedDates].sort();
     const dateChanges = [];
-    for (const entry of eventEntries) {
-      const key = entryKey(entry);
-      const requestedDate = dateDrafts[key];
-      if (!requestedDate || requestedDate === entry.date) continue;
+    eventEntries.forEach((entry, idx) => {
+      const requestedDate = sortedSelected[idx];
+      if (!requestedDate || requestedDate === entry.date) return;
       dateChanges.push({
         originalDate: entry.date,
         requestedDate,
         reservationDateId: entry.isPrimary ? null : entry.reservationDateId ?? null,
         isPrimary: Boolean(entry.isPrimary),
       });
-    }
+    });
 
     const next = {};
     if (!selected) next.reservation = "Please select a reservation.";
@@ -237,14 +232,9 @@ export default function ProvincialReschedulingPage() {
         const err = await res.json();
         const msg = err.error || "Failed to submit request";
         if (err.conflictDates?.length) {
-          const next = { ...dateDrafts };
-          for (const entry of eventEntries) {
-            const key = entryKey(entry);
-            if (err.conflictDates.includes(dateDrafts[key])) {
-              next[key] = entry.date;
-            }
-          }
-          setDateDrafts(next);
+          setSelectedDates((prev) =>
+            prev.filter((d) => !err.conflictDates.includes(d))
+          );
         }
         throw new Error(msg);
       }
@@ -315,8 +305,7 @@ export default function ProvincialReschedulingPage() {
         <CardHeader>
           <CardTitle className="text-base">Submit Reschedule Request</CardTitle>
           <CardDescription>
-            Select a reservation, then pick new dates from the calendar for each scheduled
-            event day.
+            Select a reservation, then pick the new dates on the colored availability calendar.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -331,6 +320,7 @@ export default function ProvincialReschedulingPage() {
                   value={selectedReservation}
                   onChange={(e) => {
                     setSelectedReservation(e.target.value);
+                    setSelectedDates([]);
                     clearError("reservation", "eventDates");
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -366,9 +356,9 @@ export default function ProvincialReschedulingPage() {
                   <RescheduleEventDatesPanel
                     reservation={selected}
                     eventEntries={eventEntries}
-                    dateDrafts={dateDrafts}
-                    onDateDraftChange={handleDateDraftChange}
-                    entryKey={entryKey}
+                    selectedDates={selectedDates}
+                    onToggleDate={handleToggleDate}
+                    onClearDates={handleClearDates}
                   />
                   <FieldError>{errors.eventDates}</FieldError>
                 </>

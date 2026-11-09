@@ -24,18 +24,28 @@ const MONTHS = [
 ];
 
 /**
- * Single-date venue calendar (availability + 7-day rule), matching reservation UX.
+ * Venue calendar with availability + the 7-day rule. Pass `value`/`onChange` for
+ * single-date selection, or `values`/`onToggle` to select multiple dates.
  */
 export function VenueAvailabilityCalendar({
   venueId,
   excludeReservationId = null,
   value,
   onChange,
+  values,
+  onToggle,
   disabled = false,
 }) {
+  const isMulti = Array.isArray(values);
+  const selectedSet = React.useMemo(
+    () => new Set(isMulti ? values : []),
+    [isMulti, values]
+  );
+
   const [currentMonth, setCurrentMonth] = React.useState(() => {
-    if (value) {
-      const d = new Date(`${value}T12:00:00`);
+    const first = value || (isMulti ? [...values].sort()[0] : null);
+    if (first) {
+      const d = new Date(`${first}T12:00:00`);
       if (!Number.isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), 1);
     }
     const min = getMinEventDate();
@@ -97,7 +107,8 @@ export function VenueAvailabilityCalendar({
   const pickDate = (dateStr) => {
     if (disabled || !availability[dateStr]?.available) return;
     if (isEventDateTooSoon(dateStr)) return;
-    onChange?.(dateStr);
+    if (isMulti) onToggle?.(dateStr);
+    else onChange?.(dateStr);
   };
 
   if (!venueId) {
@@ -159,7 +170,7 @@ export function VenueAvailabilityCalendar({
         ))}
         {days.map((day, i) => {
           if (!day) return <div key={`e${i}`} />;
-          const isSelected = value === day.key;
+          const isSelected = isMulti ? selectedSet.has(day.key) : value === day.key;
           const avail = availability[day.key];
           const isTooSoon = day.dt < minEventDate || avail?.isTooSoon;
           const isPast = avail?.isPast || day.dt < today;
@@ -194,10 +205,29 @@ export function VenueAvailabilityCalendar({
         })}
       </div>
       <CalendarDayLegend />
-      {value && (
-        <Badge variant="secondary" className="text-xs">
-          Selected: {value}
-        </Badge>
+      {isMulti ? (
+        (values || []).length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {[...values].sort().map((d) => (
+              <Badge key={d} variant="secondary" className="text-xs">
+                {d}
+                <button
+                  type="button"
+                  onClick={() => onToggle?.(d)}
+                  className="ml-1 hover:text-red-500"
+                >
+                  ×
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )
+      ) : (
+        value && (
+          <Badge variant="secondary" className="text-xs">
+            Selected: {value}
+          </Badge>
+        )
       )}
       {availLoading && (
         <p className="text-xs text-muted-foreground text-center">Loading availability...</p>

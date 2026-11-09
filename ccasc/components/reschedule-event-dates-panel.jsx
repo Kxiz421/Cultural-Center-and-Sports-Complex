@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { CalendarDays, Building2, Clock } from "lucide-react";
 import { VenueAvailabilityCalendar } from "@/components/venue-availability-calendar";
@@ -21,14 +22,19 @@ function formatDisplayDate(dateStr) {
 export function RescheduleEventDatesPanel({
   reservation,
   eventEntries,
-  dateDrafts,
-  onDateDraftChange,
-  entryKey,
+  selectedDates,
+  onToggleDate,
+  onClearDates,
 }) {
   if (!reservation || eventEntries.length === 0) return null;
 
   const reservationId = parseInt(String(reservation.id).replace(/^RES-/, ""), 10);
   const venueId = reservation.venueId;
+  const sortedSelected = [...(selectedDates || [])].sort();
+  const pairs = eventEntries.map((entry, idx) => ({
+    entry,
+    requestedDate: sortedSelected[idx] || null,
+  }));
 
   return (
     <div className="space-y-4 rounded-lg border p-4">
@@ -50,63 +56,63 @@ export function RescheduleEventDatesPanel({
         </div>
       </div>
 
-      <Label>Reschedule event days</Label>
-      <p className="text-xs text-muted-foreground">
-        Each row is a scheduled day for this event. Pick a new date on the calendar only for
-        days you want to move. Unchanged days stay as scheduled.
-      </p>
-
-      <div className="space-y-6">
-        {eventEntries.map((entry, idx) => {
-          const key = entryKey(entry);
-          const draft = dateDrafts[key] || entry.date;
-          const changed = draft !== entry.date;
-
-          return (
-            <div
-              key={key}
-              className="rounded-lg border bg-muted/20 p-4 space-y-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium flex items-center gap-2">
-                    <CalendarDays className="size-4 text-muted-foreground shrink-0" />
-                    {reservation.eventType || "Event"}
-                    {entry.isPrimary ? (
-                      <Badge variant="outline" className="text-xs">Primary day</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs">
-                        Day {idx + 1}
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Currently scheduled:{" "}
-                    <span className="font-medium text-foreground">
-                      {formatDisplayDate(entry.date)}
-                    </span>
-                  </p>
-                  {changed && (
-                    <p className="text-xs text-primary">
-                      New date: <span className="font-medium">{formatDisplayDate(draft)}</span>
-                    </p>
-                  )}
-                </div>
-                {changed && (
-                  <Badge className="text-xs shrink-0">Date changed</Badge>
-                )}
-              </div>
-
-              <VenueAvailabilityCalendar
-                venueId={venueId}
-                excludeReservationId={reservationId}
-                value={draft}
-                onChange={(dateStr) => onDateDraftChange(key, dateStr)}
-              />
-            </div>
-          );
-        })}
+      <div className="space-y-1">
+        <Label>Scheduled event days</Label>
+        <div className="flex flex-wrap gap-2">
+          {eventEntries.map((entry, idx) => (
+            <Badge key={`${entry.date}-${idx}`} variant="outline" className="text-xs">
+              <CalendarDays className="mr-1 size-3" />
+              {entry.isPrimary ? "Primary" : `Day ${idx + 1}`}: {formatDisplayDate(entry.date)}
+            </Badge>
+          ))}
+        </div>
       </div>
+
+      <div className="space-y-1">
+        <Label>Pick the new dates</Label>
+        <p className="text-xs text-muted-foreground">
+          Click a date on the calendar to select it. Select up to {eventEntries.length} date
+          {eventEntries.length !== 1 ? "s" : ""}; they replace the scheduled days in order.
+          Leave a date unselected to keep that day as scheduled.
+        </p>
+      </div>
+
+      <VenueAvailabilityCalendar
+        venueId={venueId}
+        excludeReservationId={reservationId}
+        values={selectedDates || []}
+        onToggle={onToggleDate}
+      />
+
+      {sortedSelected.length > 0 && (
+        <div className="space-y-1 rounded-md border bg-muted/20 p-3 text-xs">
+          {pairs.map(({ entry, requestedDate }, idx) => (
+            <div
+              key={`${entry.date}-${idx}`}
+              className="flex flex-wrap items-center justify-between gap-2"
+            >
+              <span className="text-muted-foreground">
+                {entry.isPrimary ? "Primary day" : `Day ${idx + 1}`} ·{" "}
+                {formatDisplayDate(entry.date)}
+              </span>
+              <span
+                className={
+                  requestedDate ? "font-medium text-primary" : "text-muted-foreground"
+                }
+              >
+                {requestedDate
+                  ? `→ ${formatDisplayDate(requestedDate)}`
+                  : "unchanged"}
+              </span>
+            </div>
+          ))}
+          <div className="pt-1">
+            <Button type="button" variant="outline" size="sm" onClick={onClearDates}>
+              Clear selected dates
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
