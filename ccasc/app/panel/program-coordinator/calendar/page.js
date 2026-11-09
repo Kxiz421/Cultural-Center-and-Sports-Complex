@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { dayStatusCellClass } from "@/lib/calendar-day-status";
 import { ChevronLeft, ChevronRight, CalendarDays, CheckCircle2 } from "lucide-react";
 import { SportsComplexDayDialog } from "@/components/sports-complex-day-dialog";
 
@@ -34,9 +35,9 @@ const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function getEventColor(status) {
   if (status === "Holiday")
-    return { bg: "bg-rose-600", text: "text-white" };
+    return { bg: "bg-violet-600", text: "text-white" };
   if (status === "Maintenance")
-    return { bg: "bg-orange-500", text: "text-white" };
+    return { bg: "bg-amber-500", text: "text-white" };
   if (status === "Approved" || status === "Confirmed")
     return { bg: "bg-emerald-600", text: "text-white" };
   if (status === "Pending")
@@ -52,6 +53,7 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dayAvailability, setDayAvailability] = useState({});
+  const [reservePrompt, setReservePrompt] = useState(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -133,6 +135,7 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
   return (
+    <>
     <Card className="flex flex-col">
       <CardHeader className="border-b border-l-4 border-l-blue-500 pb-3">
         <div className="flex items-center gap-3">
@@ -205,9 +208,7 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
                     return;
                   }
                   if (canReserve) {
-                    router.push(
-                      `${reserveBaseHref}?venueId=${venueId}&date=${cell.dateStr}`
-                    );
+                    setReservePrompt({ venueId, date: cell.dateStr });
                     return;
                   }
                   onDayClick?.(cell.dateStr);
@@ -241,13 +242,9 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
                         ? "bg-background hover:border-foreground/20"
                         : "bg-muted/20 text-muted-foreground/60"
                     } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}${
-                      isFullyBooked
-                        ? " border-red-400 bg-red-50 dark:border-red-900 dark:bg-red-950/30"
-                        : isMaintenance
-                          ? " border-orange-400 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30"
-                          : isHoliday
-                            ? " border-rose-400 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
-                            : ""
+                      isFullyBooked || isMaintenance || isHoliday || dayInfo?.status === "blocked"
+                        ? ` ${dayStatusCellClass(dayInfo.status)}`
+                        : ""
                     }${
                       isFullyBooked
                         ? " cursor-not-allowed"
@@ -306,11 +303,64 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-emerald-600" /> Confirmed / Approved</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-400" /> Pending</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-600" /> Fully booked</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-rose-600" /> Holiday</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-500" /> Maintenance</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-violet-600" /> Holiday</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-500" /> Maintenance</div>
           </div>
       </CardContent>
     </Card>
+      <Dialog
+        open={Boolean(reservePrompt)}
+        onOpenChange={(open) => {
+          if (!open) setReservePrompt(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start a reservation?</DialogTitle>
+            <DialogDescription>
+              Open the reservation form for{" "}
+              <strong>
+                {reservePrompt
+                  ? new Date(`${reservePrompt.date}T12:00:00`).toLocaleDateString(
+                      "en-US",
+                      {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      }
+                    )
+                  : ""}
+              </strong>{" "}
+              at <strong>{venueLabel}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReservePrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const prompt = reservePrompt;
+                setReservePrompt(null);
+                if (prompt) {
+                  router.push(
+                    `${reserveBaseHref}?venueId=${prompt.venueId}&date=${prompt.date}`
+                  );
+                }
+              }}
+            >
+              Continue to reservation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

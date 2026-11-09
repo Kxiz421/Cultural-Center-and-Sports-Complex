@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { dayStatusCellClass } from "@/lib/calendar-day-status";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,9 +28,9 @@ const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function getEventColor(status) {
   if (status === "Holiday")
-    return { bg: "bg-rose-600", text: "text-white" };
+    return { bg: "bg-violet-600", text: "text-white" };
   if (status === "Maintenance")
-    return { bg: "bg-orange-500", text: "text-white" };
+    return { bg: "bg-amber-500", text: "text-white" };
   if (status === "Approved" || status === "Confirmed")
     return { bg: "bg-emerald-600", text: "text-white" };
   if (status === "Pending")
@@ -222,13 +223,9 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onEventClick, on
                         ? "bg-background hover:border-foreground/20"
                         : "bg-muted/20 text-muted-foreground/60"
                     } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}${
-                      isFullyBooked
-                        ? " border-red-400 bg-red-50 dark:border-red-900 dark:bg-red-950/30"
-                        : isMaintenance
-                          ? " border-orange-400 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30"
-                          : isHoliday
-                            ? " border-rose-400 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
-                            : ""
+                      isFullyBooked || isMaintenance || isHoliday || dayInfo?.status === "blocked"
+                        ? ` ${dayStatusCellClass(dayInfo.status)}`
+                        : ""
                     }${
                       cell.currentMonth && isFullyBooked
                         ? " cursor-not-allowed"
@@ -287,8 +284,8 @@ function MonthGrid({ events, title, icon: Icon, color, venueId, onEventClick, on
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-emerald-600" /> Confirmed / Approved</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-400" /> Pending</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-600" /> Fully booked</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-rose-600" /> Holiday</div>
-            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-500" /> Maintenance</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-violet-600" /> Holiday</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-500" /> Maintenance</div>
           </div>
         </CardContent>
       </Card>
