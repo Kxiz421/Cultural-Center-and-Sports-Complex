@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,11 +41,30 @@ function getEventColor(status) {
   return { bg: "bg-slate-500", text: "text-white" };
 }
 
-function MonthGrid({ events, title, icon: Icon, color, onEventClick, onDayClick }) {
+function MonthGrid({ events, title, icon: Icon, color, venueId, onEventClick, onDayClick }) {
   const [currentDate, setCurrentDate] = React.useState(new Date());
+  const [dayAvailability, setDayAvailability] = React.useState({});
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  React.useEffect(() => {
+    if (!venueId) return;
+    let cancelled = false;
+    const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+    fetch(`/api/availability?venueId=${venueId}&month=${monthStr}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const map = {};
+        for (const d of data.dates || []) map[d.date] = d;
+        setDayAvailability(map);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [venueId, year, month]);
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -158,35 +178,63 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick, onDayClick 
                   ? eventsByDate[cell.dateStr] || []
                   : [];
                 const isToday = cell.dateStr === todayStr;
+                const dayInfo = cell.currentMonth
+                  ? dayAvailability[cell.dateStr]
+                  : null;
+                const isFullyBooked = dayInfo?.status === "fully-booked";
+                const isMaintenance = dayInfo?.status === "maintenance";
+                const isHoliday = dayInfo?.status === "holiday";
+                const dayMessage = dayInfo?.message;
 
                 return (
                   <div
                     key={di}
-                    role={cell.currentMonth && onDayClick ? "button" : undefined}
-                    tabIndex={cell.currentMonth && onDayClick ? 0 : undefined}
+                    role={cell.currentMonth && (onDayClick || isFullyBooked) ? "button" : undefined}
+                    tabIndex={cell.currentMonth && (onDayClick || isFullyBooked) ? 0 : undefined}
                     onClick={
-                      cell.currentMonth && onDayClick
-                        ? () => onDayClick(cell.dateStr)
+                      cell.currentMonth
+                        ? () => {
+                            if (isFullyBooked) {
+                              toast.error(dayMessage || "Fully booked");
+                              return;
+                            }
+                            onDayClick?.(cell.dateStr);
+                          }
                         : undefined
                     }
                     onKeyDown={
-                      cell.currentMonth && onDayClick
+                      cell.currentMonth
                         ? (event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              onDayClick(cell.dateStr);
+                              if (isFullyBooked) {
+                                toast.error(dayMessage || "Fully booked");
+                                return;
+                              }
+                              onDayClick?.(cell.dateStr);
                             }
                           }
                         : undefined
                     }
+                    title={cell.currentMonth ? dayMessage : undefined}
                     className={`relative min-h-[75px] rounded-md border p-1 text-xs transition-colors ${
                       cell.currentMonth
                         ? "bg-background hover:border-foreground/20"
                         : "bg-muted/20 text-muted-foreground/60"
                     } ${isToday ? "border-blue-500 ring-1 ring-blue-500" : "border-border"}${
-                      cell.currentMonth && onDayClick
-                        ? " cursor-pointer hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        : ""
+                      isFullyBooked
+                        ? " border-red-400 bg-red-50 dark:border-red-900 dark:bg-red-950/30"
+                        : isMaintenance
+                          ? " border-orange-400 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30"
+                          : isHoliday
+                            ? " border-rose-400 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
+                            : ""
+                    }${
+                      cell.currentMonth && isFullyBooked
+                        ? " cursor-not-allowed"
+                        : cell.currentMonth && onDayClick
+                          ? " cursor-pointer hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          : ""
                     }`}
                   >
                     <div
@@ -238,6 +286,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick, onDayClick 
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 pt-3 border-t text-xs text-muted-foreground">
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-emerald-600" /> Confirmed / Approved</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-amber-400" /> Pending</div>
+            <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-red-600" /> Fully booked</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-rose-600" /> Holiday</div>
             <div className="flex items-center gap-1"><span className="inline-block size-3 rounded-sm bg-orange-500" /> Maintenance</div>
           </div>
@@ -307,6 +356,7 @@ export default function FacilityCalendarPage() {
             title="Cultural Center"
             icon={CalendarDays}
             color="border-l-4 border-l-blue-500"
+            venueId={1}
             onEventClick={setSelectedEvent}
           />
           <MonthGrid
@@ -314,6 +364,7 @@ export default function FacilityCalendarPage() {
             title="Sports Complex"
             icon={Trophy}
             color="border-l-4 border-l-orange-500"
+            venueId={2}
             onEventClick={setSelectedEvent}
             onDayClick={setSportsDay}
           />

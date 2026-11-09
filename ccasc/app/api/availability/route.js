@@ -13,6 +13,7 @@ import {
   buildReservedFacilityQuantitiesByDate,
   facilityQuantity,
 } from "@/lib/facility-reservation-availability";
+import { DAY_STATUS } from "@/lib/calendar-day-status";
 
 /** Shown when every Sports Complex facility is already taken on a date. */
 const FULLY_RESERVED_REASON = "All facilities are already reserved";
@@ -138,31 +139,46 @@ export async function GET(request) {
     });
 
     // Build blocked dates set
-    const blockedDates = new Map(); // ISO date -> reason string
+    const blockedDates = new Map();
 
     for (const r of conflictingReservations) {
       const key = formatDbDate(r.eventDate);
-      blockedDates.set(key, "Booked");
+      blockedDates.set(key, {
+        reason: "Booked",
+        status: DAY_STATUS.FULLY_BOOKED,
+      });
       for (const ad of r.additionalDates) {
         const adKey = formatDbDate(ad.eventDate);
-        blockedDates.set(adKey, "Booked");
+        blockedDates.set(adKey, {
+          reason: "Booked",
+          status: DAY_STATUS.FULLY_BOOKED,
+        });
       }
     }
 
-    // Fully-booked Sports Complex dates (every facility reserved)
     for (const key of fullyReservedDates) {
       if (!blockedDates.has(key)) {
-        blockedDates.set(key, FULLY_RESERVED_REASON);
+        blockedDates.set(key, {
+          reason: FULLY_RESERVED_REASON,
+          status: DAY_STATUS.FULLY_BOOKED,
+        });
       }
     }
 
     for (const b of calendarBlocks) {
       if (!isBlockingBlockType(b.blockType)) continue;
-      // A facility-level maintenance leaves the rest of the venue open, so it
-      // does not close the whole date on the calendar.
       if (parseFacilityScope(b.notes)) continue;
       const key = formatDbDate(b.blockDate);
-      blockedDates.set(key, b.title || "Unavailable");
+      blockedDates.set(key, {
+        reason: b.title || "Unavailable",
+        status:
+          b.blockType === "Maintenance"
+            ? DAY_STATUS.MAINTENANCE
+            : b.blockType === "Holiday"
+              ? DAY_STATUS.HOLIDAY
+              : DAY_STATUS.BLOCKED,
+        blockType: b.blockType,
+      });
     }
 
     const minEventDate = getMinEventDate();
@@ -174,17 +190,37 @@ export async function GET(request) {
       today.setHours(0, 0, 0, 0);
       const isPast = dt < today;
       const isTooSoon = dt < minEventDate;
-      const isBooked = blockedDates.has(key);
+      const blockedInfo = blockedDates.get(key);
+      const isBooked = Boolean(blockedInfo);
       const blocked = isBooked || isPast || isTooSoon;
+      const status = isPast
+        ? DAY_STATUS.PAST
+        : isTooSoon
+          ? DAY_STATUS.TOO_SOON
+          : blockedInfo?.status || DAY_STATUS.AVAILABLE;
       return {
         date: key,
         available: !blocked,
         blocked,
         reason: isBooked
-          ? blockedDates.get(key)
+          ? blockedInfo.reason
           : isTooSoon
             ? ADVANCE_BOOKING_REASON
             : null,
+        status,
+        blockType: blockedInfo?.blockType || null,
+        message:
+          status === DAY_STATUS.FULLY_BOOKED
+            ? "Fully booked — no facilities are available on this date."
+            : status === DAY_STATUS.MAINTENANCE
+              ? blockedInfo?.reason || "Unavailable — maintenance is scheduled."
+              : status === DAY_STATUS.HOLIDAY
+                ? blockedInfo?.reason || "Unavailable — holiday."
+                : status === DAY_STATUS.TOO_SOON
+                  ? ADVANCE_BOOKING_REASON
+                  : status === DAY_STATUS.PAST
+                    ? "This date has already passed."
+                    : blockedInfo?.reason || "Available",
         isPast,
         isTooSoon,
       };

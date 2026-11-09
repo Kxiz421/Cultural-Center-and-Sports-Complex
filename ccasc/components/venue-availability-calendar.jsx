@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -10,6 +11,12 @@ import {
   getMinEventDateKey,
   isEventDateTooSoon,
 } from "@/lib/reservation-advance-booking";
+import {
+  DAY_STATUS_STYLES,
+  dayStatusMessage,
+  resolveDayStatus,
+} from "@/lib/calendar-day-status";
+import { CalendarDayLegend } from "@/components/calendar-day-legend";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -156,35 +163,37 @@ export function VenueAvailabilityCalendar({
           const avail = availability[day.key];
           const isTooSoon = day.dt < minEventDate || avail?.isTooSoon;
           const isPast = avail?.isPast || day.dt < today;
-          const isAvailable = avail?.available && !isPast && !isTooSoon;
-          const isBlocked = avail?.blocked || isPast || isTooSoon;
+          const status = resolveDayStatus(avail, { isPast, isTooSoon });
+          const isAvailable = !disabled && status === "available";
+          const info = DAY_STATUS_STYLES[disabled ? "too-soon" : status];
+          const message = dayStatusMessage(avail, status);
 
           return (
             <button
               key={day.key}
               type="button"
-              disabled={disabled || !isAvailable}
-              onClick={() => pickDate(day.key)}
+              aria-disabled={!isAvailable}
+              onClick={() => {
+                if (!isAvailable) {
+                  toast.error(disabled ? "This reservation cannot be edited." : message);
+                  return;
+                }
+                pickDate(day.key);
+              }}
               className={`
-                py-2 rounded-md text-sm transition-colors
-                ${isSelected ? "bg-primary text-white font-semibold" : ""}
-                ${isAvailable && !isSelected && !disabled ? "hover:bg-primary/10 cursor-pointer" : ""}
-                ${isBlocked || disabled ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
-                ${!isBlocked && !isSelected && !disabled ? "text-foreground" : ""}
+                py-2 rounded-md border text-sm transition-colors
+                ${isSelected ? "bg-primary text-white border-primary font-semibold" : info.cell}
+                ${isAvailable && !isSelected ? "hover:ring-2 hover:ring-primary/40 cursor-pointer" : ""}
+                ${!isAvailable ? "cursor-not-allowed opacity-80" : ""}
               `}
-              title={
-                isTooSoon
-                  ? `Must be at least ${MIN_ADVANCE_BOOKING_DAYS} days in advance`
-                  : isBlocked
-                    ? avail?.reason || "Unavailable"
-                    : day.key
-              }
+              title={disabled ? "This reservation cannot be edited." : message}
             >
               {day.date}
             </button>
           );
         })}
       </div>
+      <CalendarDayLegend />
       {value && (
         <Badge variant="secondary" className="text-xs">
           Selected: {value}

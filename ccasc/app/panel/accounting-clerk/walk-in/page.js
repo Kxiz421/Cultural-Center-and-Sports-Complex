@@ -31,6 +31,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import {
+  DAY_STATUS_STYLES,
+  dayStatusMessage,
+  resolveDayStatus,
+} from "@/lib/calendar-day-status";
+import { CalendarDayLegend } from "@/components/calendar-day-legend";
 import { Search, UserCheck, UserPlus, Loader2, Info, Layers, Calendar, Plus, RotateCcw, ChevronLeft, ChevronRight, Building2, Clock, Printer } from "lucide-react";
 import { FacilityDetailsDialog, FacilityNameButton } from "@/components/facility-details-dialog";
 import {
@@ -1408,35 +1414,37 @@ export default function WalkInReservationPage() {
             const avail = availability[day.key];
             const isTooSoon = day.dt < minEventDate || avail?.isTooSoon;
             const isPast = avail?.isPast || day.dt < today;
-            const isAvailable = avail?.available && !isPast && !isTooSoon;
-            const isBlocked = avail?.blocked || isPast || isTooSoon;
+            const status = resolveDayStatus(avail, { isPast, isTooSoon });
+            const isAvailable = status === "available";
+            const info = DAY_STATUS_STYLES[status];
+            const message = dayStatusMessage(avail, status);
 
             return (
               <button
                 key={day.key}
                 type="button"
-                disabled={!isAvailable}
-                onClick={() => toggleDate(day.key)}
+                aria-disabled={!isAvailable}
+                onClick={() => {
+                  if (!isAvailable) {
+                    toast.error(message);
+                    return;
+                  }
+                  toggleDate(day.key);
+                }}
                 className={`
-                  py-2 rounded-md text-sm transition-colors
-                  ${isSelected ? "bg-primary text-white font-semibold" : ""}
-                  ${isAvailable && !isSelected ? "hover:bg-primary/10 cursor-pointer" : ""}
-                  ${isBlocked ? "text-muted-foreground/30 line-through cursor-not-allowed" : ""}
-                  ${!isBlocked && !isSelected ? "text-foreground" : ""}
+                  py-2 rounded-md border text-sm transition-colors
+                  ${isSelected ? "bg-primary text-white border-primary font-semibold" : info.cell}
+                  ${isAvailable && !isSelected ? "hover:ring-2 hover:ring-primary/40 cursor-pointer" : ""}
+                  ${!isAvailable ? "cursor-not-allowed opacity-80" : ""}
                 `}
-                title={
-                  isTooSoon
-                    ? `Must be at least ${MIN_ADVANCE_BOOKING_DAYS} days in advance`
-                    : isBlocked
-                      ? avail?.reason || "Unavailable"
-                      : day.key
-                }
+                title={message}
               >
                 {day.date}
               </button>
             );
           })}
         </div>
+        <CalendarDayLegend />
         {selectedArr.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {selectedArr.map((d) => (
