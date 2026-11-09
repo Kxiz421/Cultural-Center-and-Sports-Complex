@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -248,6 +249,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick, onDayClick 
   }
 
 export default function AccountingCalendarPage() {
+  const router = useRouter();
   const [cultural, setCultural] = useState([]);
   const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -269,6 +271,16 @@ export default function AccountingCalendarPage() {
     }
     fetchData();
   }, []);
+
+  const handleEventClick = (event) => {
+    if (event?.type === "event" && event.reservationId != null) {
+      router.push(
+        `/panel/accounting-clerk/reservations?id=RES-${event.reservationId}`
+      );
+      return;
+    }
+    setSelectedEvent(event);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -308,14 +320,14 @@ export default function AccountingCalendarPage() {
             title="Cultural Center"
             icon={CalendarDays}
             color="border-l-4 border-l-blue-500"
-            onEventClick={setSelectedEvent}
+            onEventClick={handleEventClick}
           />
           <MonthGrid
             events={sports}
             title="Sports Complex"
             icon={Trophy}
             color="border-l-4 border-l-orange-500"
-            onEventClick={setSelectedEvent}
+            onEventClick={handleEventClick}
             onDayClick={setSportsDay}
           />
         </div>

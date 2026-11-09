@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -241,6 +242,7 @@ function MonthGrid({ events, title, icon: Icon, color, onEventClick, onDayClick 
 }
 
 export default function ClientCalendarPage() {
+  const router = useRouter();
   const [cultural, setCultural] = React.useState([]);
   const [sports, setSports] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -263,6 +265,14 @@ export default function ClientCalendarPage() {
     }
     fetchCalendar();
   }, []);
+
+  const handleEventClick = (event) => {
+    if (event?.type === "event" && event.reservationId != null) {
+      router.push(`/panel/client/reservations?id=RES-${event.reservationId}`);
+      return;
+    }
+    setSelectedEvent(event);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -299,14 +309,14 @@ export default function ClientCalendarPage() {
             title="Cultural Center"
             icon={CalendarDays}
             color="border-l-4 border-l-blue-500"
-            onEventClick={setSelectedEvent}
+            onEventClick={handleEventClick}
           />
           <MonthGrid
             events={sports}
             title="Sports Complex"
             icon={Trophy}
             color="border-l-4 border-l-orange-500"
-            onEventClick={setSelectedEvent}
+            onEventClick={handleEventClick}
             onDayClick={setSportsDay}
           />
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -249,6 +250,7 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
 }
 
 export default function CoordinatorCalendarPage() {
+  const router = useRouter();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -290,6 +292,20 @@ export default function CoordinatorCalendarPage() {
     } catch (err) {
       console.error("Failed to refresh calendar:", err);
     }
+  }
+
+  function handleEventClick(event) {
+    if (
+      venueLabel === "Sports Complex" &&
+      event?.type === "event" &&
+      event.reservationId != null
+    ) {
+      router.push(
+        `/panel/program-coordinator/reservations?id=RES-${event.reservationId}`
+      );
+      return;
+    }
+    setSelectedEvent(event);
   }
 
   async function handleCheckOut(reservationId) {
@@ -341,7 +357,7 @@ export default function CoordinatorCalendarPage() {
 
       <MonthGrid
         events={events}
-        onEventClick={setSelectedEvent}
+        onEventClick={handleEventClick}
         venueLabel={venueLabel}
         onDayClick={venueLabel === "Sports Complex" ? setSportsDay : undefined}
       />

@@ -98,6 +98,15 @@ export default function AccountingReservationsPage() {
         const res = await fetch("/api/reservations");
         const data = await res.json();
         setReservations(data);
+
+        const wanted = new URLSearchParams(window.location.search).get("id");
+        if (wanted && Array.isArray(data)) {
+          const match = data.find((r) => r.id === wanted);
+          if (match) {
+            setSelectedRes(match);
+            setDetailOpen(true);
+          }
+        }
       } catch (err) {
         console.error("Failed to load reservations:", err);
       } finally {

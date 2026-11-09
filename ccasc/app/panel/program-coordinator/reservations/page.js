@@ -311,6 +311,7 @@ export default function CoordinatorReservationsPage() {
   const [historySearch, setHistorySearch] = React.useState("");
   const [historyPage, setHistoryPage] = React.useState(1);
   const [showHistory, setShowHistory] = React.useState(false);
+  const [highlightId, setHighlightId] = React.useState(null);
   const [orderOfPayment, setOrderOfPayment] = React.useState(null);
 
   // Search debounce ref
@@ -327,6 +328,12 @@ export default function CoordinatorReservationsPage() {
         const list = Array.isArray(data) ? data : [];
         if (!cancelled) {
           setHistoryReservations(list.filter((r) => Number(r.venueId) === 2));
+          const wanted = new URLSearchParams(window.location.search).get("id");
+          if (wanted) {
+            setHighlightId(wanted);
+            setShowHistory(true);
+            setHistorySearch(wanted);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -341,6 +348,13 @@ export default function CoordinatorReservationsPage() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!highlightId) return;
+    document
+      .getElementById("reservation-history")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [highlightId, showHistory]);
 
   // Load facilities on mount
   React.useEffect(() => {
@@ -1160,7 +1174,8 @@ export default function CoordinatorReservationsPage() {
     return historyReservations.filter(
       (r) =>
         String(r.clientName || "").toLowerCase().includes(q) ||
-        String(r.eventType || "").toLowerCase().includes(q)
+        String(r.eventType || "").toLowerCase().includes(q) ||
+        String(r.id || "").toLowerCase().includes(q)
     );
   }, [historyReservations, historySearch]);
 
@@ -1331,7 +1346,7 @@ export default function CoordinatorReservationsPage() {
       </div>
 
       {showHistory && (
-        <Card>
+        <Card id="reservation-history">
           <CardHeader>
             <CardTitle>Sports Complex Reservation History</CardTitle>
             <CardDescription>
@@ -1383,7 +1398,10 @@ export default function CoordinatorReservationsPage() {
                   </TableRow>
                 ) : (
                   paginatedHistory.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      className={r.id === highlightId ? "bg-primary/5" : undefined}
+                    >
                       <TableCell className="font-medium">{r.clientName}</TableCell>
                       <TableCell className="text-sm">{r.eventType}</TableCell>
                       <TableCell className="text-sm">
