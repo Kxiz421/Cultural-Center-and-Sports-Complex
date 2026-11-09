@@ -174,6 +174,25 @@ export default function ClientNewReservationPage() {
       return changed ? next : prev;
     });
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const venue = params.get("venueId");
+    const date = params.get("date");
+    if (!venue && !date) return;
+    queueMicrotask(() => {
+      if (venue === "1" || venue === "2") {
+        setForm((prev) => ({ ...prev, venueId: venue }));
+      }
+      if (date) {
+        setSelectedDates(new Set([date]));
+        const d = new Date(`${date}T12:00:00`);
+        if (!Number.isNaN(d.getTime())) {
+          setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+      }
+    });
+  }, []);
+
   // Sports Complex facilities
   const [facilities, setFacilities] = React.useState([]);
   const [facilityDetails, setFacilityDetails] = React.useState(null);

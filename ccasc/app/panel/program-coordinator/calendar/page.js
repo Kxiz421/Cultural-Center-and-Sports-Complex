@@ -49,12 +49,17 @@ function getEventColor(status) {
 }
 
 function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
+  const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dayAvailability, setDayAvailability] = useState({});
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const venueId = venueLabel === "Sports Complex" ? 2 : 1;
+  const reserveBaseHref =
+    venueLabel === "Sports Complex"
+      ? "/panel/program-coordinator/reservations"
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -187,38 +192,50 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
                 const isMaintenance = dayInfo?.status === "maintenance";
                 const isHoliday = dayInfo?.status === "holiday";
                 const dayMessage = dayInfo?.message;
+                const canReserve =
+                  cell.currentMonth &&
+                  dayEvents.length === 0 &&
+                  Boolean(reserveBaseHref) &&
+                  (!dayInfo || dayInfo.status === "available");
+                const isClickable =
+                  cell.currentMonth && (onDayClick || isFullyBooked || canReserve);
+                const handleDayClick = () => {
+                  if (isFullyBooked) {
+                    toast.error(dayMessage || "Fully booked");
+                    return;
+                  }
+                  if (canReserve) {
+                    router.push(
+                      `${reserveBaseHref}?venueId=${venueId}&date=${cell.dateStr}`
+                    );
+                    return;
+                  }
+                  onDayClick?.(cell.dateStr);
+                };
 
                 return (
                   <div
                     key={di}
-                    role={cell.currentMonth && (onDayClick || isFullyBooked) ? "button" : undefined}
-                    tabIndex={cell.currentMonth && (onDayClick || isFullyBooked) ? 0 : undefined}
-                    onClick={
-                      cell.currentMonth
-                        ? () => {
-                            if (isFullyBooked) {
-                              toast.error(dayMessage || "Fully booked");
-                              return;
-                            }
-                            onDayClick?.(cell.dateStr);
-                          }
-                        : undefined
-                    }
+                    role={isClickable ? "button" : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onClick={isClickable ? handleDayClick : undefined}
                     onKeyDown={
-                      cell.currentMonth
+                      isClickable
                         ? (event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              if (isFullyBooked) {
-                                toast.error(dayMessage || "Fully booked");
-                                return;
-                              }
-                              onDayClick?.(cell.dateStr);
+                              handleDayClick();
                             }
                           }
                         : undefined
                     }
-                    title={cell.currentMonth ? dayMessage : undefined}
+                    title={
+                      isFullyBooked
+                        ? dayMessage
+                        : canReserve
+                          ? "Click to reserve this date"
+                          : dayMessage
+                    }
                     className={`relative min-h-[75px] rounded-md border p-1 text-xs transition-colors ${
                       cell.currentMonth
                         ? "bg-background hover:border-foreground/20"
@@ -232,9 +249,9 @@ function MonthGrid({ events, onEventClick, venueLabel, onDayClick }) {
                             ? " border-rose-400 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
                             : ""
                     }${
-                      cell.currentMonth && isFullyBooked
+                      isFullyBooked
                         ? " cursor-not-allowed"
-                        : cell.currentMonth && onDayClick
+                        : isClickable
                           ? " cursor-pointer hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                           : ""
                     }`}

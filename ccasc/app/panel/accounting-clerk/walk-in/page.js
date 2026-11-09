@@ -227,6 +227,20 @@ export default function WalkInReservationPage() {
       return changed ? next : prev;
     });
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const venue = params.get("venueId");
+    const date = params.get("date");
+    if (venue === "1" || venue === "2") setVenueId(venue);
+    if (date) {
+      setSelectedDates(new Set([date]));
+      const d = new Date(`${date}T12:00:00`);
+      if (!Number.isNaN(d.getTime())) {
+        setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+      }
+    }
+  }, []);
+
   // Search debounce ref
   const searchTimeoutRef = React.useRef(null);
   const submitLockRef = React.useRef(false);

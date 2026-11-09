@@ -312,6 +312,19 @@ export default function CoordinatorReservationsPage() {
       return changed ? next : prev;
     });
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const date = params.get("date");
+    if (!date) return;
+    queueMicrotask(() => {
+      setSelectedDates(new Set([date]));
+      const d = new Date(`${date}T12:00:00`);
+      if (!Number.isNaN(d.getTime())) {
+        setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+      }
+    });
+  }, []);
+
   const [historyReservations, setHistoryReservations] = React.useState([]);
   const [historyLoading, setHistoryLoading] = React.useState(true);
   const [historySearch, setHistorySearch] = React.useState("");
