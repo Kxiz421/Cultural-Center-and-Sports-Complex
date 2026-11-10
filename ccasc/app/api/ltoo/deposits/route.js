@@ -78,6 +78,7 @@ export async function POST(request) {
       reservationId,
       amount,
       reason,
+      lines,
     } = body;
 
     const parsedReservationId = parseInt(reservationId, 10);
@@ -98,6 +99,7 @@ export async function POST(request) {
         bookingId: booking.bookingId,
         amount,
         reason,
+        lines,
         staffId,
       });
       if (!result.ok) {
@@ -111,7 +113,7 @@ export async function POST(request) {
           targetName: booking.reservation?.eventType || "Deposit",
           performedById: acting.performedBy,
           performedByName: recordedBy,
-          details: `Deducted ${formatPhp(result.deduction.amount)} from the 10% deposit. Reason: ${reason}`,
+          details: `Deducted ${formatPhp(result.total ?? result.deduction.amount)} from the 10% deposit. Reason: ${result.reason || reason}`,
         },
       });
 
@@ -122,8 +124,8 @@ export async function POST(request) {
         const ctx = reservationContext(booking.reservation, parsedReservationId);
         const overLimit = outstanding > 0;
         const message =
-          `A deduction of ${formatPhp(result.deduction.amount)} was applied to your 10% deposit` +
-          `${ctx.text ? ` for ${ctx.text}` : ""} (reason: ${result.deduction.reason}).` +
+          `A deduction of ${formatPhp(result.total ?? result.deduction.amount)} was applied to your 10% deposit` +
+          `${ctx.text ? ` for ${ctx.text}` : ""} (damages: ${result.reason || reason}).` +
           (overLimit
             ? ` This exceeds the amount held, leaving an outstanding balance of ${formatPhp(outstanding)}.`
             : ` Remaining deposit: ${formatPhp(remaining)}.`);
@@ -142,8 +144,8 @@ export async function POST(request) {
               ? "A deduction was applied to your 10% deposit and went beyond the amount you paid."
               : "A deduction was applied to your 10% deposit.",
             rows: [
-              { label: "Deduction", value: formatPhp(result.deduction.amount) },
-              { label: "Reason", value: result.deduction.reason },
+              { label: "Deduction", value: formatPhp(result.total ?? result.deduction.amount) },
+              { label: "Reason", value: result.reason || result.deduction.reason },
               ...ctx.rows,
               { label: "Remaining deposit", value: formatPhp(remaining) },
               ...(overLimit

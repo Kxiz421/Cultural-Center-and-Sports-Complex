@@ -230,33 +230,105 @@ export async function consumeDeposit(prisma, {
   amount,
   reason,
   staffId = null,
+  lines = null,
 }) {
   const deposit = await prisma.deposit.findUnique({
     where: { bookingId },
     include: { status: true, deductions: true },
   });
-  const check = validateDepositConsume(deposit, amount);
+
+  // Itemised damages: one line per particular, quantity capped by stock.
+  let itemLines = null;
+  let totalAmount = amount;
+  let freeTextReason = null;
+
+  if (Array.isArray(lines) && lines.length > 0) {
+    itemLines = [];
+    for (const raw of lines) {
+      const particularId = parseInt(raw?.particularId, 10);
+      const quantity = parseInt(raw?.quantity, 10);
+      if (
+        !Number.isInteger(particularId) ||
+        !Number.isInteger(quantity) ||
+        quantity <= 0
+      ) {
+        return {
+          ok: false,
+          error:
+            "Each damaged item needs a particular and a quantity greater than zero.",
+        };
+      }
+      const particular = await prisma.particular.findUnique({
+        where: { particularId },
+        select: {
+          particularName: true,
+          inventory: { select: { quantity: true, unitCost: true } },
+        },
+      });
+      if (!particular) {
+        return { ok: false, error: "That particular could not be found." };
+      }
+      const available = Number(particular.inventory?.quantity ?? 0);
+      if (quantity > available) {
+        return {
+          ok: false,
+          error: `Only ${available} ${particular.particularName} left in stock.`,
+        };
+      }
+      const unitCost = roundMoney(particular.inventory?.unitCost ?? 0);
+      itemLines.push({
+        particularId,
+        quantity,
+        unitCost,
+        amount: roundMoney(unitCost * quantity),
+        reason: `${particular.particularName} × ${quantity}`,
+      });
+    }
+    totalAmount = itemLines.reduce((sum, line) => sum + line.amount, 0);
+  } else {
+    const reasonCheck = validateDeductionReason(reason);
+    if (!reasonCheck.ok) {
+      return { ok: false, error: reasonCheck.error };
+    }
+    freeTextReason = reasonCheck.reason;
+  }
+
+  const check = validateDepositConsume(deposit, totalAmount);
   if (!check.ok) {
     return { ok: false, error: check.error };
-  }
-  const reasonCheck = validateDeductionReason(reason);
-  if (!reasonCheck.ok) {
-    return { ok: false, error: reasonCheck.error };
   }
 
   const nextRemaining = roundMoney(check.remaining - check.deduction);
   const nextStatusName = nextRemaining <= 0 ? "Fully Deducted" : "Deducted";
   const nextStatus = await getOrCreateDepositStatus(prisma, nextStatusName);
 
+  const deductionCreates = itemLines
+    ? itemLines.map((line) =>
+        prisma.depositDeduction.create({
+          data: {
+            depositId: deposit.depositId,
+            amount: line.amount,
+            reason: line.reason,
+            particularId: line.particularId,
+            quantity: line.quantity,
+            unitCost: line.unitCost,
+            staffId: staffId || null,
+          },
+        })
+      )
+    : [
+        prisma.depositDeduction.create({
+          data: {
+            depositId: deposit.depositId,
+            amount: check.deduction,
+            reason: freeTextReason,
+            staffId: staffId || null,
+          },
+        }),
+      ];
+
   const [deduction] = await prisma.$transaction([
-    prisma.depositDeduction.create({
-      data: {
-        depositId: deposit.depositId,
-        amount: check.deduction,
-        reason: reasonCheck.reason,
-        staffId: staffId || null,
-      },
-    }),
+    ...deductionCreates,
     prisma.deposit.update({
       where: { depositId: deposit.depositId },
       data: {
@@ -269,10 +341,23 @@ export async function consumeDeposit(prisma, {
 
   const updated = await prisma.deposit.findUnique({
     where: { depositId: deposit.depositId },
-    include: { status: true, deductions: { orderBy: { recordedAt: "desc" } } },
+    include: {
+      status: true,
+      deductions: {
+        orderBy: { recordedAt: "desc" },
+        include: { particular: { select: { particularName: true } } },
+      },
+    },
   });
 
-  return { ok: true, deduction, deposit: updated };
+  return {
+    ok: true,
+    deduction,
+    deposit: updated,
+    lines: itemLines,
+    total: check.deduction,
+    reason: freeTextReason || (itemLines || []).map((l) => l.reason).join(", "),
+  };
 }
 
 export function validateDepositPullout(deposit, eventDate = null, additionalDates = null, eventStatus = null) {

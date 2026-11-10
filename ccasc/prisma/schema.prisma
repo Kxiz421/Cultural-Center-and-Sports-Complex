@@ -217,6 +217,7 @@ model Particular {
   status              AvailabilityStatus   @relation(fields: [statusId], references: [statusId])
   reservedParticulars ReservedParticular[]
   transactions        ParticularTransaction[]
+  depositDeductions   DepositDeduction[]
 
   @@map("Particular")
 }
@@ -462,9 +463,14 @@ model DepositDeduction {
   reason      String   @map("reason") @db.VarChar(500)
   recordedAt  DateTime @default(now()) @map("recorded_at")
   staffId     Int?     @map("staff_id")
+  // Itemised damage line: the particular damaged, how many, and its unit cost.
+  particularId Int?     @map("particular_id")
+  quantity     Int?     @map("quantity")
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(10, 2)
 
-  deposit Deposit @relation(fields: [depositId], references: [depositId], onDelete: Cascade)
-  staff   Staff?  @relation(fields: [staffId], references: [staffId])
+  deposit    Deposit     @relation(fields: [depositId], references: [depositId], onDelete: Cascade)
+  staff      Staff?      @relation(fields: [staffId], references: [staffId])
+  particular Particular? @relation(fields: [particularId], references: [particularId])
 
   @@map("DepositDeduction")
 }
