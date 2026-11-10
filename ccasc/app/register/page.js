@@ -1139,6 +1139,9 @@ export default function RegisterPage() {
                         inputMode="numeric"
                         aria-invalid={Boolean(errors.contactNumber)}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Only TM, Globe, DITO and GOMO SIMs are allowed.
+                      </p>
                       <FieldError>{errors.contactNumber}</FieldError>
                       {!errors.contactNumber && phoneNetworkProblem ? (
                         <p className="text-sm text-destructive">
