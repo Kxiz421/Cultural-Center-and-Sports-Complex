@@ -77,9 +77,9 @@ export function registrationNetworkProblem(input) {
   if (!network) return null;
   if (ACCEPTED_REGISTRATION_NETWORKS.has(network.key)) return null;
   if (network.key === "unknown") {
-    return "That doesn't look like a Globe, TM, DITO, or GOMO mobile number. Please check the number.";
+    return "Enter a valid mobile number. Only Globe, TM, DITO, or GOMO numbers are accepted.";
   }
-  return `This looks like a ${network.label} number. Only Globe, TM, DITO, and GOMO numbers are accepted.`;
+  return `${network.label} numbers aren't accepted. Please enter a Globe, TM, DITO, or GOMO number.`;
 }
 
 export function phLookupForms(input) {
