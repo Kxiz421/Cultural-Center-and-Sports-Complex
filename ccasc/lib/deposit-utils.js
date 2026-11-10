@@ -290,7 +290,11 @@ export function validateDepositPullout(deposit, eventDate = null, additionalDate
     return { ok: false, error: "Record the 10% deposit before pulling it out." };
   }
   if (!isEventEnded(eventDate, additionalDates, eventStatus)) {
-    return { ok: false, error: "The 10% deposit cannot be pulled out until the event has ended." };
+    return {
+      ok: false,
+      error:
+        "The 10% deposit cannot be pulled out until the last event date has ended.",
+    };
   }
   return { ok: true, releaseAmount: getDepositRemaining(deposit) };
 }
