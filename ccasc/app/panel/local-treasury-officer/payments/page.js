@@ -268,6 +268,22 @@ export default function LTOOPaymentsPage() {
   const [discountOnlySubmission, setDiscountOnlySubmission] = React.useState(false);
   const [consumeAmount, setConsumeAmount] = React.useState("");
   const [consumeReason, setConsumeReason] = React.useState("");
+  // Itemised damages: { particularId, quantity } lines. Only particulars are
+  // offered and a quantity can never exceed the stock on hand.
+  const [damageLines, setDamageLines] = React.useState([]);
+  const [particularCatalog, setParticularCatalog] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/particulars")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!cancelled) setParticularCatalog(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [settleConfirmOpen, setSettleConfirmOpen] = React.useState(false);
   const [depositSaving, setDepositSaving] = React.useState(false);
   const [depositPanelOpen, setDepositPanelOpen] = React.useState(false);
@@ -845,6 +861,17 @@ export default function LTOOPaymentsPage() {
   const handleConsumeDeposit = async () => {
     const reservation = (historyOpen && historyReservation) || selectedReservation;
     if (!reservation) return;
+    const damagePayload = (damageLines || [])
+      .map((line) => ({
+        particularId: parseInt(line.particularId, 10),
+        quantity: parseInt(line.quantity, 10),
+      }))
+      .filter(
+        (line) =>
+          Number.isInteger(line.particularId) &&
+          Number.isInteger(line.quantity) &&
+          line.quantity > 0
+      );
     setDepositSaving(true);
     try {
       const performedBy = typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
@@ -855,8 +882,12 @@ export default function LTOOPaymentsPage() {
         body: JSON.stringify({
           action: "consume",
           reservationId: reservation.reservationId,
-          amount: roundMoney(consumeAmount),
-          reason: consumeReason,
+          ...(damagePayload.length > 0
+            ? { lines: damagePayload }
+            : {
+                amount: roundMoney(consumeAmount),
+                reason: consumeReason,
+              }),
           performedBy,
           performedByName,
         }),
@@ -866,6 +897,7 @@ export default function LTOOPaymentsPage() {
       toast.success("Deposit deduction recorded");
       setConsumeAmount("");
       setConsumeReason("");
+      setDamageLines([]);
       applyDepositSnapshot(reservation.reservationId, data.deposit);
       setDepositPanelOpen(true);
       await refreshSelectedReservation();
@@ -1899,27 +1931,143 @@ export default function LTOOPaymentsPage() {
                     </div>
                   )}
                   {canConsumeDeposit(historyReservation.deposit) && (
-                    <div className="space-y-2 border-t pt-2">
-                      <Label>Consume (damages / overtime)</Label>
-                      <Input
-                        inputMode="decimal"
-                        placeholder="Deduction amount"
-                        value={consumeAmount}
-                        onChange={(e) => setConsumeAmount(sanitizeMoneyInput(e.target.value))}
-                        className="tabular-nums"
-                      />
-                      <Textarea
-                        placeholder="Reason for deduction (letters only)"
-                        value={consumeReason}
-                        onChange={(e) => setConsumeReason(sanitizeDeductionReason(e.target.value))}
-                        rows={2}
-                      />
+                    <div className="space-y-3 border-t pt-2">
+                      <Label>Damages (per particular)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Only particulars can be deducted, and each quantity is
+                        capped at the stock on hand.
+                      </p>
+                      {damageLines.map((line, idx) => {
+                        const selected = particularCatalog.find(
+                          (p) => p.particularId === line.particularId
+                        );
+                        const maxQty = Number(selected?.totalQuantity || 0);
+                        return (
+                          <div key={idx} className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <Select
+                                value={
+                                  line.particularId
+                                    ? String(line.particularId)
+                                    : undefined
+                                }
+                                onValueChange={(value) => {
+                                  const id = parseInt(value, 10);
+                                  const stock = Number(
+                                    particularCatalog.find(
+                                      (p) => p.particularId === id
+                                    )?.totalQuantity || 0
+                                  );
+                                  setDamageLines((prev) =>
+                                    prev.map((l, i) =>
+                                      i === idx
+                                        ? {
+                                            ...l,
+                                            particularId: id,
+                                            quantity: Math.max(
+                                              1,
+                                              Math.min(l.quantity || 1, stock || 1)
+                                            ),
+                                          }
+                                        : l
+                                    )
+                                  );
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select particular" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {particularCatalog.map((p) => (
+                                    <SelectItem
+                                      key={p.particularId}
+                                      value={String(p.particularId)}
+                                    >
+                                      {p.particularName} ({p.totalQuantity} in stock)
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={maxQty || undefined}
+                              value={line.quantity}
+                              onChange={(e) => {
+                                const q = parseInt(e.target.value, 10);
+                                const nextQ = Number.isInteger(q) ? q : 1;
+                                setDamageLines((prev) =>
+                                  prev.map((l, i) =>
+                                    i === idx
+                                      ? {
+                                          ...l,
+                                          quantity: Math.max(
+                                            1,
+                                            maxQty ? Math.min(nextQ, maxQty) : nextQ
+                                          ),
+                                        }
+                                      : l
+                                  )
+                                );
+                              }}
+                              className="w-20 tabular-nums"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setDamageLines((prev) =>
+                                  prev.filter((_, i) => i !== idx)
+                                )
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setDamageLines((prev) => [
+                              ...prev,
+                              { particularId: null, quantity: 1 },
+                            ])
+                          }
+                        >
+                          Add damage
+                        </Button>
+                        {damageLines.length > 0 && (
+                          <span className="text-sm font-medium tabular-nums">
+                            Total:{" "}
+                            {formatPhp(
+                              damageLines.reduce((sum, l) => {
+                                const p = particularCatalog.find(
+                                  (x) => x.particularId === l.particularId
+                                );
+                                return (
+                                  sum +
+                                  (p
+                                    ? Number(p.unitCost || 0) *
+                                      (Number(l.quantity) || 0)
+                                    : 0)
+                                );
+                              }, 0)
+                            )}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={depositSaving || !consumeAmount || !consumeReason.trim()}
+                          disabled={depositSaving || damageLines.length === 0}
                           onClick={handleConsumeDeposit}
                         >
                           Record deduction
