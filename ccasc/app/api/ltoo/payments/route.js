@@ -885,7 +885,7 @@ export async function POST(request) {
       // reservation no longer owes the deposit anywhere in the app.
       if (applyDepositRule === false) {
         await prisma.reservation.update({
-          where: { reservationId: reservation.reservationId },
+          where: { reservationId },
           data: { applyDepositRule: false },
         });
       }
