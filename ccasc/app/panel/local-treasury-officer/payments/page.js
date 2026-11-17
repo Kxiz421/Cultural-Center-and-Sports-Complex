@@ -708,7 +708,7 @@ export default function LTOOPaymentsPage() {
       // trigger a spurious "cannot exceed" error.
       if (discountEnabled && discountCheck.ok) {
         const projected = breakdownFromReservation(
-          selectedReservation,
+          { ...selectedReservation, applyDepositRule },
           pendingDiscount
         );
         if (projected) {
@@ -721,7 +721,7 @@ export default function LTOOPaymentsPage() {
       }
 
       const current = breakdownFromReservation(
-        selectedReservation,
+        { ...selectedReservation, applyDepositRule },
         discountCheck.ok ? pendingDiscount : 0
       );
       const check = validatePaymentAmount(current, paymentType || "full", amount, {
@@ -729,11 +729,14 @@ export default function LTOOPaymentsPage() {
       });
       if (!check.ok) {
         setAmountError(check.error);
+        toast.error(check.error || "This payment cannot be recorded.");
         return;
       }
 
       if (amount > current.remainingBalance) {
-        setAmountError(`Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`);
+        const message = `Amount cannot exceed ${formatPhp(current.remainingBalance)} remaining.`;
+        setAmountError(message);
+        toast.error(message);
         return;
       }
 
