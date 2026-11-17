@@ -1594,12 +1594,27 @@ export default function LTOOPaymentsPage() {
                   onChange={(e) => {
                     const on = e.target.checked;
                     setApplyDepositRule(on);
-                    if (
-                      !on &&
-                      ["deposit", "both", "both_plus"].includes(paymentType)
-                    ) {
-                      setPaymentType("downpayment");
-                    }
+                    // Recompute the figures for the new rule so the type and the
+                    // amount both match what will actually be recorded.
+                    const nextBreakdown = breakdownFromReservation({
+                      ...selectedReservation,
+                      applyDepositRule: on,
+                    });
+                    const needsDeposit = [
+                      "deposit",
+                      "both",
+                      "both_plus",
+                    ].includes(paymentType);
+                    const nextType =
+                      !on && needsDeposit ? "downpayment" : paymentType;
+                    if (nextType !== paymentType) setPaymentType(nextType);
+                    const defaultAmount = getDefaultPaymentAmount(
+                      nextBreakdown,
+                      nextType
+                    );
+                    setPaymentAmount(
+                      defaultAmount > 0 ? formatMoneyInput(defaultAmount) : ""
+                    );
                   }}
                 />
                 Apply 10% deposit rule

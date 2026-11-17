@@ -166,6 +166,24 @@ export async function GET(request) {
         bookings: {
           include: {
             status: { select: { status: true } },
+            deposit: {
+              select: {
+                amountPaid: true,
+                requiredAmount: true,
+                amountAfterDeductions: true,
+                deductions: {
+                  select: {
+                    deductionId: true,
+                    amount: true,
+                    reason: true,
+                    quantity: true,
+                    unitCost: true,
+                    recordedAt: true,
+                  },
+                  orderBy: { recordedAt: "asc" },
+                },
+              },
+            },
             payments: {
               select: {
                 amountPaid: true,
@@ -310,6 +328,23 @@ export async function GET(request) {
           amountPaid: totalPaid,
           totalAmount: totalAmount,
           applyDepositRule: r.applyDepositRule !== false,
+          // Damages / overtime taken from the 10% deposit, for the client's and
+          // the PDA's reservations view.
+          depositDeductions: (r.bookings[0]?.deposit?.deductions || []).map((d) => ({
+            deductionId: d.deductionId,
+            label: d.reason,
+            amount: Number(d.amount) || 0,
+            quantity: d.quantity != null ? Number(d.quantity) : null,
+            unitCost: d.unitCost != null ? Number(d.unitCost) : null,
+            recordedAt: d.recordedAt,
+          })),
+          depositRemaining: r.bookings[0]?.deposit
+            ? Number(
+                r.bookings[0].deposit.amountAfterDeductions ??
+                  r.bookings[0].deposit.amountPaid ??
+                  0
+              )
+            : null,
           paymentStatus,
           calendarVisible,
           downPaymentDeadline,

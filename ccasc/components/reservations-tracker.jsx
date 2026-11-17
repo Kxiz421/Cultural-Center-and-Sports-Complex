@@ -424,6 +424,38 @@ function ReservationDetail({ reservation, orderOfPaymentHref, documentsHref }) {
           </div>
         </div>
 
+        {/* Damages / overtime taken from the 10% deposit */}
+        {Array.isArray(reservation.depositDeductions) &&
+          reservation.depositDeductions.length > 0 && (
+            <div className="space-y-1.5 rounded-md border p-3 text-sm">
+              <p className="font-medium">Deposit deductions</p>
+              {reservation.depositDeductions.map((deduction) => (
+                <div
+                  key={deduction.deductionId}
+                  className="flex justify-between gap-3"
+                >
+                  <span className="text-muted-foreground">
+                    {deduction.label}
+                    {deduction.quantity != null && deduction.unitCost != null
+                      ? ` (${deduction.quantity} × ${formatPhp(deduction.unitCost)})`
+                      : ""}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatPhp(deduction.amount)}
+                  </span>
+                </div>
+              ))}
+              {reservation.depositRemaining != null && (
+                <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
+                  <span>Deposit remaining</span>
+                  <span className="tabular-nums">
+                    {formatPhp(Math.max(0, reservation.depositRemaining))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
         {/* Deadlines */}
         <div>
           <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">

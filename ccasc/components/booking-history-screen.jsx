@@ -371,7 +371,9 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
     : [src.eventDate].filter(Boolean);
   const lines = isReservation && item ? buildPaymentLines(src, dateList) : [];
   const totalAmount = isReservation ? Number(src.totalAmount) || 0 : 0;
-  const totalPayable = totalAmount * 1.1;
+  // The 10% deposit is only added when the LTOO left the rule on.
+  const depositApplies = src.applyDepositRule !== false;
+  const totalPayable = totalAmount * (depositApplies ? 1.1 : 1);
   const amountPaid = Number(src.amountPaid ?? item?.amount ?? 0);
   const oopHref = item && orderOfPaymentHref ? orderOfPaymentHref(item) : null;
 
@@ -449,24 +451,63 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
 
               <div className="bg-muted/30 space-y-1.5 rounded-md border p-3">
                 <SummaryRow
-                  label="Total Amount (incl. 10% deposit)"
+                  label={
+                    depositApplies
+                      ? "Total Amount (incl. 10% deposit)"
+                      : "Total Amount"
+                  }
                   value={totalPayable ? `₱${formatPeso(totalPayable)}` : "—"}
                 />
                 <SummaryRow
                   label="Amount Paid"
                   value={`₱${formatPeso(amountPaid)}`}
                 />
-                {isReservation && src.requiredDeposit != null && (
-                  <SummaryRow
-                    label="10% Deposit (Required)"
-                    value={`₱${formatPeso(src.requiredDeposit)}`}
-                  />
-                )}
+                {isReservation &&
+                  depositApplies &&
+                  src.requiredDeposit != null && (
+                    <SummaryRow
+                      label="10% Deposit (Required)"
+                      value={`₱${formatPeso(src.requiredDeposit)}`}
+                    />
+                  )}
                 <SummaryRow
                   label="Balance"
                   value={`₱${formatPeso(Math.max(0, totalPayable - amountPaid))}`}
                 />
               </div>
+
+              {isReservation &&
+                Array.isArray(src.depositDeductions) &&
+                src.depositDeductions.length > 0 && (
+                  <div className="space-y-1.5 rounded-md border p-3 text-sm">
+                    <p className="font-medium">Deposit deductions</p>
+                    {src.depositDeductions.map((deduction) => (
+                      <div
+                        key={deduction.deductionId}
+                        className="flex justify-between gap-3"
+                      >
+                        <span className="text-muted-foreground">
+                          {deduction.label}
+                          {deduction.quantity != null &&
+                          deduction.unitCost != null
+                            ? ` (${deduction.quantity} × ₱${formatPeso(deduction.unitCost)})`
+                            : ""}
+                        </span>
+                        <span className="tabular-nums">
+                          ₱{formatPeso(deduction.amount)}
+                        </span>
+                      </div>
+                    ))}
+                    {src.depositRemaining != null && (
+                      <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
+                        <span>Deposit remaining</span>
+                        <span className="tabular-nums">
+                          ₱{formatPeso(Math.max(0, src.depositRemaining))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
             </div>
 
             <DialogFooter>
