@@ -62,7 +62,7 @@ function collectBookingPayments(bookings) {
   return (bookings || []).flatMap((booking) => booking.payments || []);
 }
 
-function billedBreakdownForReservation(originalBase, bookings, depositRecord = null) {
+function billedBreakdownForReservation(originalBase, bookings, depositRecord = null, applyDepositRule = true) {
   const payments = collectBookingPayments(bookings);
   const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amountPaid || 0), 0);
   const totalDiscount = sumPaymentDiscounts(payments);
@@ -70,7 +70,7 @@ function billedBreakdownForReservation(originalBase, bookings, depositRecord = n
     originalBase,
     totalPaid,
     depositRecord ?? getBookingDeposit(bookings),
-    { originalBase, totalDiscount }
+    { originalBase, totalDiscount, applyDepositRule }
   );
 }
 
@@ -509,6 +509,7 @@ export async function POST(request) {
       discountMode,
       discountPeso,
       discountPercent,
+      applyDepositRule = true,
     } = body;
 
     if (!clientName) {
@@ -614,7 +615,8 @@ export async function POST(request) {
       const currentBreakdown = billedBreakdownForReservation(
         totalAmt,
         reservation.bookings,
-        getBookingDeposit(reservation.bookings)
+        getBookingDeposit(reservation.bookings),
+        applyDepositRule !== false
       );
       const totalPaid = currentBreakdown.paid;
 
@@ -646,7 +648,8 @@ export async function POST(request) {
 
       const billedAfterDiscount = getBilledTotals(
         currentBreakdown.originalBase,
-        currentBreakdown.totalDiscount + discountAmount
+        currentBreakdown.totalDiscount + discountAmount,
+        applyDepositRule !== false
       );
       const breakdown = computePaymentBreakdown(
         billedAfterDiscount.base,
@@ -655,6 +658,7 @@ export async function POST(request) {
         {
           originalBase: currentBreakdown.originalBase,
           totalDiscount: currentBreakdown.totalDiscount + discountAmount,
+          applyDepositRule: applyDepositRule !== false,
         }
       );
       depositRequiredAmount = breakdown.requiredDeposit;
@@ -873,6 +877,15 @@ export async function POST(request) {
           entryType: "payment",
         },
       });
+
+      // Remember a payment recorded with the 10% deposit rule turned off, so the
+      // reservation no longer owes the deposit anywhere in the app.
+      if (applyDepositRule === false) {
+        await prisma.reservation.update({
+          where: { reservationId: reservation.reservationId },
+          data: { applyDepositRule: false },
+        });
+      }
     }
 
     const paymentTypeLabel = isDiscountOnly ? "Discount" : getPaymentTypeLabel(resolvedPaymentType);

@@ -106,7 +106,11 @@ function breakdownFromReservation(reservation, extraDiscount = 0) {
     originalBase,
     reservation.totalPaid,
     depositRecord,
-    { originalBase, totalDiscount: existingDiscount + extraDiscount }
+    {
+      originalBase,
+      totalDiscount: existingDiscount + extraDiscount,
+      applyDepositRule: reservation.applyDepositRule !== false,
+    }
   );
 }
 
@@ -266,6 +270,8 @@ export default function LTOOPaymentsPage() {
   const [discountPeso, setDiscountPeso] = React.useState("");
   const [discountPercent, setDiscountPercent] = React.useState("");
   const [discountOnlySubmission, setDiscountOnlySubmission] = React.useState(false);
+  // Off = this payment records no 10% deposit and the reservation no longer owes it.
+  const [applyDepositRule, setApplyDepositRule] = React.useState(true);
   const [consumeAmount, setConsumeAmount] = React.useState("");
   const [consumeReason, setConsumeReason] = React.useState("");
   // Itemised damages: { particularId, quantity } lines. Only particulars are
@@ -434,9 +440,12 @@ export default function LTOOPaymentsPage() {
       // double-count it as a new extra discount on top of the saved one.
       const hasSaved = (selectedReservation?.totalDiscount ?? 0) > 0;
       const extra = hasSaved ? 0 : (discountCheck.ok ? pendingDiscount : 0);
-      return breakdownFromReservation(selectedReservation, extra);
+      return breakdownFromReservation(
+        { ...selectedReservation, applyDepositRule },
+        extra
+      );
     },
-    [selectedReservation, pendingDiscount, discountCheck.ok]
+    [selectedReservation, pendingDiscount, discountCheck.ok, applyDepositRule]
   );
 
   const projectedBreakdown = React.useMemo(() => {
@@ -743,6 +752,7 @@ export default function LTOOPaymentsPage() {
             discountMode,
             discountPeso: discountMode === "full" ? pendingDiscount : roundMoney(discountPeso || 0),
             discountPercent: discountMode === "full" ? 100 : Number(discountPercent || 0),
+            applyDepositRule,
           }),
         });
 
@@ -1288,14 +1298,32 @@ export default function LTOOPaymentsPage() {
                     <span className="text-muted-foreground">Base total</span>
                     <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalBase)}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Base + 10%</span>
-                    <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">10% Deposit</span>
-                    <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.requiredDeposit)}</span>
-                  </div>
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={applyDepositRule}
+                      onChange={(e) => setApplyDepositRule(e.target.checked)}
+                    />
+                    Apply 10% deposit rule
+                  </label>
+                  {applyDepositRule ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Base + 10%</span>
+                        <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalTotalPayable)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">10% Deposit</span>
+                        <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.requiredDeposit)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Base (no 10% deposit)</span>
+                      <span className="tabular-nums font-semibold">{formatPhp(roundMoney(selectedReservation?.totalAmount || 0))}</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border/80 pt-2">
                     <span className="text-muted-foreground">
                       Payment selected:{" "}
@@ -1316,10 +1344,12 @@ export default function LTOOPaymentsPage() {
                     {getPaymentCheckIcon(currentBreakdown.downPaymentMet)}
                     50% down {formatPhp(currentBreakdown.requiredDownPayment)}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
-                    {getPaymentCheckIcon(currentBreakdown.depositMet)}
-                    10% deposit {formatPhp(currentBreakdown.requiredDeposit)}
-                  </span>
+                  {applyDepositRule && (
+                    <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
+                      {getPaymentCheckIcon(currentBreakdown.depositMet)}
+                      10% deposit {formatPhp(currentBreakdown.requiredDeposit)}
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-sm">
                     {getPaymentCheckIcon(currentBreakdown.balanceSettled)}
                     Balance {currentBreakdown.balanceSettled ? "settled" : "pending"}
