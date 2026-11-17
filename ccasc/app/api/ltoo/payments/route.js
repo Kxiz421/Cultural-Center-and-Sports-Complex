@@ -897,22 +897,27 @@ export async function POST(request) {
       maximumFractionDigits: 2,
     });
 
-    // STEP 10 — Record who did it, in the activity log.
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        action: isDiscountOnly ? "DISCOUNT_APPLIED" : "PAYMENT_RECORDED",
-        targetUserId: `PAY-${payment.paymentId}`,
-        targetName: clientName,
-        performedById: acting.performedBy,
-        performedByName: acting.performedByName,
-        details: isDiscountOnly
-          ? `Discount of ${formatPhp(discountAmount)} applied. New total after discount: ${formatPhp(paymentAmountAfterDiscount || 0)}. Status: ${statusToUse}`
-          : paymentDiscountAmount > 0
-          ? `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel} with ${formatPhp(paymentDiscountAmount)} discount. Status: ${statusToUse}`
-          : `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
-      },
-    });
+    // STEP 10 — Record who did it, in the activity log, then STEP 11 — tell the
+    // client. The payment row is already committed at this point, so a failure
+    // here must not turn a successful payment into an error for the officer.
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: isDiscountOnly ? "DISCOUNT_APPLIED" : "PAYMENT_RECORDED",
+          targetUserId: `PAY-${payment.paymentId}`,
+          targetName: clientName,
+          performedById: acting.performedBy,
+          performedByName: acting.performedByName,
+          details: isDiscountOnly
+            ? `Discount of ${formatPhp(discountAmount)} applied. New total after discount: ${formatPhp(paymentAmountAfterDiscount || 0)}. Status: ${statusToUse}`
+            : paymentDiscountAmount > 0
+            ? `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel} with ${formatPhp(paymentDiscountAmount)} discount. Status: ${statusToUse}`
+            : `Payment of ₱${formattedAmount} recorded for ${paymentTypeLabel}. Status: ${statusToUse}`,
+        },
+      });
+    } catch (auditError) {
+      console.error("Payment recorded, but the audit log failed:", auditError);
+    }
 
     // STEP 11 — Tell the client about the payment or discount (inbox + email + text).
     // Notify the client about the recorded payment or discount
@@ -933,8 +938,9 @@ export async function POST(request) {
             fullyPaid ? " Your reservation is now fully paid." : ""
           }`;
 
-      await notifyClientEvent({
-        clientId: notifyClientId,
+      try {
+        await notifyClientEvent({
+          clientId: notifyClientId,
         type: isDiscountOnly ? "discount" : "payment",
         message,
         email: {
@@ -968,6 +974,9 @@ export async function POST(request) {
         },
         sms: message,
       });
+      } catch (notifyError) {
+        console.error("Payment recorded, but notifying the client failed:", notifyError);
+      }
     }
 
     // STEP 12 — Reply to the screen with the new payment id.
@@ -975,7 +984,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Payments POST error:", error);
     return NextResponse.json(
-      { error: "Failed to record payment" },
+      { error: error.message || "Failed to record payment" },
       { status: 500 }
     );
   }
