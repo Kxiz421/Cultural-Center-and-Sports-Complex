@@ -690,15 +690,25 @@ export default function LTOOPaymentsPage() {
   };
 
   const handleRecordPayment = async (isUpdateDiscount = false, forceDiscountOnly = false) => {
-    if (!selectedReservation) return;
+    if (!selectedReservation) {
+      toast.error("No reservation selected. Close this and pick one again.");
+      return;
+    }
 
     const isDiscountOnly = forceDiscountOnly || discountOnlySubmission;
 
     // Payment with cash — validate and close after saving
     if (!isDiscountOnly && !isUpdateDiscount) {
       let amount = roundMoney(paymentAmount || 0);
+      if (!(amount > 0)) {
+        setAmountError("Enter the amount being paid.");
+        toast.error("Enter the amount being paid.");
+        return;
+      }
       if (discountEnabled && pendingDiscount > 0 && !discountCheck.ok) {
-        setErrors({ discount: discountCheck.error || "Enter a valid discount." });
+        const message = discountCheck.error || "Enter a valid discount.";
+        setErrors({ discount: message });
+        toast.error(message);
         return;
       }
       clearError("discount");
@@ -1826,6 +1836,17 @@ export default function LTOOPaymentsPage() {
                 variant="success"
                 onClick={() => {
                   setDiscountOnlySubmission(false);
+                  if (!paymentAmount || !(roundMoney(paymentAmount) > 0)) {
+                    toast.error("Enter the amount being paid.");
+                    return;
+                  }
+                  if (!paymentAmountCheck.ok) {
+                    toast.error(
+                      paymentAmountCheck.error ||
+                        "This amount cannot be recorded with the selected payment type."
+                    );
+                    return;
+                  }
                   setConfirmOpen(true);
                 }}
                 disabled={saving}
@@ -2526,8 +2547,7 @@ export default function LTOOPaymentsPage() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="destructive" onClick={() => { setConfirmOpen(false); setDiscountOnlySubmission(false); }}>Cancel</Button>
-            <Button variant="success" onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>
-              {saving ? "Saving..." : (discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Confirm Discount") : "Confirm")}
+            <Button variant="success" onClick={() => { setConfirmOpen(false); handleRecordPayment(discountOnlySubmission && selectedReservation?.totalDiscount > 0); }} disabled={saving}>              {saving ? "Saving..." : (discountOnlySubmission ? (selectedReservation?.totalDiscount > 0 ? "Update Discount" : "Confirm Discount") : "Confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
