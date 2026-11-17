@@ -201,7 +201,8 @@ export async function GET(request) {
           const breakdown = billedBreakdownForReservation(
             totalAmount,
             r.bookings,
-            getBookingDeposit(r.bookings)
+            getBookingDeposit(r.bookings),
+            r.applyDepositRule !== false
           );
           const deposit = mapDepositSnapshot(getBookingDeposit(r.bookings));
           // Find the existing discount-only payment (amountPaid=0, discountAmount>0)
@@ -234,6 +235,7 @@ export async function GET(request) {
             originalAmount: breakdown.originalBase,
             originalTotalPayable: breakdown.originalTotalPayable,
             totalDiscount: breakdown.totalDiscount,
+            applyDepositRule: r.applyDepositRule !== false,
             totalAmount: breakdown.base,
             totalPaid: breakdown.paid,
             balance: breakdown.remainingBalance,

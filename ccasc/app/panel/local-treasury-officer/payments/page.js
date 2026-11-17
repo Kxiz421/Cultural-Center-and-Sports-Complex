@@ -556,10 +556,15 @@ export default function LTOOPaymentsPage() {
   }), [enrichedReservations]);
 
   const openRecordPayment = (reservation) => {
-    const breakdown = breakdownFromReservation(reservation);
+    const applyDepositRuleNext = reservation.applyDepositRule !== false;
+    const breakdown = breakdownFromReservation({
+      ...reservation,
+      applyDepositRule: applyDepositRuleNext,
+    });
     const next = suggestNextPayment(breakdown);
     const defaultAmount = getDefaultPaymentAmount(breakdown, next.paymentType);
     setSelectedReservation(reservation);
+    setApplyDepositRule(applyDepositRuleNext);
     setPaymentType(next.paymentType);
     setAmountError("");
     setErrors({});
