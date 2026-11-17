@@ -721,6 +721,7 @@ export async function POST(request) {
           {
             originalBase: currentBreakdown.originalBase,
             totalDiscount: currentBreakdown.totalDiscount + discountAmount,
+            applyDepositRule: applyDepositRule !== false,
           }
         );
         statusToUse = afterPayment.balanceSettled ? "Fully Paid" : "Partially Paid";
@@ -1106,6 +1107,7 @@ export async function PATCH(request) {
       {
         originalBase: currentBreakdown.originalBase,
         totalDiscount: currentBreakdown.totalDiscount - oldDiscountAmount + newDiscountAmount,
+        applyDepositRule: reservation.applyDepositRule !== false,
       }
     );
 
