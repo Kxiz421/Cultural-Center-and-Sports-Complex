@@ -1298,15 +1298,6 @@ export default function LTOOPaymentsPage() {
                     <span className="text-muted-foreground">Base total</span>
                     <span className="tabular-nums font-semibold">{formatPhp(currentBreakdown.originalBase)}</span>
                   </div>
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={applyDepositRule}
-                      onChange={(e) => setApplyDepositRule(e.target.checked)}
-                    />
-                    Apply 10% deposit rule
-                  </label>
                   {applyDepositRule ? (
                     <>
                       <div className="flex items-center justify-between gap-3">
@@ -1590,10 +1581,32 @@ export default function LTOOPaymentsPage() {
 
             {step === STEP_RECORD && (
             <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
+              <label className="flex items-center gap-2 text-base font-medium">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={applyDepositRule}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setApplyDepositRule(on);
+                    if (
+                      !on &&
+                      ["deposit", "both", "both_plus"].includes(paymentType)
+                    ) {
+                      setPaymentType("downpayment");
+                    }
+                  }}
+                />
+                Apply 10% deposit rule
+              </label>
               <fieldset className="space-y-2" disabled={(discountEnabled && pendingDiscount > 0) || (currentBreakdown?.balanceSettled && !discountSettlesRemaining)}>
                 <legend className="text-lg font-semibold">Record What?</legend>
                 <div className="space-y-2">
-                  {PAYMENT_RADIO_OPTIONS.map((option) => {
+                  {PAYMENT_RADIO_OPTIONS.filter(
+                    (option) =>
+                      applyDepositRule ||
+                      !["deposit", "both", "both_plus"].includes(option.value)
+                  ).map((option) => {
                     const allowed = currentBreakdown
                       ? isPaymentTypeAllowed(currentBreakdown, option.value)
                       : false;
