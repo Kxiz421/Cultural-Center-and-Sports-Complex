@@ -120,6 +120,7 @@ function OrderOfPaymentContent() {
         eventDates={dateList}
         venueName={data.venue}
         clientIsPda={Boolean(data.clientIsPda)}
+        applyDepositRule={data.applyDepositRule !== false}
       />
     </div>
   );

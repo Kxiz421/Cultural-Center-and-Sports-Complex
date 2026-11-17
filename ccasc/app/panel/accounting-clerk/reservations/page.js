@@ -76,6 +76,7 @@ function buildOrderOfPayment(reservation) {
     eventDates: dateList,
     venueName: reservation.venue,
     clientIsPda: Boolean(reservation.clientIsPda),
+    applyDepositRule: reservation.applyDepositRule !== false,
   };
 }
 
@@ -192,6 +193,7 @@ export default function AccountingReservationsPage() {
             eventDates={orderOfPayment.eventDates}
             venueName={orderOfPayment.venueName}
             clientIsPda={Boolean(orderOfPayment.clientIsPda)}
+            applyDepositRule={orderOfPayment.applyDepositRule !== false}
           />
         </div>
       )}

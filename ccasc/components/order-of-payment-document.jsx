@@ -936,6 +936,9 @@ export default function OrderOfPaymentDocument({
   // Provincial Department Agency bookings are billed to the Provincial
   // Government Office, so their total prints as "Charged to PGO".
   clientIsPda = false,
+  // Off = the LTOO dropped the 10% deposit rule for this reservation, so the
+  // printed total is just the base.
+  applyDepositRule = true,
 }) {
   const currentUser = useCurrentUser();
   const prepared = preparedBy || currentUser;
@@ -964,8 +967,8 @@ export default function OrderOfPaymentDocument({
   const particularLines = lines.filter((line) => !isPackageLine(line));
 
   const baseTotal = Number(totalAmount) || 0;
-  const deposit = baseTotal * OOP_DEPOSIT_RATE;
-  // The printed grand total includes the 10% deposit.
+  const deposit = applyDepositRule ? baseTotal * OOP_DEPOSIT_RATE : 0;
+  // The printed grand total includes the 10% deposit (when the rule applies).
   const total = baseTotal + deposit;
   const packageTotal = packageLines.reduce(
     (sum, line) => sum + (Number(line.amount) || 0),
@@ -1072,17 +1075,21 @@ export default function OrderOfPaymentDocument({
               />
             </tbody>
             <tfoot>
+              {applyDepositRule && (
+                <tr>
+                  <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
+                    10% Deposit of Total Payment (Required)
+                  </td>
+                  <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
+                    {formatPeso(deposit)}
+                  </td>
+                </tr>
+              )}
               <tr>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
-                  10% Deposit of Total Payment (Required)
-                </td>
-                <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
-                  {formatPeso(deposit)}
-                </td>
-              </tr>
-              <tr>
-                <td className="border border-black px-1.5 py-0.5 text-right font-bold uppercase">
-                  Total Amount (including 10% deposit)
+                  {applyDepositRule
+                    ? "Total Amount (including 10% deposit)"
+                    : "Total Amount"}
                 </td>
                 <td className="border border-black px-1.5 py-0.5 text-right font-bold tabular-nums">
                   {formatPeso(total)}
