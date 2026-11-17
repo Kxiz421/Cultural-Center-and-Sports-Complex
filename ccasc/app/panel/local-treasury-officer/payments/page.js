@@ -473,9 +473,10 @@ export default function LTOOPaymentsPage() {
       {
         originalBase,
         totalDiscount: existingDiscount + (discountCheck.ok ? pendingDiscount : 0),
+        applyDepositRule: applyDepositRule !== false,
       }
     );
-  }, [selectedReservation, currentBreakdown, paymentAmount, paymentType, pendingDiscount, discountCheck.ok]);
+  }, [selectedReservation, currentBreakdown, paymentAmount, paymentType, pendingDiscount, discountCheck.ok, applyDepositRule]);
 
   const paymentTypeMax = React.useMemo(() => {
     if (!currentBreakdown) return 0;
