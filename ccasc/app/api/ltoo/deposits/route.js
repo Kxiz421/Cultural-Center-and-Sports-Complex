@@ -306,6 +306,9 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid deposit action." }, { status: 400 });
   } catch (error) {
     console.error("Deposit POST error:", error);
-    return NextResponse.json({ error: "Failed to update deposit" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Failed to update deposit" },
+      { status: 500 }
+    );
   }
 }

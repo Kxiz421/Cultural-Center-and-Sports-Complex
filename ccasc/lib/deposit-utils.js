@@ -303,7 +303,8 @@ export async function consumeDeposit(prisma, {
         Number(deposit?.booking?.reservation?.totalAmount ?? 0) * 0.1
       );
     const hourlyRate = roundMoney(depositBase * 0.1);
-    const hours = Number(overtimeHours);
+    // Whole hours only — the deduction row stores an integer quantity.
+    const hours = Math.max(1, Math.round(Number(overtimeHours)));
     itemLines = itemLines || [];
     itemLines.push({
       particularId: null,

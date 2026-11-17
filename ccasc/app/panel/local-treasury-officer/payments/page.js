@@ -2183,8 +2183,8 @@ export default function LTOOPaymentsPage() {
                             <div className="flex flex-wrap items-center gap-2">
                               <Input
                                 type="number"
-                                min={0}
-                                step="0.5"
+                                min={1}
+                                step="1"
                                 placeholder="Hours"
                                 value={overtimeHours}
                                 onChange={(e) => setOvertimeHours(e.target.value)}
