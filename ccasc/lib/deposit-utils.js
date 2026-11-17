@@ -267,13 +267,13 @@ export async function consumeDeposit(prisma, {
         where: { particularId },
         select: {
           particularName: true,
-          inventory: { select: { quantity: true, unitCost: true } },
+          inventory: { select: { quantityAvailable: true, unitCost: true } },
         },
       });
       if (!particular) {
         return { ok: false, error: "That particular could not be found." };
       }
-      const available = Number(particular.inventory?.quantity ?? 0);
+      const available = Number(particular.inventory?.quantityAvailable ?? 0);
       if (quantity > available) {
         return {
           ok: false,
