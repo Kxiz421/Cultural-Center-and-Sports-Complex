@@ -235,7 +235,11 @@ export async function consumeDeposit(prisma, {
 }) {
   const deposit = await prisma.deposit.findUnique({
     where: { bookingId },
-    include: { status: true, deductions: true },
+    include: {
+      status: true,
+      deductions: true,
+      booking: { select: { reservation: { select: { totalAmount: true } } } },
+    },
   });
 
   // Itemised damages: one line per particular, quantity capped by stock.
@@ -291,8 +295,13 @@ export async function consumeDeposit(prisma, {
   // Overtime: charged at 10% of the 10% deposit, per hour. Only recorded when
   // the LTOO toggles it on, so an off entry is never charged or shown anywhere.
   if (Number(overtimeHours) > 0) {
+    // 10% of the 10% deposit per hour. When no deposit was recorded, fall back
+    // to 10% of the reservation total and then 10% of that (1% of the total).
     const depositBase =
-      Number(deposit?.requiredAmount ?? 0) || Number(deposit?.amountPaid ?? 0);
+      Number(deposit?.requiredAmount ?? 0) ||
+      roundMoney(
+        Number(deposit?.booking?.reservation?.totalAmount ?? 0) * 0.1
+      );
     const hourlyRate = roundMoney(depositBase * 0.1);
     const hours = Number(overtimeHours);
     itemLines = itemLines || [];
