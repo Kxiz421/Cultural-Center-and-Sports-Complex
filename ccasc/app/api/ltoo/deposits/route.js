@@ -79,6 +79,7 @@ export async function POST(request) {
       amount,
       reason,
       lines,
+      overtimeHours,
     } = body;
 
     const parsedReservationId = parseInt(reservationId, 10);
@@ -100,6 +101,7 @@ export async function POST(request) {
         amount,
         reason,
         lines,
+        overtimeHours,
         staffId,
       });
       if (!result.ok) {

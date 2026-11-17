@@ -272,6 +272,9 @@ export default function LTOOPaymentsPage() {
   // offered and a quantity can never exceed the stock on hand.
   const [damageLines, setDamageLines] = React.useState([]);
   const [particularCatalog, setParticularCatalog] = React.useState([]);
+  // Overtime: optional, charged at 10% of the 10% deposit per hour.
+  const [overtimeEnabled, setOvertimeEnabled] = React.useState(false);
+  const [overtimeHours, setOvertimeHours] = React.useState("");
   React.useEffect(() => {
     let cancelled = false;
     fetch("/api/particulars")
@@ -888,6 +891,9 @@ export default function LTOOPaymentsPage() {
                 amount: roundMoney(consumeAmount),
                 reason: consumeReason,
               }),
+          ...(overtimeEnabled && Number(overtimeHours) > 0
+            ? { overtimeHours: Number(overtimeHours) }
+            : {}),
           performedBy,
           performedByName,
         }),
@@ -898,6 +904,8 @@ export default function LTOOPaymentsPage() {
       setConsumeAmount("");
       setConsumeReason("");
       setDamageLines([]);
+      setOvertimeEnabled(false);
+      setOvertimeHours("");
       applyDepositSnapshot(reservation.reservationId, data.deposit);
       setDepositPanelOpen(true);
       await refreshSelectedReservation();
@@ -2062,12 +2070,73 @@ export default function LTOOPaymentsPage() {
                           </span>
                         )}
                       </div>
+                      <div className="space-y-2 rounded-md border p-3">
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={overtimeEnabled}
+                            onChange={(e) => {
+                              setOvertimeEnabled(e.target.checked);
+                              if (!e.target.checked) setOvertimeHours("");
+                            }}
+                          />
+                          Apply overtime deduction
+                        </label>
+                        {overtimeEnabled && (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.5"
+                                placeholder="Hours"
+                                value={overtimeHours}
+                                onChange={(e) => setOvertimeHours(e.target.value)}
+                                className="w-24 tabular-nums"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                hour(s) ×{" "}
+                                {formatPhp(
+                                  roundMoney(
+                                    Number(
+                                      historyReservation.deposit?.requiredAmount ??
+                                        0
+                                    ) * 0.1
+                                  )
+                                )}{" "}
+                                (10% of the deposit)
+                              </span>
+                            </div>
+                            {Number(overtimeHours) > 0 && (
+                              <p className="text-sm font-medium tabular-nums">
+                                Overtime:{" "}
+                                {formatPhp(
+                                  roundMoney(
+                                    Number(overtimeHours) *
+                                      roundMoney(
+                                        Number(
+                                          historyReservation.deposit
+                                            ?.requiredAmount ?? 0
+                                        ) * 0.1
+                                      )
+                                  )
+                                )}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={depositSaving || damageLines.length === 0}
+                          disabled={
+                            depositSaving ||
+                            (damageLines.length === 0 &&
+                              !(overtimeEnabled && Number(overtimeHours) > 0))
+                          }
                           onClick={handleConsumeDeposit}
                         >
                           Record deduction

@@ -231,6 +231,7 @@ export async function consumeDeposit(prisma, {
   reason,
   staffId = null,
   lines = null,
+  overtimeHours = null,
 }) {
   const deposit = await prisma.deposit.findUnique({
     where: { bookingId },
@@ -285,7 +286,27 @@ export async function consumeDeposit(prisma, {
       });
     }
     totalAmount = itemLines.reduce((sum, line) => sum + line.amount, 0);
-  } else {
+  }
+
+  // Overtime: charged at 10% of the 10% deposit, per hour. Only recorded when
+  // the LTOO toggles it on, so an off entry is never charged or shown anywhere.
+  if (Number(overtimeHours) > 0) {
+    const depositBase =
+      Number(deposit?.requiredAmount ?? 0) || Number(deposit?.amountPaid ?? 0);
+    const hourlyRate = roundMoney(depositBase * 0.1);
+    const hours = Number(overtimeHours);
+    itemLines = itemLines || [];
+    itemLines.push({
+      particularId: null,
+      quantity: hours,
+      unitCost: hourlyRate,
+      amount: roundMoney(hourlyRate * hours),
+      reason: `Overtime × ${hours} hour${hours === 1 ? "" : "s"}`,
+    });
+    totalAmount = itemLines.reduce((sum, line) => sum + line.amount, 0);
+  }
+
+  if (!itemLines) {
     const reasonCheck = validateDeductionReason(reason);
     if (!reasonCheck.ok) {
       return { ok: false, error: reasonCheck.error };
