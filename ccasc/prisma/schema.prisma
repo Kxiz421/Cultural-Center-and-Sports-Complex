@@ -329,6 +329,8 @@ model Reservation {
   reservationStatus  String   @map("reservation_status") @db.VarChar(50)
   eventStatus        String   @default("Upcoming") @map("event_status") @db.VarChar(50)
   totalAmount        Decimal? @map("total_amount") @db.Decimal(12, 2)
+  // LTOO's choice when recording payment: false drops the 10% deposit rule.
+  applyDepositRule   Boolean  @default(true) @map("apply_deposit_rule")
   submittedAt        DateTime @map("submitted_at")
   venueId            Int      @map("venue_id")
   clientId           Int?     @map("client_id")

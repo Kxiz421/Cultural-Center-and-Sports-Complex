@@ -114,17 +114,16 @@ function addDays(date, days) {
   return result;
 }
 
-function computePaymentStatus(totalAmount, payments) {
+function computePaymentStatus(totalAmount, payments, applyDepositRule = true) {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
   const totalDiscount = sumPaymentDiscounts(payments);
-  const billed = getBilledTotals(totalAmount, totalDiscount);
+  const billed = getBilledTotals(totalAmount, totalDiscount, applyDepositRule);
   if (billed.originalBase <= 0) return "Pending";
   if (billed.totalPayable <= 0) return "BalanceSettled";
   if (totalPaid <= 0) return "Pending";
   // A fully discounted / fully settled balance counts as paid in full.
   if (totalPaid >= billed.totalPayable) return "BalanceSettled";
-  // 50% down payment + 10% deposit = 60% of base
-  if (totalPaid >= totalAmount * 0.6) return "DepositPaid";
+  if (applyDepositRule && totalPaid >= totalAmount * 0.6) return "DepositPaid";
   if (totalPaid >= totalAmount * 0.5) return "DownPaymentPaid";
   return "IncompletePayment";
 }
@@ -254,7 +253,7 @@ export async function GET(request) {
         );
         const paymentStatus = hasFullyPaidPayment
           ? "BalanceSettled"
-          : computePaymentStatus(totalAmount || 0, allPayments);
+          : computePaymentStatus(totalAmount || 0, allPayments, r.applyDepositRule !== false);
         const calendarVisible = computeCalendarVisible(totalAmount || 0, allPayments);
 
         // Facilities / particulars / time slot can still be managed while the
@@ -310,6 +309,7 @@ export async function GET(request) {
           bookingVenueId: r.venueId || null,
           amountPaid: totalPaid,
           totalAmount: totalAmount,
+          applyDepositRule: r.applyDepositRule !== false,
           paymentStatus,
           calendarVisible,
           downPaymentDeadline,
@@ -317,7 +317,9 @@ export async function GET(request) {
           cancellationDeadline,
           isFinal,
           requiredDownPayment: totalAmount ? totalAmount * 0.5 : null,
-          requiredDeposit: totalAmount ? totalAmount * 0.1 : null,
+          requiredDeposit: totalAmount
+            ? (r.applyDepositRule !== false ? totalAmount * 0.1 : 0)
+            : null,
           remarks: stripChargeBreakdownFromNotes(r.notes) || null,
           chargeLines: chargeLines.length > 0 ? chargeLines : null,
           facilities: r.schedules.map((s) => ({

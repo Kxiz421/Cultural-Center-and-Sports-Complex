@@ -30,10 +30,14 @@ export function isDepositPortionMet(paid, requiredDownPayment, requiredDeposit) 
  * the 50% down and remaining. A 100% waiver (discount larger than the rental)
  * can include the unpaid deposit and bring the payable to zero.
  */
-export function getBilledTotals(originalBase, totalDiscount = 0) {
+export function getBilledTotals(originalBase, totalDiscount = 0, applyDepositRule = true) {
   const sourceBase = roundMoney(originalBase || 0);
-  const requiredDeposit = roundMoney(sourceBase * 0.1);
-  const originalTotalPayable = roundMoney(sourceBase * 1.1);
+  // Turning the rule off drops the 10% deposit entirely: nothing is owed for it
+  // and the payable is just the rental base (less any discount).
+  const requiredDeposit = applyDepositRule ? roundMoney(sourceBase * 0.1) : 0;
+  const originalTotalPayable = applyDepositRule
+    ? roundMoney(sourceBase * 1.1)
+    : sourceBase;
   const discount = roundMoney(totalDiscount || 0);
   const appliedDiscount = roundMoney(Math.min(Math.max(0, discount), originalTotalPayable));
   const totalPayable = roundMoney(Math.max(0, originalTotalPayable - appliedDiscount));
@@ -107,7 +111,11 @@ export function validateDiscountAmount(
  */
 export function computePaymentBreakdown(totalAmount, totalPaid, depositRecord = null, billing = null) {
   const billed = billing
-    ? getBilledTotals(billing.originalBase ?? totalAmount, billing.totalDiscount)
+    ? getBilledTotals(
+        billing.originalBase ?? totalAmount,
+        billing.totalDiscount,
+        billing.applyDepositRule !== false
+      )
     : getBilledTotals(totalAmount, 0);
   const base = billed.base;
   const paid = roundMoney(totalPaid || 0);
