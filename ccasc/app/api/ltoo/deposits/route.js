@@ -108,16 +108,20 @@ export async function POST(request) {
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
 
-      await prisma.auditLog.create({
-        data: {
-          action: "DEPOSIT_CONSUMED",
-          targetUserId: `DEP-${result.deposit.depositId}`,
-          targetName: booking.reservation?.eventType || "Deposit",
-          performedById: acting.performedBy,
-          performedByName: recordedBy,
-          details: `Deducted ${formatPhp(result.total ?? result.deduction.amount)} from the 10% deposit. Reason: ${result.reason || reason}`,
-        },
-      });
+      try {
+        await prisma.auditLog.create({
+          data: {
+            action: "DEPOSIT_CONSUMED",
+            targetUserId: `DEP-${result.deposit.depositId}`,
+            targetName: booking.reservation?.eventType || "Deposit",
+            performedById: acting.performedBy,
+            performedByName: recordedBy,
+            details: `Deducted ${formatPhp(result.total ?? result.deduction.amount)} from the 10% deposit. Reason: ${result.reason || reason}`,
+          },
+        });
+      } catch (auditError) {
+        console.error("Deduction recorded, but the audit log failed:", auditError);
+      }
 
       const clientId = booking.reservation?.clientId;
       if (clientId) {
@@ -132,14 +136,15 @@ export async function POST(request) {
             ? ` This exceeds the amount held, leaving an outstanding balance of ${formatPhp(outstanding)}.`
             : ` Remaining deposit: ${formatPhp(remaining)}.`);
 
-        await notifyClientEvent({
-          clientId,
-          type: "payment",
-          message,
-          email: {
-            subject: overLimit
-              ? "Deposit Deduction — Outstanding Balance - CSASC"
-              : "10% Deposit Deduction - CSASC",
+        try {
+          await notifyClientEvent({
+            clientId,
+            type: "payment",
+            message,
+            email: {
+              subject: overLimit
+                ? "Deposit Deduction — Outstanding Balance - CSASC"
+                : "10% Deposit Deduction - CSASC",
             heading: overLimit ? "⚠️ Deposit Deduction — Balance Due" : "🧾 Deposit Deduction",
             accent: overLimit ? "#dc2626" : "#2563eb",
             intro: overLimit
@@ -157,9 +162,12 @@ export async function POST(request) {
             note: overLimit
               ? `Please settle the outstanding balance of ${formatPhp(outstanding)} at the Local Treasury Operations Office. You cannot reserve a new event until this balance is settled.`
               : undefined,
-          },
-          sms: message,
-        });
+            },
+            sms: message,
+          });
+        } catch (notifyError) {
+          console.error("Deduction recorded, but notifying the client failed:", notifyError);
+        }
       }
 
       return NextResponse.json({
@@ -186,16 +194,20 @@ export async function POST(request) {
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
 
-      await prisma.auditLog.create({
-        data: {
-          action: "DEPOSIT_PULLED_OUT",
-          targetUserId: `DEP-${result.deposit.depositId}`,
-          targetName: booking.reservation?.eventType || "Deposit",
-          performedById: acting.performedBy,
-          performedByName: recordedBy,
-          details: `Pulled out remaining deposit of ${formatPhp(result.releaseAmount)}.`,
-        },
-      });
+      try {
+        await prisma.auditLog.create({
+          data: {
+            action: "DEPOSIT_PULLED_OUT",
+            targetUserId: `DEP-${result.deposit.depositId}`,
+            targetName: booking.reservation?.eventType || "Deposit",
+            performedById: acting.performedBy,
+            performedByName: recordedBy,
+            details: `Pulled out remaining deposit of ${formatPhp(result.releaseAmount)}.`,
+          },
+        });
+      } catch (auditError) {
+        console.error("Pullout recorded, but the audit log failed:", auditError);
+      }
 
       const clientId = booking.reservation?.clientId;
       if (clientId) {
@@ -204,23 +216,27 @@ export async function POST(request) {
           ctx.text ? ` for ${ctx.text}` : ""
         }.`;
 
-        await notifyClientEvent({
-          clientId,
-          type: "payment",
-          message,
-          email: {
-            subject: "10% Deposit Pulled Out - CSASC",
-            heading: "💸 10% Deposit Pulled Out",
-            accent: "#059669",
-            intro: "Your remaining 10% deposit has been released.",
-            rows: [
-              { label: "Amount released", value: formatPhp(result.releaseAmount) },
-              ...ctx.rows,
-            ],
-            note: "This confirms the release of your remaining deposit after the event has ended.",
-          },
-          sms: message,
-        });
+        try {
+          await notifyClientEvent({
+            clientId,
+            type: "payment",
+            message,
+            email: {
+              subject: "10% Deposit Pulled Out - CSASC",
+              heading: "💸 10% Deposit Pulled Out",
+              accent: "#059669",
+              intro: "Your remaining 10% deposit has been released.",
+              rows: [
+                { label: "Amount released", value: formatPhp(result.releaseAmount) },
+                ...ctx.rows,
+              ],
+              note: "This confirms the release of your remaining deposit after the event has ended.",
+            },
+            sms: message,
+          });
+        } catch (notifyError) {
+          console.error("Pullout recorded, but notifying the client failed:", notifyError);
+        }
       }
 
       return NextResponse.json({
@@ -273,27 +289,31 @@ export async function POST(request) {
           }.` +
           (outstanding > 0 ? ` Remaining balance: ${formatPhp(outstanding)}.` : " Thank you.");
 
-        await notifyClientEvent({
-          clientId,
-          type: "payment",
-          message,
-          email: {
-            subject: "Deposit Balance Settled - CSASC",
-            heading: "✅ Deposit Balance Settled",
-            accent: "#059669",
-            intro: "Your outstanding deposit balance has been settled.",
-            rows: [
-              { label: "Amount settled", value: formatPhp(result.settledAmount) },
-              ...ctx.rows,
-              { label: "Remaining balance", value: formatPhp(outstanding) },
-            ],
-            note:
-              outstanding > 0
-                ? undefined
-                : "Your deposit account is now fully settled. Thank you.",
-          },
-          sms: message,
-        });
+        try {
+          await notifyClientEvent({
+            clientId,
+            type: "payment",
+            message,
+            email: {
+              subject: "Deposit Balance Settled - CSASC",
+              heading: "✅ Deposit Balance Settled",
+              accent: "#059669",
+              intro: "Your outstanding deposit balance has been settled.",
+              rows: [
+                { label: "Amount settled", value: formatPhp(result.settledAmount) },
+                ...ctx.rows,
+                { label: "Remaining balance", value: formatPhp(outstanding) },
+              ],
+              note:
+                outstanding > 0
+                  ? undefined
+                  : "Your deposit account is now fully settled. Thank you.",
+            },
+            sms: message,
+          });
+        } catch (notifyError) {
+          console.error("Settlement recorded, but notifying the client failed:", notifyError);
+        }
       }
 
       return NextResponse.json({
