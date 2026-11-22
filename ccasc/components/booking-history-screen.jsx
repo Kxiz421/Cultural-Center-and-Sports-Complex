@@ -476,48 +476,72 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
                 />
               </div>
 
-              {isReservation &&
-                Array.isArray(src.depositDeductions) &&
-                src.depositDeductions.length > 0 && (
+              {isReservation && (
                   <div className="space-y-2 rounded-md border p-3 text-sm">
                     <div className="flex items-baseline justify-between gap-3">
                       <p className="font-medium">Deductions for this event</p>
                       <span className="tabular-nums font-semibold">
                         ₱
                         {formatPeso(
-                          src.depositDeductions.reduce(
+                          (src.depositDeductions || []).reduce(
                             (sum, d) => sum + (Number(d.amount) || 0),
                             0
                           )
                         )}
                       </span>
                     </div>
-                    {src.depositDeductions.map((deduction) => {
-                      const unitCost = Number(deduction.unitCost ?? 0);
-                      const quantity = Number(deduction.quantity ?? 0);
-                      const isOvertime = /overtime/i.test(
-                        String(deduction.label || "")
-                      );
-                      return (
-                        <div key={deduction.deductionId} className="space-y-0.5">
-                          <div className="flex justify-between gap-3">
-                            <span className="text-muted-foreground">
-                              {deduction.label}
-                            </span>
-                            <span className="tabular-nums">
-                              ₱{formatPeso(deduction.amount)}
-                            </span>
+                    <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">
+                        How this is calculated
+                      </p>
+                      <p>
+                        Overtime — charged per hour at 10% of the 10% deposit
+                        (hours × hourly rate).
+                      </p>
+                      <p>
+                        Damages — charged per particular at its unit cost
+                        (quantity damaged × unit cost).
+                      </p>
+                      <p>
+                        Both are taken from this event&apos;s 10% deposit only,
+                        never from another event.
+                      </p>
+                    </div>
+                    {(src.depositDeductions || []).length === 0 ? (
+                      <p className="text-muted-foreground text-sm">
+                        No deductions have been charged to this event.
+                      </p>
+                    ) : (
+                      (src.depositDeductions || []).map((deduction) => {
+                        const unitCost = Number(deduction.unitCost ?? 0);
+                        const quantity = Number(deduction.quantity ?? 0);
+                        const isOvertime = /overtime/i.test(
+                          String(deduction.label || "")
+                        );
+                        return (
+                          <div
+                            key={deduction.deductionId}
+                            className="space-y-0.5"
+                          >
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">
+                                {deduction.label}
+                              </span>
+                              <span className="tabular-nums">
+                                ₱{formatPeso(deduction.amount)}
+                              </span>
+                            </div>
+                            {unitCost > 0 && quantity > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                {isOvertime
+                                  ? `${quantity} hour${quantity === 1 ? "" : "s"} × ₱${formatPeso(unitCost)} per hour (10% of the 10% deposit)`
+                                  : `${quantity} × ₱${formatPeso(unitCost)} each`}
+                              </p>
+                            )}
                           </div>
-                          {unitCost > 0 && quantity > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              {isOvertime
-                                ? `${quantity} hour${quantity === 1 ? "" : "s"} × ₱${formatPeso(unitCost)} per hour (10% of the 10% deposit)`
-                                : `${quantity} × ₱${formatPeso(unitCost)} each`}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                     {src.depositRemaining != null && (
                       <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
                         <span>Deposit remaining</span>
@@ -526,12 +550,6 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
                         </span>
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      Overtime is charged per hour at 10% of the 10% deposit.
-                      Damaged particulars are charged at their unit cost × the
-                      quantity damaged. Both are taken from this event&apos;s
-                      deposit only.
-                    </p>
                   </div>
                 )}
             </div>
