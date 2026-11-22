@@ -425,76 +425,139 @@ function ReservationDetail({ reservation, orderOfPaymentHref, documentsHref }) {
         </div>
 
         {/* How damages / overtime are charged, then this event's deductions */}
-        {(Array.isArray(reservation.depositDeductions) || reservation.depositRemaining != null) && (
-            <div className="space-y-2 rounded-md border p-3 text-sm">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="font-medium">Deductions for this event</p>
-                <span className="tabular-nums font-semibold">
-                  {formatPhp(
-                    (reservation.depositDeductions || []).reduce(
-                      (sum, d) => sum + (Number(d.amount) || 0),
-                      0
-                    )
-                  )}
+        {(Array.isArray(reservation.depositDeductions) || reservation.depositRemaining != null) && (() => {
+            const deductionList = reservation.depositDeductions || [];
+            const deductedTotal = deductionList.reduce(
+              (sum, d) => sum + (Number(d.amount) || 0),
+              0
+            );
+            const remaining = Number(reservation.depositRemaining ?? 0);
+            const shortfall = Math.max(0, -remaining);
+            return (
+            <div className="space-y-3 rounded-lg border p-4 text-base">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-lg font-semibold">Deductions for this event</p>
+                <span className="tabular-nums text-lg font-bold">
+                  {formatPhp(deductedTotal)}
                 </span>
               </div>
-              <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">How this is calculated</p>
-                <p>
-                  Overtime — charged per hour at 10% of the 10% deposit
-                  (hours × hourly rate).
+
+              <div className="space-y-1.5 rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
+                <p className="text-sm font-semibold text-foreground">
+                  How this is calculated
                 </p>
                 <p>
-                  Damages — charged per particular at its unit cost
-                  (quantity damaged × unit cost).
+                  <span className="font-medium text-foreground">Overtime</span> —
+                  charged per hour at 10% of the 10% deposit:{" "}
+                  <span className="tabular-nums">hours × hourly rate</span>.
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Damages</span> —
+                  charged per particular at its unit cost:{" "}
+                  <span className="tabular-nums">
+                    quantity damaged × unit cost
+                  </span>
+                  .
                 </p>
                 <p>
                   Both are taken from this event&apos;s 10% deposit only, never
                   from another event.
                 </p>
               </div>
-              {(reservation.depositDeductions || []).length === 0 ? (
+
+              {deductionList.length === 0 ? (
                 <p className="text-muted-foreground text-sm">
                   No deductions have been charged to this event.
                 </p>
               ) : (
-                (reservation.depositDeductions || []).map((deduction) => {
-                  const unitCost = Number(deduction.unitCost ?? 0);
-                  const quantity = Number(deduction.quantity ?? 0);
-                  const isOvertime = /overtime/i.test(
-                    String(deduction.label || "")
-                  );
-                  return (
-                    <div key={deduction.deductionId} className="space-y-0.5">
-                      <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          {deduction.label}
-                        </span>
-                        <span className="tabular-nums">
-                          {formatPhp(deduction.amount)}
-                        </span>
+                <div className="divide-y rounded-md border">
+                  {deductionList.map((deduction) => {
+                    const unitCost = Number(deduction.unitCost ?? 0);
+                    const quantity = Number(deduction.quantity ?? 0);
+                    const isOvertime = /overtime/i.test(
+                      String(deduction.label || "")
+                    );
+                    return (
+                      <div
+                        key={deduction.deductionId}
+                        className="space-y-0.5 px-3 py-2"
+                      >
+                        <div className="flex justify-between gap-3">
+                          <span className="font-medium">{deduction.label}</span>
+                          <span className="tabular-nums font-semibold">
+                            {formatPhp(deduction.amount)}
+                          </span>
+                        </div>
+                        {unitCost > 0 && quantity > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {isOvertime
+                              ? `${quantity} hour${quantity === 1 ? "" : "s"} × ${formatPhp(unitCost)} per hour (10% of the 10% deposit)`
+                              : `${quantity} × ${formatPhp(unitCost)} each`}
+                          </p>
+                        )}
                       </div>
-                      {unitCost > 0 && quantity > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          {isOvertime
-                            ? `${quantity} hour${quantity === 1 ? "" : "s"} × ${formatPhp(unitCost)} per hour (10% of the 10% deposit)`
-                            : `${quantity} × ${formatPhp(unitCost)} each`}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
+
               {reservation.depositRemaining != null && (
-                <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
-                  <span>Deposit remaining</span>
-                  <span className="tabular-nums">
-                    {formatPhp(Math.max(0, reservation.depositRemaining))}
-                  </span>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between gap-3 border-t pt-2 text-base font-semibold">
+                    <span>Deposit remaining</span>
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        remaining < 0 && "text-destructive"
+                      )}
+                    >
+                      {formatPhp(Math.max(0, remaining))}
+                    </span>
+                  </div>
+
+                  {remaining < 0 ? (
+                    <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                      <p className="font-semibold text-destructive">
+                        The 10% deposit has run out — {formatPhp(shortfall)} is
+                        still owed.
+                      </p>
+                      <p className="text-muted-foreground">
+                        Damages and overtime exceeded the deposit held for this
+                        event. The excess is an outstanding balance that must be
+                        settled before you can reserve another event.
+                      </p>
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          Where to pay:
+                        </span>{" "}
+                        settle it at the{" "}
+                        <span className="font-medium text-foreground">
+                          Local Treasury Operations Office (LTOO)
+                        </span>{" "}
+                        — the treasury counter of the Provincial Government,
+                        alongside your other reservation payments. Bring this
+                        reservation reference ({reservation.id}).
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-emerald-300/60 bg-emerald-50/60 p-3 text-sm text-muted-foreground dark:border-emerald-800/60 dark:bg-emerald-950/30">
+                      <p className="font-medium text-foreground">
+                        {remaining > 0
+                          ? `${formatPhp(remaining)} of this event's deposit is still held.`
+                          : "The deposit was used up exactly — nothing is owed."}
+                      </p>
+                      <p>
+                        {remaining > 0
+                          ? "After the event has ended it will be released back to you by the LTOO. If damages or overtime push the deductions past the deposit, the excess becomes payable at the Local Treasury Operations Office (LTOO)."
+                          : "If a further deduction is recorded it becomes an outstanding balance payable at the Local Treasury Operations Office (LTOO)."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
         {/* Deadlines */}
         <div>
