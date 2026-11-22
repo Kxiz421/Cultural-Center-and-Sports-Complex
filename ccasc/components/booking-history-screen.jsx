@@ -479,25 +479,45 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
               {isReservation &&
                 Array.isArray(src.depositDeductions) &&
                 src.depositDeductions.length > 0 && (
-                  <div className="space-y-1.5 rounded-md border p-3 text-sm">
-                    <p className="font-medium">Deposit deductions</p>
-                    {src.depositDeductions.map((deduction) => (
-                      <div
-                        key={deduction.deductionId}
-                        className="flex justify-between gap-3"
-                      >
-                        <span className="text-muted-foreground">
-                          {deduction.label}
-                          {deduction.quantity != null &&
-                          deduction.unitCost != null
-                            ? ` (${deduction.quantity} × ₱${formatPeso(deduction.unitCost)})`
-                            : ""}
-                        </span>
-                        <span className="tabular-nums">
-                          ₱{formatPeso(deduction.amount)}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 rounded-md border p-3 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="font-medium">Deductions for this event</p>
+                      <span className="tabular-nums font-semibold">
+                        ₱
+                        {formatPeso(
+                          src.depositDeductions.reduce(
+                            (sum, d) => sum + (Number(d.amount) || 0),
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                    {src.depositDeductions.map((deduction) => {
+                      const unitCost = Number(deduction.unitCost ?? 0);
+                      const quantity = Number(deduction.quantity ?? 0);
+                      const isOvertime = /overtime/i.test(
+                        String(deduction.label || "")
+                      );
+                      return (
+                        <div key={deduction.deductionId} className="space-y-0.5">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              {deduction.label}
+                            </span>
+                            <span className="tabular-nums">
+                              ₱{formatPeso(deduction.amount)}
+                            </span>
+                          </div>
+                          {unitCost > 0 && quantity > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              {isOvertime
+                                ? `${quantity} hour${quantity === 1 ? "" : "s"} × ₱${formatPeso(unitCost)} per hour (10% of the 10% deposit)`
+                                : `${quantity} × ₱${formatPeso(unitCost)} each`}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                     {src.depositRemaining != null && (
                       <div className="flex justify-between gap-3 border-t pt-1.5 font-medium">
                         <span>Deposit remaining</span>
@@ -506,6 +526,12 @@ function HistoryDetailDialog({ item, onOpenChange, orderOfPaymentHref }) {
                         </span>
                       </div>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Overtime is charged per hour at 10% of the 10% deposit.
+                      Damaged particulars are charged at their unit cost × the
+                      quantity damaged. Both are taken from this event&apos;s
+                      deposit only.
+                    </p>
                   </div>
                 )}
             </div>
